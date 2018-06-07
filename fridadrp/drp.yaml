@@ -1,0 +1,16 @@
+name: FRIDA
+configurations:
+  values:
+    - c7f94f7d-1f57-4644-86d6-7004a2506680
+  default: c7f94f7d-1f57-4644-86d6-7004a2506680
+modes:
+  - key: success
+    name: Recipe Success
+    summary: Test mode
+    description: >
+      Full description of the Test mode
+pipelines:
+  default:
+    version: 1
+    recipes:
+      success: numina.core.utils.AlwaysSuccessRecipe

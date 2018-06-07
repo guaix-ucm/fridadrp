@@ -1,0 +1,10 @@
+{
+ "description": "v1",
+ "uuid": "c7f94f7d-1f57-4644-86d6-7004a2506680",
+ "date_start": "2018-01-01T12:00:00.0",
+ "date_end": "2020-02-01T12:00:00.0",
+ "type": "instrument",
+ "name": "FRIDA",
+ "components": {
+  }
+}
