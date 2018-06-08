@@ -13,10 +13,10 @@ setup(
     description='FRIDA Data Procesing Pipeline',
     packages=find_packages(),
     package_data={
-        'dridadrp': [
+        'fridadrp': [
             'drp.yaml',
         ],
-        'dridadrp.instrument.configs': ['*.json']
+        'fridadrp.instrument.configs': ['*.json']
     },
     install_requires=[
         'setuptools',
