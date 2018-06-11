@@ -6,8 +6,8 @@ jobs:
       docker:
         - image: python:3.6
       steps:
-        - run: sudo apt-get update
-        - run: sudo apt-get install python-dev
+        - run: apt-get update
+        - run: apt-get install python-dev
         - run: pip install tox
         - checkout
         - run: tox -e py36
