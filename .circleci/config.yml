@@ -7,13 +7,22 @@ jobs:
         - image: python:3.6
       steps:
         - run: apt-get update
-        - run: apt-get install python-dev
+        - run: apt-get install -y python-dev
         - run: pip install tox
         - checkout
         - run: tox -e py36
-
+  toxify27:
+      docker:
+        - image: python:2.7
+      steps:
+        - run: apt-get update
+        - run: apt-get install -y python-dev
+        - run: pip install tox
+        - checkout
+        - run: tox -e py27
 workflows:
   version: 2
   fridadrp:
     jobs:
       - toxify36
+      - toxify27
