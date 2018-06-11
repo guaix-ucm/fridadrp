@@ -2,16 +2,18 @@
 version: 2
 jobs:
   # using tox
-  toxify:
+  toxify36:
       docker:
         - image: python:3.6
       steps:
+        - run: sudo apt-get update
+        - run: sudo apt-get install python-dev
+        - run: pip install tox
         - checkout
-        - run: pip install numina
-        - run: pip install tox && tox
+        - run: tox -e py36
 
 workflows:
   version: 2
   fridadrp:
     jobs:
-      - toxify
+      - toxify36
