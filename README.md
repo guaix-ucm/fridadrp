@@ -13,4 +13,4 @@ or (at your option) any later version. See the file LICENSE for details.
 Python 2.7 or 3.4 (or greater) is required.
 
 
-Maintainer: sergiopr@fis.ucm.es
+Maintainers: Nicolás Cardiel cardiel@ucm.es, Sergio Pascual: sergiopr@fis.ucm.es
