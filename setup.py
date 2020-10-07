@@ -54,5 +54,5 @@ setup(
         "Operating System :: OS Independent",
         "Topic :: Scientific/Engineering :: Astronomy",
         ],
-    long_description=open('README.md').read()
+    long_description=open('README.rst').read()
 )
