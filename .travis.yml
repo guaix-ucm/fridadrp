@@ -31,9 +31,9 @@ install:
 script:
   - |
     if [[ $COVERAGE == true ]]; then
-      coverage run --source megaradrp -m pytest
+      coverage run --source fridadrp -m pytest
     else
-      pytest -s -v megaradrp
+      pytest -s -v fridadrp
     fi
 
 after_success:
