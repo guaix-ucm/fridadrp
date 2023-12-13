@@ -24,6 +24,8 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+# setuptools_scm
+src/fridadrp/_version.py
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -102,3 +104,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# PyCharm
+.idea

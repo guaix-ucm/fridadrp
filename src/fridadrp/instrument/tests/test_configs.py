@@ -23,7 +23,7 @@ def test_loader1(conf, uuix):
     import numina.core
     from numina.instrument.assembly import assembly_instrument
 
-    obs = numina.core.ObservationResult(instrument='MEGARA')
+    obs = numina.core.ObservationResult(instrument='FRIDA')
     obs.frames.append(create_simple_frame())
     drpm = drp_load()
     obs.configuration = conf
@@ -32,4 +32,3 @@ def test_loader1(conf, uuix):
     ins = assembly_instrument(drpm.configurations, key, date_obs, by_key=keyname)
     assert isinstance(ins, numina.instrument.generic.InstrumentGeneric)
     assert str(ins.origin.uuid) == uuix
-
