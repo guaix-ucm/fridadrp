@@ -9,8 +9,14 @@ modes:
     summary: Test mode
     description: >
       Full description of the Test mode
+  - key: test1
+    name: WaveTest
+    summary: Wavelength calibration test
+    description: >
+      Full description of the test1 mode
 pipelines:
   default:
     version: 1
     recipes:
       success: numina.core.utils.AlwaysSuccessRecipe
+      test1: fridadrp.recipes.auxiliary.WaveTestRecipe
