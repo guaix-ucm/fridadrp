@@ -27,11 +27,12 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
 dependencies = [
-   "numpy >= 1.20",
-   "astropy",
-   "scipy",
-   "matplotlib",
-   "numina >= 0.32",
+    "astropy",
+    "matplotlib",
+    "numina >= 0.32",
+    "numpy >= 1.20",
+    "pooch",
+    "scipy",
 ]
 
 [project.optional-dependencies]
@@ -51,6 +52,9 @@ Repository = "https://github.com/guaix-ucm/fridadrp.git"
 
 [project.entry-points."numina.pipeline.1"]
 FRIDA = "fridadrp.loader:drp_load"
+
+[project.scripts]
+fridadrp-ifu_simulator = "fridadrp.tools.ifu_simulator:main"
 
 # pyproject.toml
 [tool.setuptools_scm]
