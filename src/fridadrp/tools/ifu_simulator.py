@@ -37,6 +37,9 @@ def main(args=None):
         help="Apply atmosphere transmission",
         action="store_true"
     )
+    parser.add_argument("--rnoise", help="Readout noise (ADU)", type=float, default=0)
+    parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
+                        choices=["default", "none"])
     parser.add_argument("-v", "--verbose", help="increase program verbosity", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
 
@@ -49,17 +52,33 @@ def main(args=None):
     if args.echo:
         print('\033[1m\033[31m% ' + ' '.join(sys.argv) + '\033[0m\n')
 
-    # Download SKYCALC Sky Model Calculator prediction table
-    # compute md5 hash from terminal using:
+    rnoise = args.rnoise
+    if rnoise < 0:
+        raise ValueError(f'Invalid readout noise value: {rnoise}')
+
+    # ---
+    # Download auxiliary files when necessary
+    # Note: compute md5 hash from terminal using:
     # linux $ md5sum <filename>
     # macOS $ md5 <filename>
+
+    # SKYCALC Sky Model Calculator prediction table
     faux_skycalc = pooch.retrieve(
         'http://nartex.fis.ucm.es/~ncl/fridadrp_simulator_data/skycalc_R300000_table.fits',
-        known_hash='md5:49df0de4fc935de130eceacf5771350c'
+        known_hash='md5:49df0de4fc935de130eceacf5771350c',
+        progressbar=True
+    )
+
+    # pixel-to-pixel flat field
+    faux_flatpix2pix = pooch.retrieve(
+        'http://nartex.fis.ucm.es/~ncl/fridadrp_simulator_data/simulated_flat_pix2pix.fits',
+        known_hash='md5:327b983843897df229cee42513912631',
+        progressbar=True
     )
 
     if args.verbose:
         print(f'- Required file: {faux_skycalc}')
+        print(f'- Required file: {faux_flatpix2pix}')
 
 
 if __name__ == "__main__":
