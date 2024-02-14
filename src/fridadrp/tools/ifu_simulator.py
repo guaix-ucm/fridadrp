@@ -8,8 +8,49 @@
 #
 
 import argparse
+from astropy.io import fits
+import matplotlib.pyplot as plt
 import pooch
 import sys
+
+
+def display_skycalc(faux_skycalc):
+    """
+    Display sky radiance and transmission.
+
+    Data generated with the SKYCALC Sky Model Calculator tool
+    provided by ESO.
+    See https://www.eso.org/observing/etc/doc/skycalc/helpskycalc.html
+
+    Parameters
+    ----------
+    faux_skycalc : str
+        FITS file name with SKYCALC predictions.
+    """
+
+    with fits.open(faux_skycalc) as hdul:
+        skycalc_table = hdul[1].data
+    wave = skycalc_table['lam']
+    flux = skycalc_table['flux']
+    trans = skycalc_table['trans']
+
+    # plot radiance
+    fig, ax = plt.subplots()
+    ax.plot(wave, flux, '-', linewidth=1)
+    ax.set_xlabel('Vacuum Wavelength (nm)')
+    ax.set_ylabel('ph/s/m2/micron/arcsec2')
+    ax.set_title('SKYCALC prediction')
+    plt.tight_layout()
+    plt.show()
+
+    # plot transmission
+    fig, ax = plt.subplots()
+    ax.plot(wave, trans, '-', linewidth=1)
+    ax.set_xlabel('Vacuum Wavelength (nm)')
+    ax.set_ylabel('Transmission fraction')
+    ax.set_title('SKYCALC prediction')
+    plt.tight_layout()
+    plt.show()
 
 
 def main(args=None):
@@ -56,6 +97,8 @@ def main(args=None):
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
 
+    verbose = args.verbose
+
     # ---
     # Download auxiliary files when necessary
     # Note: compute md5 hash from terminal using:
@@ -79,6 +122,10 @@ def main(args=None):
     if args.verbose:
         print(f'- Required file: {faux_skycalc}')
         print(f'- Required file: {faux_flatpix2pix}')
+
+    # display SKYCALC predictions for sky radiance and transmission
+    if verbose:
+        display_skycalc(faux_skycalc)
 
 
 if __name__ == "__main__":
