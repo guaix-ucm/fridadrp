@@ -85,3 +85,4 @@ def ifu_simulator(grating, faux_dict, verbose):
     wv_lincal = LinearWaveCal.define_from_grating(grating=grating)
     if verbose:
         print(wv_lincal)
+

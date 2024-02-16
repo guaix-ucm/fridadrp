@@ -14,6 +14,30 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_VALID_GRATINGS
 
 
+def check_units(**expected_units):
+    """Decorator where a different unit is checked for each function parameter"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            # Check units for positional arguments
+            for i, arg in enumerate(args):
+                expected_unit = expected_units.get(i)
+                if expected_unit and hasattr(arg, 'unit') and arg.unit != expected_unit:
+                    raise ValueError(f"Expected unit {expected_unit} for argument {i + 1}, got {arg.unit}")
+
+            # Check units for keyword arguments
+            for arg_name, expected_unit in expected_units.items():
+                arg_value = kwargs.get(arg_name)
+                if arg_value is not None and hasattr(arg_value, 'unit') and arg_value.unit != expected_unit:
+                    raise ValueError(
+                        f"Expected unit {expected_unit} for argument '{arg_name}', got {arg_value.unit}")
+
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
 class LinearWaveCal(object):
     """Class to store a linear wavelength calibration.
 
@@ -46,32 +70,11 @@ class LinearWaveCal(object):
 
     """
 
+    @check_units(crpix1_wavecal=u.pix,
+                 crval1_wavecal=u.micrometer,
+                 cdelt1_wavecal=u.micrometer/u.pix,
+                 naxis1_wavecal=u.pix)
     def __init__(self, crpix1_wavecal, crval1_wavecal, cdelt1_wavecal, naxis1_wavecal):
-        # check parameters are astropy quantities
-        if not isinstance(crpix1_wavecal, u.Quantity):
-            raise ValueError(f"Object 'crpix1_wavecal' is not a Quantity instance")
-        if not isinstance(crval1_wavecal, u.Quantity):
-            raise ValueError(f"Object 'crval1_wavecal' is not a Quantity instance")
-        if not isinstance(cdelt1_wavecal, u.Quantity):
-            raise ValueError(f"Object 'cdelt1_wavecal' is not a Quantity instance")
-        if not isinstance(naxis1_wavecal, u.Quantity):
-            raise ValueError(f"Object 'naxis1_wavecal' is not a Quantity instance")
-
-        # check expected units
-        if crpix1_wavecal.unit != u.pix:
-            raise ValueError(f"Unexpected unit for 'crpix1_wavecal': {crpix1_wavecal.unit}")
-        if naxis1_wavecal.unit != u.pix:
-            raise ValueError(f"Unexpected unit for 'naxis1_wavecal': {crpix1_wavecal.unit}")
-
-        # check compatibility of units
-        if cdelt1_wavecal.unit * u.pix != crval1_wavecal.unit:
-            raise ValueError(
-                f"Different wavelength units used for:\n"
-                f"crval1_wavecal --> {crval1_wavecal.unit}\n"
-                f"cdelt1_wavecal --> {cdelt1_wavecal.unit}\n"
-                f"Employ the same wavelength unit in both cases to set default."
-            )
-
         # define attributes
         self.crpix1_wavecal = crpix1_wavecal
         self.crval1_wavecal = crval1_wavecal
@@ -141,6 +144,8 @@ class LinearWaveCal(object):
         else:
             return False
 
+    # do not use here @check_units
+    # (problem with two possible units, being one of them u.dimensionless_unscaled)
     def wave_at_pixel(self, pixel):
         """Compute wavelength(s) at the pixel coordinate(s).
 
@@ -175,6 +180,8 @@ class LinearWaveCal(object):
 
         return wave
 
+    # do not try to check return_units in decorator
+    @check_units(wave=u.micrometer)
     def pixel_at_wave(self, wave, return_units):
         """Compute pixel coordinate(s) at the wavelength(s).
 
@@ -195,9 +202,6 @@ class LinearWaveCal(object):
             Pixel coordinates computed at the considered wavelength(s).
 
         """
-
-        if not isinstance(wave, u.Quantity):
-            raise ValueError(f"Object 'wave' is not an Quantity instance")
 
         if return_units not in [u.pix, u.dimensionless_unscaled]:
             raise ValueError(f'Unexpected return_units: {return_units}')
