@@ -46,7 +46,14 @@ def download_auxiliary_images(grating):
 
     """
 
-    faux_dict = {}
+    registry = {
+        'skycalc_R300000_table.fits': 'md5:49df0de4fc935de130eceacf5771350c',
+        'simulated_flat_pix2pix.fits': 'md5:327b983843897df229cee42513912631',
+        'model_IFU2HAWAII_medium-K.json': 'md5:a708f8cf3f94e12f53a9833b853c2a3c',
+    }
+
+    if f'model_IFU2HAWAII_{grating}.json' not in registry:
+        raise SystemExit(f'Error: grating {grating} has not yet been defined!')
 
     pooch_inst = pooch.create(
         # use the default cache folder for the operating system
@@ -54,25 +61,33 @@ def download_auxiliary_images(grating):
         # base URL for the remote data source
         base_url='http://nartex.fis.ucm.es/~ncl/fridadrp_simulator_data/',
         # specify the files that can be fetched
-        registry={
-            'skycalc_R300000_table.fits': 'md5:49df0de4fc935de130eceacf5771350c',
-            'simulated_flat_pix2pix.fits': 'md5:327b983843897df229cee42513912631',
-            'model_IFU2HAWAII_medium-K.json': 'md5:a708f8cf3f94e12f53a9833b853c2a3c'
-        }
+        registry=registry
     )
 
+    # initialize output dictionary
+    faux_dict = {}
+
     # SKYCALC Sky Model Calculator prediction table
-    faux_skycalc = pooch_inst.fetch('skycalc_R300000_table.fits', progressbar=True)
-    faux_dict['skycalc'] = faux_skycalc
+    try:
+        faux_skycalc = pooch_inst.fetch('skycalc_R300000_table.fits', progressbar=True)
+        faux_dict['skycalc'] = faux_skycalc
+    except BaseException as e:
+        raise SystemExit(e)
 
     # pixel-to-pixel flat field
-    faux_flatpix2pix = pooch_inst.fetch('simulated_flat_pix2pix.fits', progressbar=True)
-    faux_dict['flatpix2pix'] = faux_flatpix2pix
+    try:
+        faux_flatpix2pix = pooch_inst.fetch('simulated_flat_pix2pix.fits', progressbar=True)
+        faux_dict['flatpix2pix'] = faux_flatpix2pix
+    except BaseException as e:
+        raise SystemExit(e)
 
     # 2D polynomial transformation from IFU (x_ifu, y_ifu, wavelength) to
     # Hawaii coordinates (x_hawaii, y_hawaii)
-    faux_model_ifu2detector = pooch_inst.fetch(f'model_IFU2HAWAII_{grating}.json', progressbar=True)
-    faux_dict['model_ifu2detector'] = faux_model_ifu2detector
+    try:
+        faux_model_ifu2detector = pooch_inst.fetch(f'model_IFU2HAWAII_{grating}.json', progressbar=True)
+        faux_dict['model_ifu2detector'] = faux_model_ifu2detector
+    except BaseException as e:
+        raise SystemExit(e)
 
     return faux_dict
 
