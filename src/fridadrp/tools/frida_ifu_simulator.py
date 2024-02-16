@@ -22,6 +22,7 @@ from fridadrp.core import FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NAXIS1_IFU
 from fridadrp.core import FRIDA_NAXIS2_IFU
 from fridadrp.core import FRIDA_NSLICES
+from fridadrp.core import FRIDA_VALID_GRISMS
 
 
 def define_auxiliary_files(grating, verbose):
@@ -36,12 +37,13 @@ def define_auxiliary_files(grating, verbose):
 
     Returns
     -------
-    outdict : Python dictionary
-        File names of auxiliary files:
+    outdict : dictionary
+        Dictionary with the file name of the auxiliary files.
+        The dictionary keys are the following:
         - skycalc: table with SKYCALC Sky Model Calculator predictions
         - flatpix2pix: pixel-to-pixel flat field
-        - model_ifu2detector: 2D polynomial transformation
-          x_ifu, y_ify, wavelength -> x_detector, y_detector
+        - model_ifu2detector: 2D polynomial transformation from
+          (x_ifu, y_ify, wavelength) to (x_detector, y_detector)
 
     """
 
@@ -66,8 +68,9 @@ def define_auxiliary_files(grating, verbose):
     registry_label = {}
     # SKYCALC Sky Model Calculator prediction table
     label = 'skycalc'
-    registry_label[d[label]['filename']] = label
-    registry_md5[d[label]['filename']] = f"md5:{d[label]['md5']}"
+    filename = d[label]['filename']
+    registry_label[filename] = label
+    registry_md5[filename] = f"md5:{d[label]['md5']}"
     # pixel-to-pixel flat field
     label = 'flatpix2pix'
     filename = d[label][grating]['filename']
@@ -116,11 +119,7 @@ def main(args=None):
     parser = argparse.ArgumentParser(
         description=f"description: simulator of FRIDA IFU images ({version})"
     )
-
-    parser.add_argument("--grating", help="Grating name", type=str,
-                        choices=["low-zJ", "low-JH", "medium-z", "medium-J",
-                                 "medium-H", "medium-K", "high-H", "high-K"],
-                        default="medium-K")
+    parser.add_argument("--grating", help="Grating name", type=str, choices=FRIDA_VALID_GRISMS, default="medium-K")
     parser.add_argument("--scale", help="Scale", type=str, choices=["fine", "medium", "coarse"], default="fine")
     parser.add_argument("--transmission", help="Apply atmosphere transmission", action="store_true")
     parser.add_argument("--rnoise", help="Readout noise (ADU)", type=float, default=0)
@@ -131,6 +130,7 @@ def main(args=None):
     parser.add_argument("--echo", help="Display full command line", action="store_true")
 
     args = parser.parse_args(args=args)
+
     print(f"Welcome to fridadrp-ifu_simulator\nversion {version}\n")
 
     if len(sys.argv) == 1:
