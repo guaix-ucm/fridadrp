@@ -8,12 +8,14 @@
 #
 
 from astropy.io import fits
+import astropy.units as u
 import matplotlib.pyplot as plt
+import numpy as np
 
-from fridadrp.processing.set_wv_parameters import set_wv_parameters
+from fridadrp.processing.linear_wavelength_calibration import LinearWaveCal
 
 
-def display_skycalc(faux_skycalc):
+def display_skycalc(grating, faux_skycalc):
     """
     Display sky radiance and transmission.
 
@@ -23,6 +25,8 @@ def display_skycalc(faux_skycalc):
 
     Parameters
     ----------
+    grating : str
+        Grating name.
     faux_skycalc : str
         FITS file name with SKYCALC predictions.
     """
@@ -76,6 +80,8 @@ def ifu_simulator(grating, faux_dict, verbose):
         for item in faux_dict:
             print(f'- Required file for item {item}:\n  {faux_dict[item]}')
         # display SKYCALC predictions for sky radiance and transmission
-        display_skycalc(faux_dict['skycalc'])
+        display_skycalc(grating=grating, faux_skycalc=faux_dict['skycalc'])
 
-    wv_parameters = set_wv_parameters(grating=grating)
+    wv_lincal = LinearWaveCal.define_from_grating(grating=grating)
+    if verbose:
+        print(wv_lincal)
