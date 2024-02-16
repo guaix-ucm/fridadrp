@@ -8,6 +8,7 @@
 #
 
 import argparse
+import json
 import pooch
 import sys
 
@@ -23,17 +24,15 @@ from fridadrp.core import FRIDA_NAXIS2_IFU
 from fridadrp.core import FRIDA_NSLICES
 
 
-def download_auxiliary_images(grating):
-    """"Download auxiliary files when necessary
-
-    # Note: compute md5 hash from terminal using:
-    # linux $ md5sum <filename>
-    # macOS $ md5 <filename>
+def define_auxiliary_files(grating, verbose):
+    """"Define auxiliary files for requested configuration
 
     Parameters
     ----------
     grating : str
         Grating name.
+    verbose : bool
+        If True, display/plot additional information.
 
     Returns
     -------
@@ -46,48 +45,68 @@ def download_auxiliary_images(grating):
 
     """
 
-    registry = {
-        'skycalc_R300000_table.fits': 'md5:49df0de4fc935de130eceacf5771350c',
-        'simulated_flat_pix2pix.fits': 'md5:327b983843897df229cee42513912631',
-        'model_IFU2HAWAII_medium-K.json': 'md5:a708f8cf3f94e12f53a9833b853c2a3c',
-    }
+    # retrieve configuration file
+    base_url = 'http://nartex.fis.ucm.es/~ncl/fridadrp_simulator_data'
+    # note: compute md5 hash from terminal using:
+    # linux $ md5sum <filename>
+    # macOS $ md5 <filename>
+    fconf = pooch.retrieve(
+        f'{base_url}/configuration_FRIDA_IFU_simulator.json',
+        known_hash='md5:2599ac77b395e699b90a0711c8c15988',
+        path=pooch.os_cache(project="fridadrp"),
+        progressbar=True
+    )
+    dconf = json.loads(open(fconf, mode='rt').read())
+    if verbose:
+        print(f"Configuration file uuid: {dconf['uuid']}")
 
-    if f'model_IFU2HAWAII_{grating}.json' not in registry:
+    # generate registry for all the auxiliary files to be used by Pooch
+    d = dconf['auxfiles']
+    registry_md5 = {}
+    registry_label = {}
+    # SKYCALC Sky Model Calculator prediction table
+    label = 'skycalc'
+    registry_label[d[label]['filename']] = label
+    registry_md5[d[label]['filename']] = f"md5:{d[label]['md5']}"
+    # pixel-to-pixel flat field
+    label = 'flatpix2pix'
+    filename = d[label][grating]['filename']
+    md5 = d[label][grating]['md5']
+    if (filename is not None) and (md5 is not None):
+        registry_label[filename] = label
+        registry_md5[filename] = f'md5:{md5}'
+    else:
+        raise SystemExit(f'Error: grating {grating} has not yet been defined!')
+    # 2D polynomial transformation from IFU (x_ifu, y_ifu, wavelength) to
+    # Hawaii coordinates (x_hawaii, y_hawaii)
+    label = 'model_ifu2detector'
+    filename = d[label][grating]['filename']
+    md5 = d[label][grating]['md5']
+    if (filename is not None) and (md5 is not None):
+        registry_label[filename] = label
+        registry_md5[filename] = f'md5:{md5}'
+    else:
         raise SystemExit(f'Error: grating {grating} has not yet been defined!')
 
+    # create a Pooch instance with the previous registry
     pooch_inst = pooch.create(
         # use the default cache folder for the operating system
         path=pooch.os_cache(project="fridadrp"),
         # base URL for the remote data source
-        base_url='http://nartex.fis.ucm.es/~ncl/fridadrp_simulator_data/',
+        base_url=base_url,
         # specify the files that can be fetched
-        registry=registry
+        registry=registry_md5
     )
 
     # initialize output dictionary
     faux_dict = {}
-
-    # SKYCALC Sky Model Calculator prediction table
-    try:
-        faux_skycalc = pooch_inst.fetch('skycalc_R300000_table.fits', progressbar=True)
-        faux_dict['skycalc'] = faux_skycalc
-    except BaseException as e:
-        raise SystemExit(e)
-
-    # pixel-to-pixel flat field
-    try:
-        faux_flatpix2pix = pooch_inst.fetch('simulated_flat_pix2pix.fits', progressbar=True)
-        faux_dict['flatpix2pix'] = faux_flatpix2pix
-    except BaseException as e:
-        raise SystemExit(e)
-
-    # 2D polynomial transformation from IFU (x_ifu, y_ifu, wavelength) to
-    # Hawaii coordinates (x_hawaii, y_hawaii)
-    try:
-        faux_model_ifu2detector = pooch_inst.fetch(f'model_IFU2HAWAII_{grating}.json', progressbar=True)
-        faux_dict['model_ifu2detector'] = faux_model_ifu2detector
-    except BaseException as e:
-        raise SystemExit(e)
+    for item in registry_md5:
+        try:
+            faux = pooch_inst.fetch(item, progressbar=True)
+            label = registry_label[item]
+            faux_dict[label] = faux
+        except BaseException as e:
+            raise SystemExit(e)
 
     return faux_dict
 
@@ -122,15 +141,15 @@ def main(args=None):
         print('\033[1m\033[31m% ' + ' '.join(sys.argv) + '\033[0m\n')
 
     grating = args.grating
+    verbose = args.verbose
 
-    # Download auxiliary files when necessary
-    faux_dict = download_auxiliary_images(grating)
+    # define auxiliary files
+    faux_dict = define_auxiliary_files(grating, verbose=verbose)
 
     rnoise = args.rnoise
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
 
-    verbose = args.verbose
     ifu_simulator(
         faux_dict=faux_dict,
         verbose=verbose
