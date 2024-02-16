@@ -10,6 +10,8 @@
 from astropy.io import fits
 import matplotlib.pyplot as plt
 
+from fridadrp.processing.set_wv_parameters import set_wv_parameters
+
 
 def display_skycalc(faux_skycalc):
     """
@@ -50,11 +52,13 @@ def display_skycalc(faux_skycalc):
     plt.show()
 
 
-def ifu_simulator(faux_dict, verbose):
+def ifu_simulator(grating, faux_dict, verbose):
     """IFU simulator.
 
     Parameters
     ----------
+    grating : str
+        Grating name.
     faux_dict : Python dictionary
         File names of auxiliary files:
         - skycalc: table with SKYCALC Sky Model Calculator predictions
@@ -73,3 +77,5 @@ def ifu_simulator(faux_dict, verbose):
             print(f'- Required file for item {item}:\n  {faux_dict[item]}')
         # display SKYCALC predictions for sky radiance and transmission
         display_skycalc(faux_dict['skycalc'])
+
+    wv_parameters = set_wv_parameters(grating=grating)
