@@ -170,6 +170,10 @@ def main(args=None):
     rng = np.random.default_rng(seed)
 
     ifu_simulator(
+        naxis1_ifu=FRIDA_NAXIS1_IFU,
+        naxis2_ifu=FRIDA_NAXIS2_IFU,
+        naxis1_detector=FRIDA_NAXIS1_HAWAII,
+        naxis2_detector=FRIDA_NAXIS2_HAWAII,
         scene=scene,
         faux_dict=faux_dict,
         wv_lincal=wv_lincal,

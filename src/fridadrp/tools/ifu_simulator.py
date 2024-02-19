@@ -211,11 +211,20 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
     return simulated_wave
 
 
-def ifu_simulator(scene, faux_dict, wv_lincal, rng, verbose, plots):
+def ifu_simulator(naxis1_ifu, naxis2_ifu, naxis1_detector, naxis2_detector,
+                  scene, faux_dict, wv_lincal, rng, verbose, plots):
     """IFU simulator.
 
     Parameters
     ----------
+    naxis1_ifu : int
+        IFU NAXIS1, parallel to the slices.
+    naxis2_ifu : int
+        IFU NAXIS2, perpendicular to the slices.
+    naxis1_detector : int
+        Detector NAXIS1, dispersion direction.
+    naxis2_detector : int
+        Detector NAXIS2, spatial direction (slices).
     scene : str
         YAML scene file name.
     faux_dict : Python dictionary
@@ -246,9 +255,20 @@ def ifu_simulator(scene, faux_dict, wv_lincal, rng, verbose, plots):
         # display SKYCALC predictions for sky radiance and transmission
         display_skycalc(faux_skycalc=faux_dict['skycalc'])
 
+    min_x_ifu = 0.5 * u.pix
+    max_x_ifu = naxis1_ifu + 0.5 * u.pix
+    min_y_ifu = 0.5 * u.pix
+    max_y_ifu = naxis2_ifu + 0.5 * u.pix
+
     # render scene
     required_keys = ['spectrum', 'geometry', 'nphotons', 'render']
     required_keys.sort()
+
+    nphotons_all = 0
+    simulated_wave_all = None
+    simulated_x_ifu_all = None
+    simulated_y_ifu_all = None
+    # main loop
     with open(scene, 'rt') as fstream:
         scene_dict = yaml.safe_load_all(fstream)
         for document in scene_dict:
@@ -308,11 +328,23 @@ def ifu_simulator(scene, faux_dict, wv_lincal, rng, verbose, plots):
                         )
                     else:
                         raise ValueError(f'Unexpected spectrum type: {spectrum_type}')
+                    if nphotons_all == 0:
+                        nphotons_all = nphotons
+                        simulated_wave_all = simulated_wave
+                    else:
+                        nphotons_all += nphotons
+                        simulated_wave_all = np.concatenate((simulated_wave_all, simulated_wave))
+                    print(f'--> Double check: {nphotons_all}, {len(simulated_wave_all)}')
                     # ---
                     # geometry
                     geometry_type = document['geometry']['type']
                     if geometry_type == 'flatfield':
-                        pass
+                        simulated_x_ifu = rng.uniform(low=min_x_ifu.value, high=max_x_ifu.value, size=nphotons)
+                        simulated_x_ifu *= u.pix
+                        simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
+                        simulated_y_ifu *= u.pix
+                        print(np.min(simulated_x_ifu), np.max(simulated_x_ifu))
+                        print(np.min(simulated_y_ifu), np.max(simulated_y_ifu))
                     elif geometry_type == 'normal':
                         pass
                     else:
