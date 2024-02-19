@@ -123,7 +123,7 @@ class LinearWaveCal(object):
         """
 
         if not isinstance(pixel, u.Quantity):
-            raise ValueError(f"Object 'pixel' is not a Quantity instance")
+            raise ValueError(f"Object 'pixel': {pixel} is not a Quantity instance")
 
         if pixel.unit == u.pix:
             fitspixel = pixel
@@ -158,7 +158,7 @@ class LinearWaveCal(object):
         """
 
         if not isinstance(wave, u.Quantity):
-            raise ValueError(f"Object 'wave' is not a Quantity instance")
+            raise ValueError(f"Object 'wave': {wave} is not a Quantity instance")
         if return_units not in [u.pix, u.dimensionless_unscaled]:
             raise ValueError(f'Unexpected return_units: {return_units}')
 
