@@ -56,7 +56,7 @@ def define_auxiliary_files(grating, verbose):
     # macOS $ md5 <filename>
     fconf = pooch.retrieve(
         f'{base_url}/configuration_FRIDA_IFU_simulator.json',
-        known_hash='md5:2599ac77b395e699b90a0711c8c15988',
+        known_hash='md5:9befc9554521b062bd444cb80e730333',
         path=pooch.os_cache(project="fridadrp"),
         progressbar=True
     )
@@ -70,6 +70,11 @@ def define_auxiliary_files(grating, verbose):
     registry_label = {}
     # SKYCALC Sky Model Calculator prediction table
     label = 'skycalc'
+    filename = d[label]['filename']
+    registry_label[filename] = label
+    registry_md5[filename] = f"md5:{d[label]['md5']}"
+    # EMIR arc lines
+    label = 'EMIR-arc-delta-lines'
     filename = d[label]['filename']
     registry_label[filename] = label
     registry_md5[filename] = f"md5:{d[label]['md5']}"
@@ -121,6 +126,7 @@ def main(args=None):
     parser = argparse.ArgumentParser(
         description=f"description: simulator of FRIDA IFU images ({version})"
     )
+    parser.add_argument("scene", help="YAML scene file name", type=str)
     parser.add_argument("--grating", help="Grating name", type=str, choices=FRIDA_VALID_GRATINGS, default="medium-K")
     parser.add_argument("--scale", help="Scale", type=str, choices=["fine", "medium", "coarse"], default="fine")
     parser.add_argument("--transmission", help="Apply atmosphere transmission", action="store_true")
@@ -129,6 +135,7 @@ def main(args=None):
                         choices=["default", "none"])
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=1234)
     parser.add_argument("-v", "--verbose", help="increase program verbosity", action="store_true")
+    parser.add_argument("--plots", help="plot intermediate results", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
 
     args = parser.parse_args(args=args)
@@ -142,8 +149,10 @@ def main(args=None):
     if args.echo:
         print('\033[1m\033[31m% ' + ' '.join(sys.argv) + '\033[0m\n')
 
+    scene = args.scene
     grating = args.grating
     verbose = args.verbose
+    plots = args.plots
     seed = args.seed
 
     # define auxiliary files
@@ -161,10 +170,12 @@ def main(args=None):
     rng = np.random.default_rng(seed)
 
     ifu_simulator(
+        scene=scene,
         faux_dict=faux_dict,
         wv_lincal=wv_lincal,
         rng=rng,
-        verbose=verbose
+        verbose=verbose,
+        plots=plots
     )
 
 

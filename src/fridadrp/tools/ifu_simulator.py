@@ -6,11 +6,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # License-Filename: LICENSE.txt
 #
-
+import yaml
 from astropy.io import fits
 import astropy.units as u
+from astropy.units import Unit
 import matplotlib.pyplot as plt
 import numpy as np
+import pprint
+
+
+pp = pprint.PrettyPrinter(indent=1, sort_dicts=False)
 
 
 def display_skycalc(faux_skycalc):
@@ -126,7 +131,7 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
         if not wmin.unit.is_equivalent(u.m):
             raise ValueError(f"Unexpected unit for 'wmin': {wmin}")
         wmin = wmin.to(wave_unit)
-        lower_index =np.searchsorted(line_wave.value, wmin.value, side='left')
+        lower_index = np.searchsorted(line_wave.value, wmin.value, side='left')
     else:
         lower_index = 0
 
@@ -137,11 +142,9 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
         if not wmax.unit.is_equivalent(u.m):
             raise ValueError(f"Unexpected unit for 'wmax': {wmin}")
         wmax = wmax.to(wave_unit)
-        upper_index =np.searchsorted(line_wave.value, wmax.value, side='right')
+        upper_index = np.searchsorted(line_wave.value, wmax.value, side='right')
     else:
         upper_index = len(line_wave)
-
-    print(lower_index, upper_index)
 
     if plots:
         fig, ax = plt.subplots()
@@ -208,11 +211,13 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
     return simulated_wave
 
 
-def ifu_simulator(faux_dict, wv_lincal, rng, verbose):
+def ifu_simulator(scene, faux_dict, wv_lincal, rng, verbose, plots):
     """IFU simulator.
 
     Parameters
     ----------
+    scene : str
+        YAML scene file name.
     faux_dict : Python dictionary
         File names of auxiliary files:
         - skycalc: table with SKYCALC Sky Model Calculator predictions
@@ -225,7 +230,9 @@ def ifu_simulator(faux_dict, wv_lincal, rng, verbose):
     rng : `~numpy.random._generator.Generator`
         Random number generator.
     verbose : bool
-        If True, display/plot additional information.
+        If True, display additional information.
+    plots : bool
+        If True, plot intermediate results.
 
     Returns
     -------
@@ -234,19 +241,83 @@ def ifu_simulator(faux_dict, wv_lincal, rng, verbose):
     if verbose:
         for item in faux_dict:
             print(f'- Required file for item {item}:\n  {faux_dict[item]}')
+
+    if plots:
         # display SKYCALC predictions for sky radiance and transmission
         display_skycalc(faux_skycalc=faux_dict['skycalc'])
 
-    catlines = np.genfromtxt('lines_argon_neon_xenon_empirical_EMIR.dat')
-    cat_wave = catlines[:, 0] / 10000 * u.micrometer
-    cat_flux = catlines[:, 1]
-    result = simulate_delta_lines(cat_wave, cat_flux, int(1E7), rng=rng,
-                                  wmin=wv_lincal.wmin, wmax=wv_lincal.wmax, plots=True)
-    print(type(result))
-    print(len(result))
-    print(result)
-
-    result = simulate_constant_flux(wmin=wv_lincal.wmin, wmax=wv_lincal.wmax, nphotons=int(1E7), rng=rng)
-    print(type(result))
-    print(len(result))
-    print(result)
+    # render scene
+    required_keys = ['spectrum', 'geometry', 'nphotons', 'render']
+    required_keys.sort()
+    with open(scene, 'rt') as fstream:
+        scene_dict = yaml.safe_load_all(fstream)
+        for document in scene_dict:
+            document_keys = list(document.keys())
+            document_keys.sort()
+            if document_keys == required_keys:
+                if verbose:
+                    print('\n* Processing:')
+                    pp.pprint(document)
+                nphotons = int(float(document['nphotons']))
+                render = document['render']
+                if nphotons > 0 and render:
+                    # ---
+                    # wavelength range and units
+                    wave_unit = document['spectrum']['wave_unit']
+                    if wave_unit is None:
+                        wave_min = wv_lincal.wmin
+                        wave_max = wv_lincal.wmax
+                    else:
+                        wave_min = document['spectrum']['wave_min']
+                        if wave_min is None:
+                            wave_min = wv_lincal.wmin.to(wave_unit)
+                        else:
+                            wave_min *= Unit(wave_unit)
+                        wave_max = document['spectrum']['wave_max']
+                        if wave_max is None:
+                            wave_max = wv_lincal.wmax.to(wave_unit)
+                        else:
+                            wave_max *= Unit(wave_unit)
+                    # ---
+                    # spectrum type
+                    spectrum_type = document['spectrum']['type']
+                    if spectrum_type == 'delta-lines':
+                        filename = document['spectrum']['filename']
+                        wave_column = document['spectrum']['wave_column'] - 1
+                        flux_column = document['spectrum']['flux_column'] - 1
+                        if filename[0] == '@':
+                            filename = faux_dict[filename[1:]]
+                        catlines = np.genfromtxt(filename)
+                        line_wave = catlines[:, wave_column] * Unit(wave_unit)
+                        line_flux = catlines[:, flux_column]
+                        simulated_wave = simulate_delta_lines(
+                            line_wave=line_wave,
+                            line_flux=line_flux,
+                            nphotons=nphotons,
+                            rng=rng,
+                            wmin=wave_min,
+                            wmax=wave_max,
+                            plots=plots
+                        )
+                    elif spectrum_type == 'constant-flux':
+                        simulated_wave = simulate_constant_flux(
+                            wmin=wave_min,
+                            wmax=wave_max,
+                            nphotons=nphotons,
+                            rng=rng
+                        )
+                    else:
+                        raise ValueError(f'Unexpected spectrum type: {spectrum_type}')
+                    # ---
+                    # geometry
+                    geometry_type = document['geometry']['type']
+                    if geometry_type == 'flatfield':
+                        pass
+                    elif geometry_type == 'normal':
+                        pass
+                    else:
+                        raise ValueError(f'Unexpected geometry type: {geometry_type}')
+            else:
+                print('ERROR while processing:')
+                pp.pprint(document)
+                raise ValueError(f'Invalid format in file: {scene}')
