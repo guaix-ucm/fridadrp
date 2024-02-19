@@ -71,6 +71,8 @@ class LinearWaveCal(object):
         self.crval1_wavecal = crval1_wavecal.to(default_wavelength_unit)
         self.cdelt1_wavecal = cdelt1_wavecal.to(default_wavelength_unit/u.pix)
         self.naxis1_wavecal = naxis1_wavecal
+        self.wmin = self.wave_at_pixel(0.5 * u.pix)
+        self.wmax = self.wave_at_pixel(naxis1_wavecal + 0.5 * u.pix)
         self.default_wavelength_unit = default_wavelength_unit
 
     def __str__(self):
@@ -79,6 +81,8 @@ class LinearWaveCal(object):
         output += f'crval1_wavecal: {self.crval1_wavecal}\n'
         output += f'cdelt1_wavecal: {self.cdelt1_wavecal}\n'
         output += f'naxis1_wavecal: {self.naxis1_wavecal}\n'
+        output += f'wmin..........: {self.wmin}\n'
+        output += f'wmax..........: {self.wmax}\n'
         output += f'default_wavelength_unit: {self.default_wavelength_unit}'
         return output
 
@@ -153,6 +157,8 @@ class LinearWaveCal(object):
 
         """
 
+        if not isinstance(wave, u.Quantity):
+            raise ValueError(f"Object 'wave' is not a Quantity instance")
         if return_units not in [u.pix, u.dimensionless_unscaled]:
             raise ValueError(f'Unexpected return_units: {return_units}')
 
