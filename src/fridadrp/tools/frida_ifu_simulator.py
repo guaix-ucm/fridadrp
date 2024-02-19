@@ -15,6 +15,7 @@ import sys
 from .ifu_simulator import ifu_simulator
 
 from fridadrp._version import version
+from fridadrp.processing.linear_wavelength_calibration_frida import LinearWaveCalFRIDA
 
 # Parameters
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
@@ -150,9 +151,14 @@ def main(args=None):
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
 
+    wv_lincal = LinearWaveCalFRIDA(grating=grating)
+    if verbose:
+        print(wv_lincal)
+        print(wv_lincal.__repr__())
+
     ifu_simulator(
-        grating=grating,
         faux_dict=faux_dict,
+        wv_lincal=wv_lincal,
         verbose=verbose
     )
 
