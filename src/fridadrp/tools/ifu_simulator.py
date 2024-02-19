@@ -52,7 +52,36 @@ def display_skycalc(faux_skycalc):
     plt.show()
 
 
-def simulate_delta_lines(line_wave, line_flux, nphotons, seed, wmin=None, wmax=None, plots=False):
+def simulate_constant_flux(wmin, wmax, nphotons, rng):
+    """Simulate spectrum with constant flux (per unit wavelength).
+
+    Parameters
+    ----------
+    wmin : `~astroppy.units.Quantity`
+        Minimum wavelength to be considered.
+    wmax : `~astroppy.units.Quantity`
+        Maximum wavelength to be considered.
+    nphotons : int
+        Number of photons to be simulated.
+    rng : `~numpy.random._generator.Generator`
+        Random number generator.
+
+    """
+
+    if not isinstance(wmin, u.Quantity):
+        raise ValueError(f"Object 'wmin': {wmin} is not a Quantity instance")
+    if not isinstance(wmax, u.Quantity):
+        raise ValueError(f"Object 'wmax': {wmax} is not a Quantity instance")
+    if wmin.unit != wmax.unit:
+        raise ValueError(f"Different units used for 'wmin' and 'wmax': {wmin.unit}, {wmax.unit}.\n"
+                         "Employ the same unit to unambiguously define the output result.")
+
+    simulated_wave = rng.uniform(low=wmin.value, high=wmax.value, size=nphotons)
+    simulated_wave *= wmin.unit
+    return simulated_wave
+
+
+def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=None, plots=False):
     """Simulate spectrum defined from isolated wavelengths.
 
     Parameters
@@ -64,11 +93,11 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, seed, wmin=None, wmax=N
         Array-like object containing the individual flux of each line.
     nphotons : int
         Number of photons to be simulated
-    seed : int
-        Seed for random number generator.
-    wmin : float
+    rng : `~numpy.random._generator.Generator`
+        Random number generator.
+    wmin : `~astroppy.units.Quantity`
         Minimum wavelength to be considered.
-    wmax : float
+    wmax : `~astroppy.units.Quantity`
         Maximum wavelength to be considered.
     plots : bool
         If True, plot input and output results.
@@ -85,7 +114,7 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, seed, wmin=None, wmax=N
         raise ValueError(f"Incompatible array length: 'line_wave' ({len(line_wave)}), 'line_flux' ({len(line_flux)})")
 
     if not isinstance(line_wave, u.Quantity):
-        raise ValueError(f"Object 'line_wave' is not a Quantity instance")
+        raise ValueError(f"Object 'line_wave': {line_wave} is not a Quantity instance")
     wave_unit = line_wave.unit
     if not wave_unit.is_equivalent(u.m):
         raise ValueError(f"Unexpected unit for 'line_wave': {wave_unit}")
@@ -93,7 +122,7 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, seed, wmin=None, wmax=N
     # lower wavelength limit
     if wmin is not None:
         if not isinstance(wmin, u.Quantity):
-            raise ValueError(f"Object 'wmin' is not a Quantity instance")
+            raise ValueError(f"Object 'wmin':{wmin}  is not a Quantity instance")
         if not wmin.unit.is_equivalent(u.m):
             raise ValueError(f"Unexpected unit for 'wmin': {wmin}")
         wmin = wmin.to(wave_unit)
@@ -104,7 +133,7 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, seed, wmin=None, wmax=N
     # upper wavelength limit
     if wmax is not None:
         if not isinstance(wmax, u.Quantity):
-            raise ValueError(f"Object 'wmax' is not a Quantity instance")
+            raise ValueError(f"Object 'wmax': {wmax} is not a Quantity instance")
         if not wmax.unit.is_equivalent(u.m):
             raise ValueError(f"Unexpected unit for 'wmax': {wmin}")
         wmax = wmax.to(wave_unit)
@@ -146,7 +175,6 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, seed, wmin=None, wmax=N
         plt.show()
 
     # samples following a uniform distribution
-    rng = np.random.default_rng(seed)
     unisamples = rng.uniform(low=0, high=1, size=nphotons)
 
     # closest array indices in sorted array
@@ -180,7 +208,7 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, seed, wmin=None, wmax=N
     return simulated_wave
 
 
-def ifu_simulator(faux_dict, wv_lincal, verbose):
+def ifu_simulator(faux_dict, wv_lincal, rng, verbose):
     """IFU simulator.
 
     Parameters
@@ -194,6 +222,8 @@ def ifu_simulator(faux_dict, wv_lincal, verbose):
     wv_lincal : `fridadrp.processing.linear_wavelength_calibration.LinearWaveCal`
         Object that stores the linear wavelength calibration
         parameters: CRPIX1, CRVAL1, CDELT1 and NAXIS1.
+    rng : `~numpy.random._generator.Generator`
+        Random number generator.
     verbose : bool
         If True, display/plot additional information.
 
@@ -207,12 +237,16 @@ def ifu_simulator(faux_dict, wv_lincal, verbose):
         # display SKYCALC predictions for sky radiance and transmission
         display_skycalc(faux_skycalc=faux_dict['skycalc'])
 
-
     catlines = np.genfromtxt('lines_argon_neon_xenon_empirical_EMIR.dat')
     cat_wave = catlines[:, 0] / 10000 * u.micrometer
     cat_flux = catlines[:, 1]
-    result = simulate_delta_lines(cat_wave, cat_flux, int(1E7), seed=1234,
+    result = simulate_delta_lines(cat_wave, cat_flux, int(1E7), rng=rng,
                                   wmin=wv_lincal.wmin, wmax=wv_lincal.wmax, plots=True)
+    print(type(result))
+    print(len(result))
+    print(result)
+
+    result = simulate_constant_flux(wmin=wv_lincal.wmin, wmax=wv_lincal.wmax, nphotons=int(1E7), rng=rng)
     print(type(result))
     print(len(result))
     print(result)

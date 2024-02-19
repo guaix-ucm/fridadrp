@@ -9,6 +9,7 @@
 
 import argparse
 import json
+import numpy as np
 import pooch
 import sys
 
@@ -143,6 +144,7 @@ def main(args=None):
 
     grating = args.grating
     verbose = args.verbose
+    seed = args.seed
 
     # define auxiliary files
     faux_dict = define_auxiliary_files(grating, verbose=verbose)
@@ -156,9 +158,12 @@ def main(args=None):
         print(wv_lincal)
         print(wv_lincal.__repr__())
 
+    rng = np.random.default_rng(seed)
+
     ifu_simulator(
         faux_dict=faux_dict,
         wv_lincal=wv_lincal,
+        rng=rng,
         verbose=verbose
     )
 
