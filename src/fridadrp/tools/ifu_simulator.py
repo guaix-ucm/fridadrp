@@ -12,7 +12,7 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 
-from fridadrp.processing.linear_wavelength_calibration import LinearWaveCal
+from fridadrp.processing.linear_wavelength_calibration_frida import LinearWaveCalFRIDA
 
 
 def display_skycalc(grating, faux_skycalc):
@@ -82,7 +82,7 @@ def ifu_simulator(grating, faux_dict, verbose):
         # display SKYCALC predictions for sky radiance and transmission
         display_skycalc(grating=grating, faux_skycalc=faux_dict['skycalc'])
 
-    wv_lincal = LinearWaveCal.define_from_grating(grating=grating)
+    wv_lincal = LinearWaveCalFRIDA(grating=grating)
     if verbose:
         print(wv_lincal)
-
+        print(wv_lincal.__repr__())
