@@ -127,6 +127,7 @@ def define_auxiliary_files(grating, verbose):
 
 
 def main(args=None):
+
     # parse command-line options
     parser = argparse.ArgumentParser(
         description=f"description: simulator of FRIDA IFU images ({version})"
@@ -141,6 +142,7 @@ def main(args=None):
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
                         choices=["default", "none"])
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=1234)
+    parser.add_argument("--prefix_intermediate_FITS", help="Prefix for intermediate FITS files", type=str, default="")
     parser.add_argument("-v", "--verbose", help="increase program verbosity", action="store_true")
     parser.add_argument("--plots", help="plot intermediate results", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
@@ -167,6 +169,7 @@ def main(args=None):
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
     flatpix2pix = args.flatpix2pix  # ToDo: take into account
+    prefix_intermediate_FITS = args.prefix_intermediate_FITS
     seed = args.seed
     verbose = args.verbose
     plots = args.plots
@@ -204,7 +207,10 @@ def main(args=None):
         scene=scene,
         faux_dict=faux_dict,
         rng=rng,
+        prefix_intermediate_FITS=prefix_intermediate_FITS,
         verbose=verbose,
+        instname='FRIDA',
+        subtitle=f'scale: {scale}, grating: {grating}',
         plots=plots
     )
 

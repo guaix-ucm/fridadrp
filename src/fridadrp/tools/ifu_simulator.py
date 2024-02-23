@@ -11,6 +11,7 @@ from astropy.io import fits
 import astropy.units as u
 from astropy.units import Unit
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import pprint
 
@@ -211,7 +212,9 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
 
 
 def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
-                  scene, faux_dict, rng, verbose, plots):
+                  scene, faux_dict, rng,
+                  prefix_intermediate_FITS,
+                  verbose=False, instname=None, subtitle=None, plots=False):
     """IFU simulator.
 
     Parameters
@@ -234,8 +237,15 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
           x_ifu, y_ify, wavelength -> x_detector, y_detector
     rng : `~numpy.random._generator.Generator`
         Random number generator.
+    prefix_intermediate_FITS : str
+        Prefix for output intermediate FITS files. If the length of
+        this string is 0, no output is generated.
     verbose : bool
         If True, display additional information.
+    instname : str or None
+        Instrument name.
+    subtitle : str or None
+        Plot subtitle.
     plots : bool
         If True, plot intermediate results.
 
@@ -348,7 +358,7 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                         simulated_y_ifu *= u.pix
                     elif geometry_type == 'gaussian':
                         ra_deg = document['geometry']['ra_deg'] * u.deg
-                        dec_deg = document['geometry']['ra_deg'] * u.deg
+                        dec_deg = document['geometry']['dec_deg'] * u.deg
                         std_ra_arcsec = document['geometry']['std_ra_arcsec'] * u.arcsec
                         std_dec_arcsec = document['geometry']['std_dec_arcsec'] * u.arcsec
                         position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
@@ -363,10 +373,10 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                         # covariance matrix for the multivariate normal
                         std_x = std_ra_arcsec / plate_scale_x.to(u.arcsec / u.pix)
                         std_y = std_dec_arcsec / plate_scale_y.to(u.arcsec / u.pix)
-                        rotation_matrix = np.array(
+                        rotation_matrix = np.array(  # note the sign to rotate N -> E -> S -> W
                             [
-                                [np.cos(position_angle_deg), -np.sin(position_angle_deg)],
-                                [np.sin(position_angle_deg), np.cos(position_angle_deg)]
+                                [np.cos(position_angle_deg), np.sin(position_angle_deg)],
+                                [-np.sin(position_angle_deg), np.cos(position_angle_deg)]
                             ]
                         )
                         covariance = np.diag([std_x.value**2, std_y.value**2])
@@ -390,6 +400,8 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                         simulated_y_ifu_all = np.concatenate((simulated_y_ifu_all, simulated_y_ifu))
                     # ---
                     # update nphotons
+                    if verbose:
+                        print(f'--> {nphotons} simulated')
                     if nphotons_all == 0:
                         nphotons_all = nphotons
                     else:
@@ -405,6 +417,12 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                         print(f'{len(simulated_x_ifu_all)=}')
                         print(f'{len(simulated_y_ifu_all)=}')
                         raise ValueError('Unexpected differences found in the previous numbers')
+                else:
+                    if verbose:
+                        if nphotons == 0:
+                            print('WARNING -> nphotons: 0')
+                        else:
+                            print('WARNING -> render: False')
             else:
                 print('ERROR while processing:')
                 pp.pprint(document)
@@ -431,3 +449,38 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
         nphotons_all = len(iok)
     if verbose:
         print(f'Final number of simulated photons..: {nphotons_all:>{textwidth_nphotons_number}}')
+
+    # compute image2d, method0
+    bins_x_ifu = 0.5 + np.arange(naxis1_ifu.value + 1)
+    bins_y_ifu = 0.5 + np.arange(naxis2_ifu.value + 1)
+    # (important: reverse X <-> Y)
+    image2d_method0_ifu, xedges, yedges = np.histogram2d(
+        x=simulated_y_ifu_all.value,
+        y=simulated_x_ifu_all.value,
+        bins=(bins_y_ifu, bins_x_ifu)
+    )
+    if len(prefix_intermediate_FITS) > 0:
+        hdu = fits.PrimaryHDU(image2d_method0_ifu.astype(np.float32))
+        hdul = fits.HDUList([hdu])
+        outfile = f'{prefix_intermediate_FITS}_ifu_white2D_method0.fits'
+        print(f'Saving file: {outfile}')
+        hdul.writeto(f'{outfile}', overwrite='yes')
+    if True:  #plots:
+        fig, ax = plt.subplots(figsize=(6.4, 6.4))
+        img = ax.imshow(image2d_method0_ifu, origin='lower', interpolation='None')
+        ax.set_xlabel('X axis (array index)  [parallel to the slices]')
+        ax.set_ylabel('Y axis (array index)  [perpendicular to the slices]')
+        if instname is not None:
+            title = f'{instname} '
+        else:
+            title = ''
+        title += 'IFU image, method0'
+        if subtitle is not None:
+            title += f'\n{subtitle}'
+        title += f'\nscene: {scene}'
+        ax.set_title(title)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        fig.colorbar(img, cax=cax, label='Number of photons')
+        plt.tight_layout()
+        plt.show()
