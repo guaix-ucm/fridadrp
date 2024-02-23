@@ -58,7 +58,7 @@ class LinearWaveCal(object):
     """
 
     def __init__(self, crpix1_wavecal, crval1_wavecal, cdelt1_wavecal, naxis1_wavecal, default_wavelength_unit):
-        # check attribute units
+        # check units
         if not crpix1_wavecal.unit.is_equivalent(u.pix):
             raise ValueError(f'Unexpected crpix1_wavecal unit: {crpix1_wavecal.unit}')
         if not crval1_wavecal.unit.is_equivalent(u.m):

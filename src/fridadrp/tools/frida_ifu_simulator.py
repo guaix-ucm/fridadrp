@@ -8,6 +8,8 @@
 #
 
 import argparse
+from astropy.coordinates import SkyCoord
+import astropy.units as u
 import json
 import numpy as np
 import pooch
@@ -16,6 +18,7 @@ import sys
 from .ifu_simulator import ifu_simulator
 
 from fridadrp._version import version
+from fridadrp.processing.define_3d_wcs import define_3d_wcs
 from fridadrp.processing.linear_wavelength_calibration_frida import LinearWaveCalFRIDA
 
 # Parameters
@@ -25,6 +28,8 @@ from fridadrp.core import FRIDA_NAXIS1_IFU
 from fridadrp.core import FRIDA_NAXIS2_IFU
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_VALID_GRATINGS
+from fridadrp.core import FRIDA_VALID_SPATIAL_SCALES
+from fridadrp.core import FRIDA_SPATIAL_SCALE
 
 
 def define_auxiliary_files(grating, verbose):
@@ -128,7 +133,9 @@ def main(args=None):
     )
     parser.add_argument("scene", help="YAML scene file name", type=str)
     parser.add_argument("--grating", help="Grating name", type=str, choices=FRIDA_VALID_GRATINGS, default="medium-K")
-    parser.add_argument("--scale", help="Scale", type=str, choices=["fine", "medium", "coarse"], default="fine")
+    parser.add_argument("--scale", help="Scale", type=str, choices=FRIDA_VALID_SPATIAL_SCALES, default="fine")
+    parser.add_argument("--ra_center_deg", help="Central RA coordinate (deg)", type=float, default=0.0)
+    parser.add_argument("--dec_center_deg", help="Central DEC coordinate (deg)", type=float, default=0.0)
     parser.add_argument("--transmission", help="Apply atmosphere transmission", action="store_true")
     parser.add_argument("--rnoise", help="Readout noise (ADU)", type=float, default=0)
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
@@ -149,34 +156,52 @@ def main(args=None):
     if args.echo:
         print('\033[1m\033[31m% ' + ' '.join(sys.argv) + '\033[0m\n')
 
+    # simplify argument names
     scene = args.scene
     grating = args.grating
+    scale = args.scale
+    ra_center_deg = args.ra_center_deg
+    dec_center_deg = args.dec_center_deg
+    transmission = args.transmission
+    rnoise = args.rnoise
+    if rnoise < 0:
+        raise ValueError(f'Invalid readout noise value: {rnoise}')
+    flatpix2pix = args.flatpix2pix
+    seed = args.seed
     verbose = args.verbose
     plots = args.plots
-    seed = args.seed
 
     # define auxiliary files
     faux_dict = define_auxiliary_files(grating, verbose=verbose)
 
-    rnoise = args.rnoise
-    if rnoise < 0:
-        raise ValueError(f'Invalid readout noise value: {rnoise}')
+    # World Coordinate System of the data cube
+    skycoord_center = SkyCoord(ra=ra_center_deg * u.deg, dec=dec_center_deg * u.deg, frame='icrs')
 
+    # linear wavelength calibration
     wv_lincal = LinearWaveCalFRIDA(grating=grating)
-    if verbose:
-        print(wv_lincal)
-        print(wv_lincal.__repr__())
+    print(type(wv_lincal))
+    print(wv_lincal)
 
+    # define WCS object
+    wcs = define_3d_wcs(
+        naxis1_ifu=FRIDA_NAXIS1_IFU,
+        naxis2_ifu=FRIDA_NAXIS2_IFU,
+        skycoord_center=skycoord_center,
+        spatial_scale= FRIDA_SPATIAL_SCALE[scale],
+        wv_lincal=wv_lincal,
+        verbose=verbose
+    )
+
+    # initilize random number generator with provided seed
     rng = np.random.default_rng(seed)
 
     ifu_simulator(
-        naxis1_ifu=FRIDA_NAXIS1_IFU,
-        naxis2_ifu=FRIDA_NAXIS2_IFU,
+        wcs=wcs,
+        wv_lincal=wv_lincal,
         naxis1_detector=FRIDA_NAXIS1_HAWAII,
         naxis2_detector=FRIDA_NAXIS2_HAWAII,
         scene=scene,
         faux_dict=faux_dict,
-        wv_lincal=wv_lincal,
         rng=rng,
         verbose=verbose,
         plots=plots

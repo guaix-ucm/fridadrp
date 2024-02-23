@@ -211,19 +211,19 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
     return simulated_wave
 
 
-def ifu_simulator(naxis1_ifu, naxis2_ifu, naxis1_detector, naxis2_detector,
-                  scene, faux_dict, wv_lincal, rng, verbose, plots):
+def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
+                  scene, faux_dict, rng, verbose, plots):
     """IFU simulator.
 
     Parameters
     ----------
-    naxis1_ifu : int
-        IFU NAXIS1, parallel to the slices.
-    naxis2_ifu : int
-        IFU NAXIS2, perpendicular to the slices.
-    naxis1_detector : int
+    wcs : `~astropy.wcs.wcs.WCS`
+        WCS of the data cube.
+    wv_lincal : `~fridadrp.processing.linear_wavelength_calibration_frida.LinearWaveCalFRIDA`
+        Linear wavelength calibration object.
+    naxis1_detector : `~astropy.units.Quantity`
         Detector NAXIS1, dispersion direction.
-    naxis2_detector : int
+    naxis2_detector : `~astropy.units.Quantity`
         Detector NAXIS2, spatial direction (slices).
     scene : str
         YAML scene file name.
@@ -233,9 +233,6 @@ def ifu_simulator(naxis1_ifu, naxis2_ifu, naxis1_detector, naxis2_detector,
         - flatpix2pix: pixel-to-pixel flat field
         - model_ifu2detector: 2D polynomial transformation
           x_ifu, y_ify, wavelength -> x_detector, y_detector
-    wv_lincal : `fridadrp.processing.linear_wavelength_calibration.LinearWaveCal`
-        Object that stores the linear wavelength calibration
-        parameters: CRPIX1, CRVAL1, CDELT1 and NAXIS1.
     rng : `~numpy.random._generator.Generator`
         Random number generator.
     verbose : bool
@@ -255,6 +252,12 @@ def ifu_simulator(naxis1_ifu, naxis2_ifu, naxis1_detector, naxis2_detector,
         # display SKYCALC predictions for sky radiance and transmission
         display_skycalc(faux_skycalc=faux_dict['skycalc'])
 
+    if int(naxis1_detector.value) != wcs.array_shape[0]:
+        print(wcs)
+        raise ValueError(f'naxis1_detector: {int(naxis1_detector.value)} != NAXIS3: {wcs.array_shape[0]} in wcs object')
+    naxis1_ifu = wcs.array_shape[2] * u.pix
+    naxis2_ifu = wcs.array_shape[1] * u.pix
+
     min_x_ifu = 0.5 * u.pix
     max_x_ifu = naxis1_ifu + 0.5 * u.pix
     min_y_ifu = 0.5 * u.pix
@@ -262,7 +265,7 @@ def ifu_simulator(naxis1_ifu, naxis2_ifu, naxis1_detector, naxis2_detector,
 
     # render scene
     required_keys = ['spectrum', 'geometry', 'nphotons', 'render']
-    required_keys.sort()
+    required_keys.sort()  # in place
 
     nphotons_all = 0
     simulated_wave_all = None
@@ -273,7 +276,7 @@ def ifu_simulator(naxis1_ifu, naxis2_ifu, naxis1_detector, naxis2_detector,
         scene_dict = yaml.safe_load_all(fstream)
         for document in scene_dict:
             document_keys = list(document.keys())
-            document_keys.sort()
+            document_keys.sort()  # in place
             if document_keys == required_keys:
                 if verbose:
                     print('\n* Processing:')
@@ -306,6 +309,8 @@ def ifu_simulator(naxis1_ifu, naxis2_ifu, naxis1_detector, naxis2_detector,
                         wave_column = document['spectrum']['wave_column'] - 1
                         flux_column = document['spectrum']['flux_column'] - 1
                         if filename[0] == '@':
+                            # retrieve file name from dictionary of auxiliary
+                            # file names for the considered instrument
                             filename = faux_dict[filename[1:]]
                         catlines = np.genfromtxt(filename)
                         line_wave = catlines[:, wave_column] * Unit(wave_unit)
@@ -327,14 +332,12 @@ def ifu_simulator(naxis1_ifu, naxis2_ifu, naxis1_detector, naxis2_detector,
                             rng=rng
                         )
                     else:
-                        raise ValueError(f'Unexpected spectrum type: {spectrum_type}')
+                        raise ValueError(f'Unexpected spectrum type: "{spectrum_type}" '
+                                         f'in file "{scene}"')
                     if nphotons_all == 0:
-                        nphotons_all = nphotons
                         simulated_wave_all = simulated_wave
                     else:
-                        nphotons_all += nphotons
                         simulated_wave_all = np.concatenate((simulated_wave_all, simulated_wave))
-                    print(f'--> Double check: {nphotons_all}, {len(simulated_wave_all)}')
                     # ---
                     # geometry
                     geometry_type = document['geometry']['type']
@@ -343,12 +346,34 @@ def ifu_simulator(naxis1_ifu, naxis2_ifu, naxis1_detector, naxis2_detector,
                         simulated_x_ifu *= u.pix
                         simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
                         simulated_y_ifu *= u.pix
-                        print(np.min(simulated_x_ifu), np.max(simulated_x_ifu))
-                        print(np.min(simulated_y_ifu), np.max(simulated_y_ifu))
-                    elif geometry_type == 'normal':
+                    elif geometry_type == 'gaussian':
                         pass
                     else:
-                        raise ValueError(f'Unexpected geometry type: {geometry_type}')
+                        raise ValueError(f'Unexpected geometry type: "{geometry_type}" '
+                                         f'in file "{scene}"')
+                    if nphotons_all == 0:
+                        simulated_x_ifu_all = simulated_x_ifu
+                        simulated_y_ifu_all = simulated_y_ifu
+                    else:
+                        simulated_x_ifu_all = np.concatenate((simulated_x_ifu_all, simulated_x_ifu))
+                        simulated_y_ifu_all = np.concatenate((simulated_y_ifu_all, simulated_y_ifu))
+                    # ---
+                    # update nphotons
+                    if nphotons_all == 0:
+                        nphotons_all = nphotons
+                    else:
+                        nphotons_all += nphotons
+                    if len({nphotons_all,
+                            len(simulated_wave_all),
+                            len(simulated_x_ifu_all),
+                            len(simulated_y_ifu_all)
+                            }) != 1:
+                        print('ERROR: check the following numbers:')
+                        print(f'{nphotons_all=}')
+                        print(f'{len(simulated_wave_all)=}')
+                        print(f'{len(simulated_x_ifu_all)=}')
+                        print(f'{len(simulated_y_ifu_all)=}')
+                        raise ValueError('Unexpected differences found in the previous numbers')
             else:
                 print('ERROR while processing:')
                 pp.pprint(document)
