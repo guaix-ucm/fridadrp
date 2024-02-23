@@ -409,3 +409,25 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                 print('ERROR while processing:')
                 pp.pprint(document)
                 raise ValueError(f'Invalid format in file: {scene}')
+
+    # filter simulated photons to keep only those that fall within
+    # the IFU field of view and within the expected espectral range
+    textwidth_nphotons_number = len(str(nphotons_all))
+    if verbose:
+        print('Filtering photons within IFU field of view and spectral range...')
+        print(f'Initial number of simulated photons: {nphotons_all:>{textwidth_nphotons_number}}')
+    cond1 = simulated_x_ifu_all >= min_x_ifu
+    cond2 = simulated_x_ifu_all <= max_x_ifu
+    cond3 = simulated_y_ifu_all >= min_y_ifu
+    cond4 = simulated_y_ifu_all <= max_y_ifu
+    cond5 = simulated_wave_all >= wv_lincal.wmin
+    cond6 = simulated_wave_all <= wv_lincal.wmax
+    iok = np.where(cond1 & cond2 & cond3 & cond4 & cond5 & cond6)[0]
+
+    if len(iok) < nphotons_all:
+        simulated_x_ifu_all = simulated_x_ifu_all[iok]
+        simulated_y_ifu_all = simulated_y_ifu_all[iok]
+        simulated_wave_all = simulated_wave_all[iok]
+        nphotons_all = len(iok)
+    if verbose:
+        print(f'Final number of simulated photons..: {nphotons_all:>{textwidth_nphotons_number}}')
