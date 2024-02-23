@@ -162,11 +162,11 @@ def main(args=None):
     scale = args.scale
     ra_center_deg = args.ra_center_deg
     dec_center_deg = args.dec_center_deg
-    transmission = args.transmission
-    rnoise = args.rnoise
+    transmission = args.transmission  # ToDo: take into account
+    rnoise = args.rnoise  # ToDo: take into account
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
-    flatpix2pix = args.flatpix2pix
+    flatpix2pix = args.flatpix2pix  # ToDo: take into account
     seed = args.seed
     verbose = args.verbose
     plots = args.plots
@@ -179,10 +179,11 @@ def main(args=None):
 
     # linear wavelength calibration
     wv_lincal = LinearWaveCalFRIDA(grating=grating)
-    print(type(wv_lincal))
-    print(wv_lincal)
+    if verbose:
+        print(f'\n{wv_lincal}')
 
-    # define WCS object
+    # define WCS object to store the spatial 2D WCS
+    # and the linear wavelength calibration
     wcs = define_3d_wcs(
         naxis1_ifu=FRIDA_NAXIS1_IFU,
         naxis2_ifu=FRIDA_NAXIS2_IFU,

@@ -66,10 +66,9 @@ def define_3d_wcs(naxis1_ifu, naxis2_ifu, skycoord_center, spatial_scale, wv_lin
     header['CRPIX1'] = (naxis1_ifu.value + 1) / 2
     header['CRPIX2'] = (naxis2_ifu.value + 1) / 2
     header['CRPIX3'] = wv_lincal.crpix1_wavecal.value
-    # Convert scale from degrees/pixel to degrees/arcsecond
-    spatial_scale_deg_arcsec = spatial_scale.to(u.deg / u.pix).value / 3600
-    header['CD1_1'] = -spatial_scale_deg_arcsec
-    header['CD2_2'] = spatial_scale_deg_arcsec
+    spatial_scale_deg_pix = spatial_scale.to(u.deg / u.pix).value
+    header['CD1_1'] = -spatial_scale_deg_pix
+    header['CD2_2'] = spatial_scale_deg_pix
     header['CD3_3'] = 1.0
     header['CUNIT1'] = 'deg'
     header['CUNIT2'] = 'deg'
@@ -78,6 +77,6 @@ def define_3d_wcs(naxis1_ifu, naxis2_ifu, skycoord_center, spatial_scale, wv_lin
     # define wcs object
     wcs = WCS(header)
     if verbose:
-        print(wcs)
+        print(f'\n{wcs}')
 
     return wcs

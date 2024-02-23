@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pprint
 
-
 pp = pprint.PrettyPrinter(indent=1, sort_dicts=False)
 
 
@@ -245,6 +244,7 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
     """
 
     if verbose:
+        print(' ')
         for item in faux_dict:
             print(f'- Required file for item {item}:\n  {faux_dict[item]}')
 
@@ -347,7 +347,38 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                         simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
                         simulated_y_ifu *= u.pix
                     elif geometry_type == 'gaussian':
-                        pass
+                        ra_deg = document['geometry']['ra_deg'] * u.deg
+                        dec_deg = document['geometry']['ra_deg'] * u.deg
+                        std_ra_arcsec = document['geometry']['std_ra_arcsec'] * u.arcsec
+                        std_dec_arcsec = document['geometry']['std_dec_arcsec'] * u.arcsec
+                        position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
+                        x_center, y_center, w_center = wcs.world_to_pixel_values(ra_deg, dec_deg, wave_min)
+                        # the previous pixel coordinates are assumed to be 0 at the center
+                        # of the first pixel in each dimension
+                        x_center += 1
+                        y_center += 1
+                        # plate scale
+                        plate_scale_x = wcs.wcs.cd[0, 0] * u.deg / u.pix
+                        plate_scale_y = wcs.wcs.cd[1, 1] * u.deg / u.pix
+                        # covariance matrix for the multivariate normal
+                        std_x = std_ra_arcsec / plate_scale_x.to(u.arcsec / u.pix)
+                        std_y = std_dec_arcsec / plate_scale_y.to(u.arcsec / u.pix)
+                        rotation_matrix = np.array(
+                            [
+                                [np.cos(position_angle_deg), -np.sin(position_angle_deg)],
+                                [np.sin(position_angle_deg), np.cos(position_angle_deg)]
+                            ]
+                        )
+                        covariance = np.diag([std_x.value**2, std_y.value**2])
+                        rotated_covariance = np.dot(rotation_matrix.T, np.dot(covariance, rotation_matrix))
+                        # simulate X, Y values
+                        simulated_xy_ifu = rng.multivariate_normal(
+                            mean=[x_center, y_center],
+                            cov=rotated_covariance,
+                            size=nphotons
+                        )
+                        simulated_x_ifu = simulated_xy_ifu[:, 0] * u.pix
+                        simulated_y_ifu = simulated_xy_ifu[:, 1] * u.pix
                     else:
                         raise ValueError(f'Unexpected geometry type: "{geometry_type}" '
                                          f'in file "{scene}"')
