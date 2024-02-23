@@ -344,6 +344,8 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                     else:
                         raise ValueError(f'Unexpected spectrum type: "{spectrum_type}" '
                                          f'in file "{scene}"')
+                    # convert to default wavelength_unit
+                    simulated_wave = simulated_wave.to(wv_lincal.default_wavelength_unit)
                     if nphotons_all == 0:
                         simulated_wave_all = simulated_wave
                     else:
@@ -450,7 +452,9 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
     if verbose:
         print(f'Final number of simulated photons..: {nphotons_all:>{textwidth_nphotons_number}}')
 
-    # compute image2d, method0
+    # ----------------------------
+    # compute image2d IFU, method0
+    # ----------------------------
     bins_x_ifu = 0.5 + np.arange(naxis1_ifu.value + 1)
     bins_y_ifu = 0.5 + np.arange(naxis2_ifu.value + 1)
     # (important: reverse X <-> Y)
@@ -459,6 +463,7 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
         y=simulated_x_ifu_all.value,
         bins=(bins_y_ifu, bins_x_ifu)
     )
+    print(f'Double check: {np.sum(image2d_method0_ifu)}, {nphotons_all}')
     if len(prefix_intermediate_FITS) > 0:
         hdu = fits.PrimaryHDU(image2d_method0_ifu.astype(np.float32))
         hdul = fits.HDUList([hdu])
@@ -484,3 +489,24 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
         fig.colorbar(img, cax=cax, label='Number of photons')
         plt.tight_layout()
         plt.show()
+
+    # ----------------------------
+    # compute image3d IFU, method0
+    # ----------------------------
+    crval1 = wv_lincal.crval1_wavecal.value
+    cdelt1 = wv_lincal.cdelt1_wavecal.value
+    bins_wave = crval1  + np.arange(naxis2_detector.value + 1) * cdelt1 - 0.5 * cdelt1
+    print(np.min(simulated_wave_all.value), np.max(simulated_wave_all.value))
+    print(bins_wave)
+    image3d_method0_ifu, edges = np.histogramdd(
+        sample=(simulated_wave_all.value, simulated_y_ifu_all.value, simulated_x_ifu_all.value),
+        bins=(bins_wave, bins_y_ifu, bins_x_ifu)
+    )
+    print(f'Double check: {np.sum(image3d_method0_ifu)}, {nphotons_all}')
+    if len(prefix_intermediate_FITS) > 0:
+        hdu = fits.PrimaryHDU(image3d_method0_ifu.astype(np.float32))
+        hdu.header.extend(wcs.to_header(), update=True)
+        hdul = fits.HDUList([hdu])
+        outfile = f'{prefix_intermediate_FITS}_ifu_3D_method0.fits'
+        print(f'Saving file: {outfile}')
+        hdul.writeto(f'{outfile}', overwrite='yes')
