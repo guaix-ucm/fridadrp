@@ -43,6 +43,10 @@ class LinearWaveCal(object):
         NAXIS1 value of the wavelength calibrated spectrum.
     default_wavelength_unit : `~astropy.units.core.Unit
         Default wavelength unit to be employed in CRVAL1 and CDELT1.
+    wmin : `~astropy.units.Quantity`
+        Minimum wavelength, computed at pixel 0.5.
+    wmax : `~astropy.units.Quantity`
+        Maximum wavelength, computed at pixel naxis1_wavecal + 0.5.
 
     Methods
     -------
