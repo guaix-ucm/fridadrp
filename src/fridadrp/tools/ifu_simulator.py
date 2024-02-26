@@ -361,8 +361,8 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                     elif geometry_type == 'gaussian':
                         ra_deg = document['geometry']['ra_deg'] * u.deg
                         dec_deg = document['geometry']['dec_deg'] * u.deg
-                        std_ra_arcsec = document['geometry']['std_ra_arcsec'] * u.arcsec
-                        std_dec_arcsec = document['geometry']['std_dec_arcsec'] * u.arcsec
+                        fwhm_ra_arcsec = document['geometry']['fwhm_ra_arcsec'] * u.arcsec
+                        fwhm_dec_arcsec = document['geometry']['fwhm_dec_arcsec'] * u.arcsec
                         position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
                         x_center, y_center, w_center = wcs.world_to_pixel_values(ra_deg, dec_deg, wave_min)
                         # the previous pixel coordinates are assumed to be 0 at the center
@@ -373,8 +373,9 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                         plate_scale_x = wcs.wcs.cd[0, 0] * u.deg / u.pix
                         plate_scale_y = wcs.wcs.cd[1, 1] * u.deg / u.pix
                         # covariance matrix for the multivariate normal
-                        std_x = std_ra_arcsec / plate_scale_x.to(u.arcsec / u.pix)
-                        std_y = std_dec_arcsec / plate_scale_y.to(u.arcsec / u.pix)
+                        factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
+                        std_x = fwhm_ra_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
+                        std_y = fwhm_dec_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
                         rotation_matrix = np.array(  # note the sign to rotate N -> E -> S -> W
                             [
                                 [np.cos(position_angle_deg), np.sin(position_angle_deg)],
