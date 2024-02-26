@@ -8,6 +8,7 @@
 #
 import yaml
 from astropy.io import fits
+from astropy.wcs import WCS
 import astropy.units as u
 from astropy.units import Unit
 import matplotlib.pyplot as plt
@@ -211,7 +212,97 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
     return simulated_wave
 
 
-def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
+def generate_image2d_method0_ifu(
+        wcs3d,
+        noversampling_whiteimage,
+        simulated_x_ifu_all,
+        simulated_y_ifu_all,
+        prefix_intermediate_FITS,
+        instname,
+        subtitle,
+        scene
+):
+    """Compute image2d IFU (white image), method0
+
+    Parameters
+    ----------
+    wcs3d : `~astropy.wcs.wcs.WCS`
+        WCS of the data cube.
+    noversampling_whiteimage : int
+        Oversampling factor (integer number) to generate the method0
+        white image.
+    simulated_x_ifu_all : `~astropy.units.Quantity`
+        Simulated X coordinates of the photons in the IFU.
+    simulated_y_ifu_all : `~astropy.units.Quantity`
+        Simulated Y coordinates of the photons in the IFU.
+    prefix_intermediate_FITS : str
+        Prefix for output intermediate FITS files. If the length of
+        this string is 0, no output is generated.
+    instname : str or None
+        Instrument name.
+    subtitle : str or None
+        Plot subtitle.
+    scene : str
+        YAML scene file name.
+
+    """
+
+    wcs2d = wcs3d.sub(axes=[1, 2])
+
+    naxis1_ifu_oversampled = wcs2d.array_shape[1] * noversampling_whiteimage * u.pix
+    naxis2_ifu_oversampled = wcs2d.array_shape[0] * noversampling_whiteimage * u.pix
+
+    bins_x_ifu_oversampled = 0.5 + np.arange(naxis1_ifu_oversampled.value + 1)
+    bins_y_ifu_oversampled = 0.5 + np.arange(naxis2_ifu_oversampled.value + 1)
+
+    crpix1_orig, crpix2_orig = wcs2d.wcs.crpix
+    crpix1_oversampled = (naxis1_ifu_oversampled.value + 1) / 2
+    crpix2_oversampled = (naxis2_ifu_oversampled.value + 1) / 2
+
+    wcs2d.wcs.crpix = crpix1_oversampled, crpix2_oversampled
+
+    # (important: reverse X <-> Y)
+    image2d_method0_ifu, xedges, yedges = np.histogram2d(
+        x=(simulated_y_ifu_all.value - crpix2_orig) * noversampling_whiteimage + crpix2_oversampled,
+        y=(simulated_x_ifu_all.value - crpix1_orig) * noversampling_whiteimage + crpix1_oversampled,
+        bins=(bins_y_ifu_oversampled, bins_x_ifu_oversampled)
+    )
+
+    wcs2d.wcs.cd /= noversampling_whiteimage
+
+    # save FITS file
+    if len(prefix_intermediate_FITS) > 0:
+        hdu = fits.PrimaryHDU(image2d_method0_ifu.astype(np.float32))
+        hdu.header.extend(wcs2d.to_header(), update=True)
+        hdul = fits.HDUList([hdu])
+        outfile = f'{prefix_intermediate_FITS}_ifu_white2D_method0.fits'
+        print(f'Saving file: {outfile}')
+        hdul.writeto(f'{outfile}', overwrite='yes')
+
+    # display result
+    if True:  #plots:
+        fig, ax = plt.subplots(figsize=(6.4, 6.4))
+        img = ax.imshow(image2d_method0_ifu, origin='lower', interpolation='None')
+        ax.set_xlabel('X axis (array index)  [parallel to the slices]')
+        ax.set_ylabel('Y axis (array index)  [perpendicular to the slices]')
+        if instname is not None:
+            title = f'{instname} '
+        else:
+            title = ''
+        title += 'IFU image, method0'
+        if subtitle is not None:
+            title += f'\n{subtitle}'
+        title += f'\nscene: {scene}'
+        ax.set_title(title)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        fig.colorbar(img, cax=cax, label='Number of photons')
+        plt.tight_layout()
+        plt.show()
+
+
+def ifu_simulator(wcs3d, wv_lincal, naxis1_detector, naxis2_detector,
+                  noversampling_whiteimage,
                   scene, faux_dict, rng,
                   prefix_intermediate_FITS,
                   verbose=False, instname=None, subtitle=None, plots=False):
@@ -219,7 +310,7 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
 
     Parameters
     ----------
-    wcs : `~astropy.wcs.wcs.WCS`
+    wcs3d : `~astropy.wcs.wcs.WCS`
         WCS of the data cube.
     wv_lincal : `~fridadrp.processing.linear_wavelength_calibration_frida.LinearWaveCalFRIDA`
         Linear wavelength calibration object.
@@ -227,6 +318,9 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
         Detector NAXIS1, dispersion direction.
     naxis2_detector : `~astropy.units.Quantity`
         Detector NAXIS2, spatial direction (slices).
+    noversampling_whiteimage : int
+        Oversampling factor (integer number) to generate the method0
+        white image.
     scene : str
         YAML scene file name.
     faux_dict : Python dictionary
@@ -262,11 +356,12 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
         # display SKYCALC predictions for sky radiance and transmission
         display_skycalc(faux_skycalc=faux_dict['skycalc'])
 
-    if int(naxis1_detector.value) != wcs.array_shape[0]:
-        print(wcs)
-        raise ValueError(f'naxis1_detector: {int(naxis1_detector.value)} != NAXIS3: {wcs.array_shape[0]} in wcs object')
-    naxis1_ifu = wcs.array_shape[2] * u.pix
-    naxis2_ifu = wcs.array_shape[1] * u.pix
+    if int(naxis1_detector.value) != wcs3d.array_shape[0]:
+        print(wcs3d)
+        raise ValueError(f'naxis1_detector: {int(naxis1_detector.value)} != '
+                         f'NAXIS3: {wcs3d.array_shape[0]} in wcs object')
+    naxis1_ifu = wcs3d.array_shape[2] * u.pix
+    naxis2_ifu = wcs3d.array_shape[1] * u.pix
 
     min_x_ifu = 0.5 * u.pix
     max_x_ifu = naxis1_ifu + 0.5 * u.pix
@@ -364,14 +459,14 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
                         fwhm_ra_arcsec = document['geometry']['fwhm_ra_arcsec'] * u.arcsec
                         fwhm_dec_arcsec = document['geometry']['fwhm_dec_arcsec'] * u.arcsec
                         position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
-                        x_center, y_center, w_center = wcs.world_to_pixel_values(ra_deg, dec_deg, wave_min)
+                        x_center, y_center, w_center = wcs3d.world_to_pixel_values(ra_deg, dec_deg, wave_min)
                         # the previous pixel coordinates are assumed to be 0 at the center
                         # of the first pixel in each dimension
                         x_center += 1
                         y_center += 1
                         # plate scale
-                        plate_scale_x = wcs.wcs.cd[0, 0] * u.deg / u.pix
-                        plate_scale_y = wcs.wcs.cd[1, 1] * u.deg / u.pix
+                        plate_scale_x = wcs3d.wcs.cd[0, 0] * u.deg / u.pix
+                        plate_scale_y = wcs3d.wcs.cd[1, 1] * u.deg / u.pix
                         # covariance matrix for the multivariate normal
                         factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
                         std_x = fwhm_ra_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
@@ -453,47 +548,25 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
     if verbose:
         print(f'Final number of simulated photons..: {nphotons_all:>{textwidth_nphotons_number}}')
 
-    # ----------------------------
-    # compute image2d IFU, method0
-    # ----------------------------
-    bins_x_ifu = 0.5 + np.arange(naxis1_ifu.value + 1)
-    bins_y_ifu = 0.5 + np.arange(naxis2_ifu.value + 1)
-    # (important: reverse X <-> Y)
-    image2d_method0_ifu, xedges, yedges = np.histogram2d(
-        x=simulated_y_ifu_all.value,
-        y=simulated_x_ifu_all.value,
-        bins=(bins_y_ifu, bins_x_ifu)
+    # ------------------------------------------
+    # compute image2d IFU (white image), method0
+    # ------------------------------------------
+    generate_image2d_method0_ifu(
+        wcs3d=wcs3d,
+        noversampling_whiteimage=noversampling_whiteimage,
+        simulated_x_ifu_all=simulated_x_ifu_all,
+        simulated_y_ifu_all=simulated_y_ifu_all,
+        prefix_intermediate_FITS=prefix_intermediate_FITS,
+        instname=instname,
+        subtitle=subtitle,
+        scene=scene
     )
-    print(f'Double check: {np.sum(image2d_method0_ifu)}, {nphotons_all}')
-    if len(prefix_intermediate_FITS) > 0:
-        hdu = fits.PrimaryHDU(image2d_method0_ifu.astype(np.float32))
-        hdul = fits.HDUList([hdu])
-        outfile = f'{prefix_intermediate_FITS}_ifu_white2D_method0.fits'
-        print(f'Saving file: {outfile}')
-        hdul.writeto(f'{outfile}', overwrite='yes')
-    if True:  #plots:
-        fig, ax = plt.subplots(figsize=(6.4, 6.4))
-        img = ax.imshow(image2d_method0_ifu, origin='lower', interpolation='None')
-        ax.set_xlabel('X axis (array index)  [parallel to the slices]')
-        ax.set_ylabel('Y axis (array index)  [perpendicular to the slices]')
-        if instname is not None:
-            title = f'{instname} '
-        else:
-            title = ''
-        title += 'IFU image, method0'
-        if subtitle is not None:
-            title += f'\n{subtitle}'
-        title += f'\nscene: {scene}'
-        ax.set_title(title)
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        fig.colorbar(img, cax=cax, label='Number of photons')
-        plt.tight_layout()
-        plt.show()
 
     # ----------------------------
     # compute image3d IFU, method0
     # ----------------------------
+    bins_x_ifu = 0.5 + np.arange(naxis1_ifu.value + 1)
+    bins_y_ifu = 0.5 + np.arange(naxis2_ifu.value + 1)
     crval1 = wv_lincal.crval1_wavecal.value
     cdelt1 = wv_lincal.cdelt1_wavecal.value
     bins_wave = crval1  + np.arange(naxis2_detector.value + 1) * cdelt1 - 0.5 * cdelt1
@@ -506,7 +579,7 @@ def ifu_simulator(wcs, wv_lincal, naxis1_detector, naxis2_detector,
     print(f'Double check: {np.sum(image3d_method0_ifu)}, {nphotons_all}')
     if len(prefix_intermediate_FITS) > 0:
         hdu = fits.PrimaryHDU(image3d_method0_ifu.astype(np.float32))
-        hdu.header.extend(wcs.to_header(), update=True)
+        hdu.header.extend(wcs3d.to_header(), update=True)
         hdul = fits.HDUList([hdu])
         outfile = f'{prefix_intermediate_FITS}_ifu_3D_method0.fits'
         print(f'Saving file: {outfile}')

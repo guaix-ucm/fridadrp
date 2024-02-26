@@ -139,6 +139,7 @@ def main(args=None):
     parser.add_argument("--dec_teles_deg", help="Telescope central DEC (deg)", type=float, default=0.0)
     parser.add_argument("--delta_ra_teles_arcsec", help="Offset in RA (arcsec)", type=float, default=0.0)
     parser.add_argument("--delta_dec_teles_arcsec", help="Offset in DEC (arcsec)", type=float, default=0.0)
+    parser.add_argument("--noversampling_whiteimage", help="Oversampling white image", type=int, default=10)
     parser.add_argument("--transmission", help="Apply atmosphere transmission", action="store_true")
     parser.add_argument("--rnoise", help="Readout noise (ADU)", type=float, default=0)
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
@@ -168,6 +169,9 @@ def main(args=None):
     dec_teles_deg = args.dec_teles_deg
     delta_ra_teles_arcsec = args.delta_ra_teles_arcsec
     delta_dec_teles_arcsec = args.delta_dec_teles_arcsec
+    noversampling_whiteimage = args.noversampling_whiteimage
+    if noversampling_whiteimage < 1:
+        raise ValueError(f'Unexpected {noversampling_whiteimage=} (must be > 1)')
     transmission = args.transmission  # ToDo: take into account
     rnoise = args.rnoise  # ToDo: take into account
     if rnoise < 0:
@@ -195,11 +199,11 @@ def main(args=None):
 
     # define WCS object to store the spatial 2D WCS
     # and the linear wavelength calibration
-    wcs = define_3d_wcs(
+    wcs3d = define_3d_wcs(
         naxis1_ifu=FRIDA_NAXIS1_IFU,
         naxis2_ifu=FRIDA_NAXIS2_IFU,
         skycoord_center=skycoord_center,
-        spatial_scale= FRIDA_SPATIAL_SCALE[scale],
+        spatial_scale=FRIDA_SPATIAL_SCALE[scale],
         wv_lincal=wv_lincal,
         verbose=verbose
     )
@@ -208,10 +212,11 @@ def main(args=None):
     rng = np.random.default_rng(seed)
 
     ifu_simulator(
-        wcs=wcs,
+        wcs3d=wcs3d,
         wv_lincal=wv_lincal,
         naxis1_detector=FRIDA_NAXIS1_HAWAII,
         naxis2_detector=FRIDA_NAXIS2_HAWAII,
+        noversampling_whiteimage=noversampling_whiteimage,
         scene=scene,
         faux_dict=faux_dict,
         rng=rng,
