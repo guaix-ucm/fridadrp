@@ -177,7 +177,7 @@ def main(args=None):
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
     flatpix2pix = args.flatpix2pix  # ToDo: take into account
-    prefix_intermediate_FITS = args.prefix_intermediate_FITS
+    prefix_intermediate_fits = args.prefix_intermediate_FITS
     seed = args.seed
     verbose = args.verbose
     plots = args.plots
@@ -215,11 +215,12 @@ def main(args=None):
         wcs3d=wcs3d,
         naxis1_detector=FRIDA_NAXIS1_HAWAII,
         naxis2_detector=FRIDA_NAXIS2_HAWAII,
+        nslices=FRIDA_NSLICES,
         noversampling_whitelight=noversampling_whitelight,
         scene=scene,
         faux_dict=faux_dict,
         rng=rng,
-        prefix_intermediate_FITS=prefix_intermediate_FITS,
+        prefix_intermediate_fits=prefix_intermediate_fits,
         verbose=verbose,
         instname='FRIDA',
         subtitle=f'scale: {scale}, grating: {grating}',

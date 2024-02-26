@@ -6,16 +6,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # License-Filename: LICENSE.txt
 #
-import yaml
+from astropy import wcs
 from astropy.io import fits
 import astropy.units as u
 from astropy.units import Unit
+import json
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import pprint
+import yaml
 
 from fridadrp.processing.define_3d_wcs import get_wvparam_from_wcs3d
+from numina.array.distortion import fmap
+
 
 pp = pprint.PrettyPrinter(indent=1, sort_dicts=False)
 
@@ -218,10 +222,11 @@ def generate_image2d_method0_ifu(
         noversampling_whitelight,
         simulated_x_ifu_all,
         simulated_y_ifu_all,
-        prefix_intermediate_FITS,
+        prefix_intermediate_fits,
         instname,
         subtitle,
-        scene
+        scene,
+        plots
 ):
     """Compute image2d IFU (white image), method0
 
@@ -236,7 +241,7 @@ def generate_image2d_method0_ifu(
         Simulated X coordinates of the photons in the IFU.
     simulated_y_ifu_all : `~astropy.units.Quantity`
         Simulated Y coordinates of the photons in the IFU.
-    prefix_intermediate_FITS : str
+    prefix_intermediate_fits : str
         Prefix for output intermediate FITS files. If the length of
         this string is 0, no output is generated.
     instname : str or None
@@ -245,6 +250,8 @@ def generate_image2d_method0_ifu(
         Plot subtitle.
     scene : str
         YAML scene file name.
+    plots : bool
+        If True, plot intermediate results.
 
     """
 
@@ -273,16 +280,16 @@ def generate_image2d_method0_ifu(
     wcs2d.wcs.cd /= noversampling_whitelight
 
     # save FITS file
-    if len(prefix_intermediate_FITS) > 0:
+    if len(prefix_intermediate_fits) > 0:
         hdu = fits.PrimaryHDU(image2d_method0_ifu.astype(np.float32))
         hdu.header.extend(wcs2d.to_header(), update=True)
         hdul = fits.HDUList([hdu])
-        outfile = f'{prefix_intermediate_FITS}_ifu_white2D_method0_os{noversampling_whitelight:d}.fits'
+        outfile = f'{prefix_intermediate_fits}_ifu_white2D_method0_os{noversampling_whitelight:d}.fits'
         print(f'Saving file: {outfile}')
         hdul.writeto(f'{outfile}', overwrite='yes')
 
     # display result
-    if True:  #plots:
+    if plots:
         fig, ax = plt.subplots(figsize=(6.4, 6.4))
         img = ax.imshow(image2d_method0_ifu, origin='lower', interpolation='None')
         ax.set_xlabel('X axis (array index)  [parallel to the slices]')
@@ -308,10 +315,12 @@ def generate_image3d_method0_ifu(
         simulated_x_ifu_all,
         simulated_y_ifu_all,
         simulated_wave_all,
-        naxis2_detector,
-        prefix_intermediate_FITS
+        bins_x_ifu,
+        bins_y_ifu,
+        bins_wave,
+        prefix_intermediate_fits
 ):
-    """Compute image3d IFU, method 0
+    """Compute 3D image3 IFU, method 0
 
     Parameters
     ----------
@@ -323,43 +332,220 @@ def generate_image3d_method0_ifu(
         Simulated Y coordinates of the photons in the IFU.
     simulated_wave_all : `~astropy.units.Quantity`
         Simulated wavelengths of the photons in the IFU.
-    naxis2_detector : `~astropy.units.Quantity`
-        Detector NAXIS2, spatial direction (slices).
-    prefix_intermediate_FITS : str
+    bins_x_ifu : `~numpy.ndarray`
+        Bin edges in the naxis1_ifu direction
+        (along the slice).
+    bins_y_ifu : `~numpy.ndarray`
+        Bin edges in the naxis2_ifu direction
+        (perpendicular to the slice).
+    bins_wave : `~numpy.ndarray`
+        Bin edges in the wavelength direction.
+    prefix_intermediate_fits : str
         Prefix for output intermediate FITS files. If the length of
         this string is 0, no output is generated.
 
     """
 
-    naxis1_ifu = wcs3d.array_shape[2] * u.pix
-    naxis2_ifu = wcs3d.array_shape[1] * u.pix
-
-    bins_x_ifu = (0.5 + np.arange(naxis1_ifu.value + 1)) * u.pix
-    bins_y_ifu = (0.5 + np.arange(naxis2_ifu.value + 1)) * u.pix
-
-    wv_cunit1, wv_crpix1, wv_crval1, wv_cdelt1 = get_wvparam_from_wcs3d(wcs3d)
-    bins_wave = wv_crval1 + \
-                (np.arange(naxis2_detector.value + 1) * u.pix - wv_crpix1) * wv_cdelt1 - 0.5 * u.pix * wv_cdelt1
-
+    # generate image
     image3d_method0_ifu, edges = np.histogramdd(
         sample=(simulated_wave_all.value, simulated_y_ifu_all.value, simulated_x_ifu_all.value),
         bins=(bins_wave.value, bins_y_ifu.value, bins_x_ifu.value)
     )
 
     # save FITS file
-    if len(prefix_intermediate_FITS) > 0:
+    if len(prefix_intermediate_fits) > 0:
         hdu = fits.PrimaryHDU(image3d_method0_ifu.astype(np.float32))
         hdu.header.extend(wcs3d.to_header(), update=True)
         hdul = fits.HDUList([hdu])
-        outfile = f'{prefix_intermediate_FITS}_ifu_3D_method0.fits'
+        outfile = f'{prefix_intermediate_fits}_ifu_3D_method0.fits'
         print(f'Saving file: {outfile}')
         hdul.writeto(f'{outfile}', overwrite='yes')
 
 
-def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector,
+def update_image2d_rss_detector_method0(
+        islice,
+        simulated_x_ifu_all,
+        simulated_y_ifu_all,
+        simulated_wave_all,
+        naxis1_ifu,
+        bins_x_ifu,
+        bins_wave,
+        bins_x_detector,
+        bins_y_detector,
+        wv_cdelt1,
+        extra_degradation_spectral_direction,
+        dict_ifu2detector,
+        image2d_rss_method0,
+        image2d_detector_method0
+):
+    """Update the two 2D images: RSS and detector.
+
+    The function updates the following 2D arrays:
+    - image2d_rss_method0,
+    - image2d_detector_method0
+    with the photons observed through the slice 'islice'.
+
+    Note that both arrays are generated simultaneously in
+    order to make use of the same value of
+    'extra_degradation_spectral_direction'.
+
+    This function can be executed in parallel.
+
+    Parameters
+    ----------
+    islice : int
+        Slice number.
+    simulated_x_ifu_all : `~astropy.units.Quantity`
+        Simulated X coordinates of the photons in the IFU.
+    simulated_y_ifu_all : `~astropy.units.Quantity`
+        Simulated Y coordinates of the photons in the IFU.
+    simulated_wave_all : `~astropy.units.Quantity`
+        Simulated wavelengths of the photons in the IFU.
+    naxis1_ifu : `~astropy.units.Quantity`
+        IFU NAXIS1 (along the slice)
+    bins_x_ifu : `~numpy.ndarray`
+        Bin edges in the naxis1_ifu direction
+        (along the slice).
+    bins_wave : `~numpy.ndarray`
+        Bin edges in the wavelength direction.
+    bins_x_detector : `~numpy.ndarray`
+        Bin edges in the naxis1_detector direction
+        (spectral direction).
+    bins_y_detector : `~numpy.ndarray`
+        Bin edges in the naxis2_detector direction
+        (slices direction).
+    wv_cdelt1 : ~astropy.units.Quantity`
+        CDELT1 value along the spectral direction.
+    extra_degradation_spectral_direction : `~astropy.units.Quantity`
+        Additional degradation in the spectral direction, in units of
+        the detector pixels, for each simulated photon.
+    dict_ifu2detector : dict
+        A Python dictionary containing the 2D polynomials that allow
+        to transform (X, Y) coordinates in the IFU focal plane to
+        (X, Y) coordinates in the detector.
+    image2d_rss_method0 : `~numpy.ndarray`
+        2D array containing the RSS image. This array is
+        updated by this function.
+    image2d_detector_method0 : `~numpy.ndarray`
+        2D array containing the detector image. This array is
+        updated by this function.
+
+    """
+
+    # determine photons that pass through the considered slice
+    y_ifu_expected = 1.5 + 2 * islice
+    condition = np.abs(simulated_y_ifu_all.value - y_ifu_expected) < 1
+    iok = np.where(condition)[0]
+    nphotons_slice = len(iok)
+
+    if nphotons_slice > 0:
+        # -------------------------------------------------
+        # 1) spectroscopic 2D image with continguous slices
+        # -------------------------------------------------
+        h, xedges, yedges = np.histogram2d(
+            x=simulated_x_ifu_all.value[iok],
+            y=simulated_wave_all.value[iok] + \
+              (simulated_y_ifu_all.value[iok] - y_ifu_expected) * wv_cdelt1.value + \
+              extra_degradation_spectral_direction.value[iok] * wv_cdelt1.value,
+            bins=(bins_x_ifu.value, bins_wave.value)
+        )
+        j1 = islice * int(naxis1_ifu.value)
+        j2 = j1 + int(naxis1_ifu.value)
+        image2d_rss_method0[j1:j2, :] += h
+
+        # -----------------------------------------
+        # 2) spectroscopic 2D image in the detector
+        # -----------------------------------------
+        # use models to predict location in Hawaii detector
+        # important: reverse here X <-> Y
+        dumdict = dict_ifu2detector['contents'][islice]
+        order = dumdict['order']
+        aij = np.array(dumdict['aij'])
+        bij = np.array(dumdict['bij'])
+        y_hawaii, x_hawaii = fmap(
+            order=order,
+            aij=aij,
+            bij=bij,
+            x=simulated_x_ifu_all.value[iok],
+            y=simulated_wave_all.to(u.um).value[iok]   # ToDo: revise this!
+        )
+        # disperse photons along the spectral direction according to their
+        # location within the slice in the vertical direction
+        x_hawaii += simulated_y_ifu_all[iok].value - y_ifu_expected
+        # include additional degradation in spectral resolution
+        x_hawaii += extra_degradation_spectral_direction.value[iok]
+        # compute 2D histogram
+        # important: reverse X <-> Y
+        h, xedges, yedges = np.histogram2d(
+            x=y_hawaii,
+            y=x_hawaii,
+            bins=(bins_y_detector, bins_x_detector)
+        )
+        image2d_detector_method0 += h
+
+
+def save_image2d_rss_detector_method0(
+        wcs3d,
+        image2d_rss_method0,
+        image2d_detector_method0,
+        prefix_intermediate_fits
+):
+    """Save the two 2D images: RSS and detector.
+
+    Parameters
+    ----------
+    wcs3d : `~astropy.wcs.wcs.WCS`
+        WCS of the data cube.
+    image2d_rss_method0 : `~numpy.ndarray`
+        2D array containing the RSS image. This array is
+        updated by this function.
+    image2d_detector_method0 : `~numpy.ndarray`
+        2D array containing the detector image. This array is
+        updated by this function.
+    prefix_intermediate_fits : str
+        Prefix for output intermediate FITS files. If the length of
+        this string is 0, no output is generated.
+    """
+
+    if len(prefix_intermediate_fits) > 0:
+        # -------------------------------------------------
+        # 1) spectroscopic 2D image with continguous slices
+        # -------------------------------------------------
+        # ToDo: compute properly the parameters corresponding to the spatial axis
+        # Note that using: wcs2d = wcs3d.sub(axes=[0, 1])
+        # selecting the 1D spectral and one of the 1D spatial info of the 3D WCS
+        # does not work:
+        # "astropy.wcs._wcs.InconsistentAxisTypesError: ERROR 4 in wcs_types()
+        #  Unmatched celestial axes."
+        # For that reason we try a different approach:
+        wv_cunit1, wv_crpix1, wv_crval1, wv_cdelt1 = get_wvparam_from_wcs3d(wcs3d)
+        wcs2d = wcs.WCS(naxis=2)
+        wcs2d.wcs.crpix = [wv_crpix1.value, 1]  # reference pixel coordinate
+        wcs2d.wcs.crval = [wv_crval1.value, 0]  # world coordinate at reference pixel
+        wcs2d.wcs.cdelt = [wv_cdelt1.value, 1]
+        wcs2d.wcs.ctype = ["WAVE", ""]   # ToDo: fix this
+        wcs2d.wcs.cunit = [wv_cunit1, u.pix]
+        hdu = fits.PrimaryHDU(image2d_rss_method0.astype(np.float32))
+        hdu.header.extend(wcs2d.to_header(), update=True)
+        hdul = fits.HDUList([hdu])
+        outfile = f'{prefix_intermediate_fits}_rss_2D_method0.fits'
+        print(f'Saving file: {outfile}')
+        hdul.writeto(outfile, overwrite='yes')
+
+        # -----------------------------------------
+        # 2) spectroscopic 2D image in the detector
+        # -----------------------------------------
+        hdu = fits.PrimaryHDU(image2d_detector_method0.astype(np.float32))
+        hdul = fits.HDUList([hdu])
+        outfile = f'{prefix_intermediate_fits}_detector_2D_method0.fits'
+        print(f'Saving file: {outfile}')
+        hdul.writeto(outfile, overwrite='yes')
+
+
+def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                   noversampling_whitelight,
                   scene, faux_dict, rng,
-                  prefix_intermediate_FITS,
+                  prefix_intermediate_fits,
                   verbose=False, instname=None, subtitle=None, plots=False):
     """IFU simulator.
 
@@ -371,6 +557,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector,
         Detector NAXIS1, dispersion direction.
     naxis2_detector : `~astropy.units.Quantity`
         Detector NAXIS2, spatial direction (slices).
+    nslices : int
+        Number of IFU slices.
     noversampling_whitelight : int
         Oversampling factor (integer number) to generate the white
         light image.
@@ -384,7 +572,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector,
           x_ifu, y_ify, wavelength -> x_detector, y_detector
     rng : `~numpy.random._generator.Generator`
         Random number generator.
-    prefix_intermediate_FITS : str
+    prefix_intermediate_fits : str
         Prefix for output intermediate FITS files. If the length of
         this string is 0, no output is generated.
     verbose : bool
@@ -611,20 +799,71 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector,
             noversampling_whitelight=noversampling,
             simulated_x_ifu_all=simulated_x_ifu_all,
             simulated_y_ifu_all=simulated_y_ifu_all,
-            prefix_intermediate_FITS=prefix_intermediate_FITS,
+            prefix_intermediate_fits=prefix_intermediate_fits,
             instname=instname,
             subtitle=subtitle,
-            scene=scene
+            scene=scene,
+            plots=plots
         )
 
     # ----------------------------
     # compute image3d IFU, method0
     # ----------------------------
+    bins_x_ifu = (0.5 + np.arange(naxis1_ifu.value + 1)) * u.pix
+    bins_y_ifu = (0.5 + np.arange(naxis2_ifu.value + 1)) * u.pix
+    bins_wave = wv_crval1 + \
+                (np.arange(naxis2_detector.value + 1) * u.pix - wv_crpix1) * wv_cdelt1 - 0.5 * u.pix * wv_cdelt1
     generate_image3d_method0_ifu(
         wcs3d=wcs3d,
         simulated_x_ifu_all=simulated_x_ifu_all,
         simulated_y_ifu_all=simulated_y_ifu_all,
         simulated_wave_all=simulated_wave_all,
-        naxis2_detector=naxis2_detector,
-        prefix_intermediate_FITS=prefix_intermediate_FITS
+        bins_x_ifu=bins_x_ifu,
+        bins_y_ifu=bins_y_ifu,
+        bins_wave=bins_wave,
+        prefix_intermediate_fits=prefix_intermediate_fits
+    )
+
+    # --------------------------------------------
+    # compute image2d RSS and in detector, method0
+    # --------------------------------------------
+    bins_x_detector = np.linspace(start=0.5, stop=naxis1_detector.value + 0.5, num=int(naxis1_detector.value) + 1)
+    bins_y_detector = np.linspace(start=0.5, stop=naxis2_detector.value + 0.5, num=int(naxis2_detector.value) + 1)
+
+    # read ifu2detector transformations
+    dict_ifu2detector = json.loads(open(faux_dict['model_ifu2detector'], mode='rt').read())
+
+    # additional degradation in the spectral direction
+    # (in units of detector pixels)
+    extra_degradation_spectral_direction = rng.normal(loc=0.0, scale=1, size=nphotons_all) * u.pix
+
+    # initialize images
+    image2d_rss_method0 = np.zeros((int(naxis1_ifu.value * nslices), int(naxis1_detector.value)))
+    image2d_detector_method0 = np.zeros((int(naxis2_detector.value), int(naxis1_detector.value)))
+
+    # update images
+    for islice in range(nslices):
+        print(f'{islice=}')
+        update_image2d_rss_detector_method0(
+            islice=islice,
+            simulated_x_ifu_all=simulated_x_ifu_all,
+            simulated_y_ifu_all=simulated_y_ifu_all,
+            simulated_wave_all=simulated_wave_all,
+            naxis1_ifu=naxis1_ifu,
+            bins_x_ifu=bins_x_ifu,
+            bins_wave=bins_wave,
+            bins_x_detector=bins_x_detector,
+            bins_y_detector=bins_y_detector,
+            wv_cdelt1=wv_cdelt1,
+            extra_degradation_spectral_direction=extra_degradation_spectral_direction,
+            dict_ifu2detector=dict_ifu2detector,
+            image2d_rss_method0=image2d_rss_method0,
+            image2d_detector_method0=image2d_detector_method0
+        )
+
+    save_image2d_rss_detector_method0(
+        wcs3d=wcs3d,
+        image2d_rss_method0=image2d_rss_method0,
+        image2d_detector_method0=image2d_detector_method0,
+        prefix_intermediate_fits=prefix_intermediate_fits
     )
