@@ -135,8 +135,10 @@ def main(args=None):
     parser.add_argument("scene", help="YAML scene file name", type=str)
     parser.add_argument("--grating", help="Grating name", type=str, choices=FRIDA_VALID_GRATINGS, default="medium-K")
     parser.add_argument("--scale", help="Scale", type=str, choices=FRIDA_VALID_SPATIAL_SCALES, default="fine")
-    parser.add_argument("--ra_center_deg", help="Central RA coordinate (deg)", type=float, default=0.0)
-    parser.add_argument("--dec_center_deg", help="Central DEC coordinate (deg)", type=float, default=0.0)
+    parser.add_argument("--ra_teles_deg", help="Telescope central RA (deg)", type=float, default=0.0)
+    parser.add_argument("--dec_teles_deg", help="Telescope central DEC (deg)", type=float, default=0.0)
+    parser.add_argument("--delta_ra_teles_arcsec", help="Offset in RA (arcsec)", type=float, default=0.0)
+    parser.add_argument("--delta_dec_teles_arcsec", help="Offset in DEC (arcsec)", type=float, default=0.0)
     parser.add_argument("--transmission", help="Apply atmosphere transmission", action="store_true")
     parser.add_argument("--rnoise", help="Readout noise (ADU)", type=float, default=0)
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
@@ -162,8 +164,10 @@ def main(args=None):
     scene = args.scene
     grating = args.grating
     scale = args.scale
-    ra_center_deg = args.ra_center_deg
-    dec_center_deg = args.dec_center_deg
+    ra_teles_deg = args.ra_teles_deg
+    dec_teles_deg = args.dec_teles_deg
+    delta_ra_teles_arcsec = args.delta_ra_teles_arcsec
+    delta_dec_teles_arcsec = args.delta_dec_teles_arcsec
     transmission = args.transmission  # ToDo: take into account
     rnoise = args.rnoise  # ToDo: take into account
     if rnoise < 0:
@@ -178,7 +182,11 @@ def main(args=None):
     faux_dict = define_auxiliary_files(grating, verbose=verbose)
 
     # World Coordinate System of the data cube
-    skycoord_center = SkyCoord(ra=ra_center_deg * u.deg, dec=dec_center_deg * u.deg, frame='icrs')
+    skycoord_center = SkyCoord(
+        ra=ra_teles_deg * u.deg + (delta_ra_teles_arcsec * u.arcsec).to(u.deg),
+        dec=dec_teles_deg * u.deg + (delta_dec_teles_arcsec * u.arcsec).to(u.deg),
+        frame='icrs'
+    )
 
     # linear wavelength calibration
     wv_lincal = LinearWaveCalFRIDA(grating=grating)
