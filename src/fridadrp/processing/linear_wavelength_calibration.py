@@ -73,7 +73,7 @@ class LinearWaveCal(object):
         # define attributes
         self.crpix1_wavecal = crpix1_wavecal
         self.crval1_wavecal = crval1_wavecal.to(default_wavelength_unit)
-        self.cdelt1_wavecal = cdelt1_wavecal.to(default_wavelength_unit/u.pix)
+        self.cdelt1_wavecal = cdelt1_wavecal.to(default_wavelength_unit / u.pix)
         self.naxis1_wavecal = naxis1_wavecal
         self.wmin = self.wave_at_pixel(0.5 * u.pix)
         self.wmax = self.wave_at_pixel(naxis1_wavecal + 0.5 * u.pix)

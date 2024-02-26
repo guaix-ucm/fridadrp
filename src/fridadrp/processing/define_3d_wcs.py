@@ -51,6 +51,8 @@ def define_3d_wcs(naxis1_ifu, naxis2_ifu, skycoord_center, spatial_scale, wv_lin
     if not spatial_scale.unit.is_equivalent(u.deg / u.pix):
         raise ValueError(f'Unexpected spatial_scale unit: {spatial_scale.unit}')
 
+    default_wv_unit = wv_lincal.default_wavelength_unit
+
     # define FITS header
     header = fits.Header()
     header['NAXIS'] = 3
@@ -62,17 +64,17 @@ def define_3d_wcs(naxis1_ifu, naxis2_ifu, skycoord_center, spatial_scale, wv_lin
     header['CTYPE3'] = 'WAVE'
     header['CRVAL1'] = skycoord_center.ra.deg
     header['CRVAL2'] = skycoord_center.dec.deg
-    header['CRVAL3'] = wv_lincal.crval1_wavecal.to(u.m).value
+    header['CRVAL3'] = wv_lincal.crval1_wavecal.to(default_wv_unit).value
     header['CRPIX1'] = (naxis1_ifu.value + 1) / 2
     header['CRPIX2'] = (naxis2_ifu.value + 1) / 2
     header['CRPIX3'] = wv_lincal.crpix1_wavecal.value
     spatial_scale_deg_pix = spatial_scale.to(u.deg / u.pix).value
     header['CD1_1'] = -spatial_scale_deg_pix
     header['CD2_2'] = spatial_scale_deg_pix
-    header['CD3_3'] = wv_lincal.cdelt1_wavecal.to(u.m / u.pix).value
+    header['CD3_3'] = wv_lincal.cdelt1_wavecal.to(default_wv_unit / u.pix).value
     header['CUNIT1'] = 'deg'
     header['CUNIT2'] = 'deg'
-    header['CUNIT3'] = 'm'
+    header['CUNIT3'] = default_wv_unit.name
 
     # define wcs object
     wcs3d = WCS(header)

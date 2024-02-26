@@ -229,7 +229,7 @@ def generate_image2d_method0_ifu(
     ----------
     wcs3d : `~astropy.wcs.wcs.WCS`
         WCS of the data cube.
-    noversampling_whiteimage : int
+    noversampling_whitelight : int
         Oversampling factor (integer number) to generate the method0
         white image.
     simulated_x_ifu_all : `~astropy.units.Quantity`
