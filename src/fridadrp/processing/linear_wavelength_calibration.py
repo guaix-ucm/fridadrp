@@ -41,7 +41,7 @@ class LinearWaveCal(object):
         CDELT1 value of the wavelength calibrated spectrum.
     naxis1_wavecal : `~astropy.units.Quantity`
         NAXIS1 value of the wavelength calibrated spectrum.
-    default_wavelength_unit : `~astropy.units.core.Unit
+    default_wavelength_unit : `~astropy.units.core.Unit`
         Default wavelength unit to be employed in CRVAL1 and CDELT1.
     wmin : `~astropy.units.Quantity`
         Minimum wavelength, computed at pixel 0.5.
