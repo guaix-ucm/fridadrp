@@ -11,6 +11,7 @@ from astropy.io import fits
 from astropy.units import Quantity
 import astropy.units as u
 from astropy.units import Unit
+from joblib import Parallel, delayed
 import json
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -781,7 +782,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 raise ValueError(f'Invalid format in file: {scene}')
 
     # filter simulated photons to keep only those that fall within
-    # the IFU field of view and within the expected espectral range
+    # the IFU field of view and within the expected spectral range
     textwidth_nphotons_number = len(str(nphotons_all))
     if verbose:
         print('Filtering photons within IFU field of view and spectral range...')
@@ -854,9 +855,14 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     image2d_detector_method0 = np.zeros((naxis2_detector.value, naxis1_detector.value))
 
     # update images
+    # (accelerate computation using joblib.Parallel)
+    """
     for islice in range(nslices):
         print(f'{islice=}')
-        update_image2d_rss_detector_method0(
+        update_image2d_rss_detector_method0(...)
+    """
+    Parallel(n_jobs=-1, prefer="threads")(
+        delayed(update_image2d_rss_detector_method0)(
             islice=islice,
             simulated_x_ifu_all=simulated_x_ifu_all,
             simulated_y_ifu_all=simulated_y_ifu_all,
@@ -871,7 +877,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             dict_ifu2detector=dict_ifu2detector,
             image2d_rss_method0=image2d_rss_method0,
             image2d_detector_method0=image2d_detector_method0
-        )
+        ) for islice in range(nslices))
 
     save_image2d_rss_detector_method0(
         wcs3d=wcs3d,

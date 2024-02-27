@@ -28,6 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "astropy",
+    "joblib",
     "matplotlib",
     "numina >= 0.32",
     "numpy >= 1.20",
