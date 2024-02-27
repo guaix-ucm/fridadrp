@@ -61,7 +61,7 @@ def define_auxiliary_files(grating, verbose):
     # macOS $ md5 <filename>
     fconf = pooch.retrieve(
         f'{base_url}/configuration_FRIDA_IFU_simulator.json',
-        known_hash='md5:9befc9554521b062bd444cb80e730333',
+        known_hash='md5:8bbf34ed003ac7445ad0f4db9cdb8320',
         path=pooch.os_cache(project="fridadrp"),
         progressbar=True
     )

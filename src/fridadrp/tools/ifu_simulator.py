@@ -467,6 +467,7 @@ def update_image2d_rss_detector_method0(
         # -----------------------------------------
         # use models to predict location in Hawaii detector
         # important: reverse here X <-> Y
+        wavelength_unit = Unit(dict_ifu2detector['wavelength-unit'])
         dumdict = dict_ifu2detector['contents'][islice]
         order = dumdict['order']
         aij = np.array(dumdict['aij'])
@@ -476,7 +477,9 @@ def update_image2d_rss_detector_method0(
             aij=aij,
             bij=bij,
             x=simulated_x_ifu_all.value[iok],
-            y=simulated_wave_all.to(u.um).value[iok]   # ToDo: revise this!
+            # important: use the wavelength unit employed to determine
+            # the polynomial transformation
+            y=simulated_wave_all.to(wavelength_unit).value[iok]
         )
         # disperse photons along the spectral direction according to their
         # location within the slice in the vertical direction
