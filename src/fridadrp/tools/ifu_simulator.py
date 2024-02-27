@@ -126,6 +126,9 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
     if len(line_wave) != len(line_flux):
         raise ValueError(f"Incompatible array length: 'line_wave' ({len(line_wave)}), 'line_flux' ({len(line_flux)})")
 
+    if np.any(line_flux < 0):
+        raise ValueError(f'Negative line fluxes cannot be handled')
+
     if not isinstance(line_wave, u.Quantity):
         raise ValueError(f"Object 'line_wave': {line_wave} is not a Quantity instance")
     wave_unit = line_wave.unit
@@ -215,6 +218,107 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
         ax.set_ylabel('Intensity (number of photons)')
         plt.tight_layout()
         plt.show()
+
+    return simulated_wave
+
+
+def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, plots):
+    """Simulate spectrum defined by tabulated wave and flux data.
+
+    Parameters
+    ----------
+    wave : `~astropy.units.Quantity`
+        Numpy array (with astropy units) containing the tabulated
+        wavelength.
+    flux : array_like
+        Array-like object containing the tabulated flux.
+    nphotons : int
+        Number of photons to be simulated
+    rng : `~numpy.random._generator.Generator`
+        Random number generator.
+    wmin : `~astroppy.units.Quantity`
+        Minimum wavelength to be considered.
+    wmax : `~astroppy.units.Quantity`
+        Maximum wavelength to be considered.
+    plots : bool
+        If True, plot input and output results.
+
+    Returns
+    -------
+    simulated_wave : `~astropy.units.Quantity`
+        Wavelength of simulated photons.
+    """
+
+    flux = np.asarray(flux)
+    if len(wave) != len(flux):
+        raise ValueError(f"Incompatible array length: 'wave' ({len(wave)}), 'flux' ({len(flux)})")
+
+    if np.any(flux < 0):
+        raise ValueError(f'Negative flux values cannot be handled')
+
+    if not isinstance(wave, u.Quantity):
+        raise ValueError(f"Object 'wave': {wave} is not a Quantity instance")
+    wave_unit = wave.unit
+    if not wave_unit.is_equivalent(u.m):
+        raise ValueError(f"Unexpected unit for 'wave': {wave_unit}")
+
+    # lower wavelength limit
+    if wmin is not None:
+        if not isinstance(wmin, u.Quantity):
+            raise ValueError(f"Object 'wmin':{wmin}  is not a Quantity instance")
+        if not wmin.unit.is_equivalent(u.m):
+            raise ValueError(f"Unexpected unit for 'wmin': {wmin}")
+        wmin = wmin.to(wave_unit)
+        lower_index = np.searchsorted(wave.value, wmin.value, side='left')
+    else:
+        lower_index = 0
+
+    # upper wavelength limit
+    if wmax is not None:
+        if not isinstance(wmax, u.Quantity):
+            raise ValueError(f"Object 'wmax': {wmax} is not a Quantity instance")
+        if not wmax.unit.is_equivalent(u.m):
+            raise ValueError(f"Unexpected unit for 'wmax': {wmin}")
+        wmax = wmax.to(wave_unit)
+        upper_index = np.searchsorted(wave.value, wmax.value, side='right')
+    else:
+        upper_index = len(wave)
+
+    if plots:
+        fig, ax = plt.subplots()
+        ax.plot(wave.value, flux, '-')
+        if wmin is not None:
+            ax.axvline(wmin.value, linestyle='--', color='gray')
+        if wmax is not None:
+            ax.axvline(wmax.value, linestyle='--', color='gray')
+        ax.set_xlabel(f'Wavelength ({wave_unit})')
+        ax.set_ylabel('Flux (arbitrary units)')
+        plt.tight_layout()
+        plt.show()
+
+    wave = wave[lower_index:upper_index]
+    flux = flux[lower_index:upper_index]
+
+    # normalized cumulative sum
+    cumsum = np.cumsum(flux)
+    cumsum /= cumsum[-1]
+
+    if plots:
+        fig, ax = plt.subplots()
+        ax.plot(wave.value, cumsum, '-')
+        if wmin is not None:
+            ax.axvline(wmin.value, linestyle='--', color='gray')
+        if wmax is not None:
+            ax.axvline(wmax.value, linestyle='--', color='gray')
+        ax.set_xlabel(f'Wavelength ({wave_unit})')
+        ax.set_ylabel('Cumulative sum')
+        plt.tight_layout()
+        plt.show()
+
+    # samples following a uniform distribution
+    unisamples = rng.uniform(low=0, high=1, size=nphotons)
+    simulated_wave = np.interp(x=unisamples, xp=cumsum, fp=wave.value)
+    simulated_wave *= wave_unit
 
     return simulated_wave
 
@@ -678,6 +782,21 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         simulated_wave = simulate_delta_lines(
                             line_wave=line_wave,
                             line_flux=line_flux,
+                            nphotons=nphotons,
+                            rng=rng,
+                            wmin=wave_min,
+                            wmax=wave_max,
+                            plots=plots
+                        )
+                    elif spectrum_type == 'skycalc-radiance':
+                        faux_skycalc = faux_dict['skycalc']
+                        with fits.open(faux_skycalc) as hdul:
+                            skycalc_table = hdul[1].data
+                        wave = skycalc_table['lam'] * Unit(wave_unit)
+                        flux = skycalc_table['flux']
+                        simulated_wave = simulate_spectrum(
+                            wave=wave,
+                            flux=flux,
                             nphotons=nphotons,
                             rng=rng,
                             wmin=wave_min,
