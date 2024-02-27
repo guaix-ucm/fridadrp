@@ -222,7 +222,7 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
     return simulated_wave
 
 
-def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, plots):
+def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, nbins_histo, plots):
     """Simulate spectrum defined by tabulated wave and flux data.
 
     Parameters
@@ -240,6 +240,8 @@ def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, plots):
         Minimum wavelength to be considered.
     wmax : `~astroppy.units.Quantity`
         Maximum wavelength to be considered.
+    nbins_histo : int
+        Number of bins for histogram plot.
     plots : bool
         If True, plot input and output results.
 
@@ -319,6 +321,23 @@ def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, plots):
     unisamples = rng.uniform(low=0, high=1, size=nphotons)
     simulated_wave = np.interp(x=unisamples, xp=cumsum, fp=wave.value)
     simulated_wave *= wave_unit
+
+    if plots:
+        fig, ax = plt.subplots()
+        h, bin_edges = np.histogram(simulated_wave, bins=nbins_histo)
+        hmax = np.max(h)
+        xdum = (bin_edges[:-1] + bin_edges[1:]) / 2
+        ax.plot(xdum, h, '-', label='binned simulated data')
+        ax.plot(wave.value, flux/np.max(flux)*hmax, '-', label='initial spectrum')
+        if wmin is not None:
+            ax.axvline(wmin.value, linestyle='--', color='gray')
+        if wmax is not None:
+            ax.axvline(wmax.value, linestyle='--', color='gray')
+        ax.set_xlabel(f'Wavelength ({wave_unit})')
+        ax.set_ylabel('Flux (arbitrary units)')
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
 
     return simulated_wave
 
@@ -801,6 +820,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                             rng=rng,
                             wmin=wave_min,
                             wmax=wave_max,
+                            nbins_histo=naxis1_detector.value,
                             plots=plots
                         )
                     elif spectrum_type == 'constant-flux':
