@@ -7,13 +7,16 @@
 # License-Filename: LICENSE.txt
 #
 
+from astropy.units import Quantity
 import astropy.units as u
 
-FRIDA_NAXIS1_HAWAII = 2048 * u.pix # dispersion direction
-FRIDA_NAXIS2_HAWAII = 2048 * u.pix # spatial direction (slices)
+# use Quantity(...) to define integer parameters
+# (otherwise integers are converted to float by default)
+FRIDA_NAXIS1_HAWAII = Quantity(value=2048, unit=u.pix, dtype=int)  # dispersion direction
+FRIDA_NAXIS2_HAWAII = Quantity(value=2048, unit=u.pix, dtype=int)  # spatial direction (slices)
 
-FRIDA_NAXIS1_IFU = 64 * u.pix # parallel to the slices
-FRIDA_NAXIS2_IFU = 60 * u.pix # perpendicular to the slices
+FRIDA_NAXIS1_IFU = Quantity(value=64, unit=u.pix, dtype=int)  # parallel to the slices
+FRIDA_NAXIS2_IFU = Quantity(value=60, unit=u.pix, dtype=int)  # perpendicular to the slices
 
 FRIDA_NSLICES = 30
 

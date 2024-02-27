@@ -8,6 +8,7 @@
 #
 from astropy import wcs
 from astropy.io import fits
+from astropy.units import Quantity
 import astropy.units as u
 from astropy.units import Unit
 import json
@@ -258,8 +259,16 @@ def generate_image2d_method0_ifu(
     # select the 2D spatial info of the 3D WCS
     wcs2d = wcs3d.sub(axes=[1, 2])
 
-    naxis1_ifu_oversampled = wcs2d.array_shape[1] * noversampling_whitelight * u.pix
-    naxis2_ifu_oversampled = wcs2d.array_shape[0] * noversampling_whitelight * u.pix
+    naxis1_ifu_oversampled = Quantity(
+        value=wcs2d.array_shape[1] * noversampling_whitelight,
+        unit=u.pix,
+        dtype=int
+    )
+    naxis2_ifu_oversampled = Quantity(
+        value=wcs2d.array_shape[0] * noversampling_whitelight,
+        unit=u.pix,
+        dtype=int
+    )
 
     bins_x_ifu_oversampled = (0.5 + np.arange(naxis1_ifu_oversampled.value + 1)) * u.pix
     bins_y_ifu_oversampled = (0.5 + np.arange(naxis2_ifu_oversampled.value + 1)) * u.pix
@@ -449,8 +458,8 @@ def update_image2d_rss_detector_method0(
               extra_degradation_spectral_direction.value[iok] * wv_cdelt1.value,
             bins=(bins_x_ifu.value, bins_wave.value)
         )
-        j1 = islice * int(naxis1_ifu.value)
-        j2 = j1 + int(naxis1_ifu.value)
+        j1 = islice * naxis1_ifu.value
+        j2 = j1 + naxis1_ifu.value
         image2d_rss_method0[j1:j2, :] += h
 
         # -----------------------------------------
@@ -598,8 +607,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         display_skycalc(faux_skycalc=faux_dict['skycalc'])
 
     # spatial IFU limits
-    naxis1_ifu = wcs3d.array_shape[2] * u.pix
-    naxis2_ifu = wcs3d.array_shape[1] * u.pix
+    naxis1_ifu = Quantity(value=wcs3d.array_shape[2], unit=u.pix, dtype=int)
+    naxis2_ifu = Quantity(value=wcs3d.array_shape[1], unit=u.pix, dtype=int)
     min_x_ifu = 0.5 * u.pix
     max_x_ifu = naxis1_ifu + 0.5 * u.pix
     min_y_ifu = 0.5 * u.pix
@@ -827,8 +836,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     # --------------------------------------------
     # compute image2d RSS and in detector, method0
     # --------------------------------------------
-    bins_x_detector = np.linspace(start=0.5, stop=naxis1_detector.value + 0.5, num=int(naxis1_detector.value) + 1)
-    bins_y_detector = np.linspace(start=0.5, stop=naxis2_detector.value + 0.5, num=int(naxis2_detector.value) + 1)
+    bins_x_detector = np.linspace(start=0.5, stop=naxis1_detector.value + 0.5, num=naxis1_detector.value + 1)
+    bins_y_detector = np.linspace(start=0.5, stop=naxis2_detector.value + 0.5, num=naxis2_detector.value + 1)
 
     # read ifu2detector transformations
     dict_ifu2detector = json.loads(open(faux_dict['model_ifu2detector'], mode='rt').read())
@@ -838,8 +847,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     extra_degradation_spectral_direction = rng.normal(loc=0.0, scale=1, size=nphotons_all) * u.pix
 
     # initialize images
-    image2d_rss_method0 = np.zeros((int(naxis1_ifu.value * nslices), int(naxis1_detector.value)))
-    image2d_detector_method0 = np.zeros((int(naxis2_detector.value), int(naxis1_detector.value)))
+    image2d_rss_method0 = np.zeros((naxis1_ifu.value * nslices, naxis1_detector.value))
+    image2d_detector_method0 = np.zeros((naxis2_detector.value, naxis1_detector.value))
 
     # update images
     for islice in range(nslices):
