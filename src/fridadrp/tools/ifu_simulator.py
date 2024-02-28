@@ -324,17 +324,19 @@ def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, nbins_histo, plots)
 
     if plots:
         fig, ax = plt.subplots()
-        h, bin_edges = np.histogram(simulated_wave, bins=nbins_histo)
-        hmax = np.max(h)
+        h, bin_edges = np.histogram(wave, bins=nbins_histo, weights=flux)
         xdum = (bin_edges[:-1] + bin_edges[1:]) / 2
-        ax.plot(xdum, h, '-', label='binned simulated data')
-        ax.plot(wave.value, flux/np.max(flux)*hmax, '-', label='initial spectrum')
+        hsum = np.sum(h)
+        h = h / hsum * nphotons
+        ax.plot(xdum, h, '-', linewidth=3, label='binned input spectrum')
+        h, bin_edges = np.histogram(simulated_wave, bins=nbins_histo)
+        ax.plot(xdum, h, '-', linewidth=1, label='binned simulated spectrum')
         if wmin is not None:
             ax.axvline(wmin.value, linestyle='--', color='gray')
         if wmax is not None:
             ax.axvline(wmax.value, linestyle='--', color='gray')
         ax.set_xlabel(f'Wavelength ({wave_unit})')
-        ax.set_ylabel('Flux (arbitrary units)')
+        ax.set_ylabel('Number of simulated photons')
         ax.legend()
         plt.tight_layout()
         plt.show()
@@ -821,7 +823,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                             wmin=wave_min,
                             wmax=wave_max,
                             nbins_histo=naxis1_detector.value,
-                            plots=plots
+                            plots=True
                         )
                     elif spectrum_type == 'constant-flux':
                         simulated_wave = simulate_constant_flux(
