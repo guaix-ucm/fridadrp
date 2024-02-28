@@ -301,40 +301,43 @@ def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, nbins_histo, plots)
     wave = wave[lower_index:upper_index]
     flux = flux[lower_index:upper_index]
 
-    # normalized cumulative sum
-    cumsum = np.cumsum(flux)
-    cumsum /= cumsum[-1]
+    wmin_eff = wave[0]
+    wmax_eff = wave[-1]
+
+    # normalized cumulative area
+    # (area under the polygons defined by the tabulated data)
+    cumulative_area = np.concatenate((
+        [0],
+        np.cumsum((flux[:-1] + flux[1:])/2 * (wave[1:] - wave[:-1]))
+    ))
+    normalized_cumulative_area = cumulative_area / cumulative_area[-1]
 
     if plots:
         fig, ax = plt.subplots()
-        ax.plot(wave.value, cumsum, '-')
-        if wmin is not None:
-            ax.axvline(wmin.value, linestyle='--', color='gray')
-        if wmax is not None:
-            ax.axvline(wmax.value, linestyle='--', color='gray')
+        ax.plot(wave.value, normalized_cumulative_area, '.')
+        ax.axvline(wmin_eff.value, linestyle='--', color='gray')
+        ax.axvline(wmax_eff.value, linestyle='--', color='gray')
         ax.set_xlabel(f'Wavelength ({wave_unit})')
-        ax.set_ylabel('Cumulative sum')
+        ax.set_ylabel('Normalized cumulative area')
         plt.tight_layout()
         plt.show()
 
     # samples following a uniform distribution
     unisamples = rng.uniform(low=0, high=1, size=nphotons)
-    simulated_wave = np.interp(x=unisamples, xp=cumsum, fp=wave.value)
+    simulated_wave = np.interp(x=unisamples, xp=normalized_cumulative_area, fp=wave.value)
     simulated_wave *= wave_unit
 
     if plots:
         fig, ax = plt.subplots()
-        h, bin_edges = np.histogram(wave, bins=nbins_histo, weights=flux)
-        xdum = (bin_edges[:-1] + bin_edges[1:]) / 2
-        hsum = np.sum(h)
-        h = h / hsum * nphotons
-        ax.plot(xdum, h, '-', linewidth=3, label='binned input spectrum')
-        h, bin_edges = np.histogram(simulated_wave, bins=nbins_histo)
-        ax.plot(xdum, h, '-', linewidth=1, label='binned simulated spectrum')
-        if wmin is not None:
-            ax.axvline(wmin.value, linestyle='--', color='gray')
-        if wmax is not None:
-            ax.axvline(wmax.value, linestyle='--', color='gray')
+        hist_sim, bin_edges_sim = np.histogram(simulated_wave.value, bins=nbins_histo)
+        xhist_sim = (bin_edges_sim[:-1] + bin_edges_sim[1:]) / 2
+        fscale = np.median(hist_sim / np.interp(x=xhist_sim, xp=wave.value, fp=flux))
+        ax.plot(wave.value, flux*fscale, 'k-', linewidth=1, label='rescaled input spectrum')
+        hist_dum = np.diff(np.interp(x=bin_edges_sim, xp=wave.value, fp=normalized_cumulative_area)) * nphotons
+        ax.plot(xhist_sim, hist_dum, '-', linewidth=3, label='binned input spectrum')
+        ax.plot(xhist_sim, hist_sim, '-', linewidth=1, label='binned simulated spectrum')
+        ax.axvline(wmin_eff.value, linestyle='--', color='gray')
+        ax.axvline(wmax_eff.value, linestyle='--', color='gray')
         ax.set_xlabel(f'Wavelength ({wave_unit})')
         ax.set_ylabel('Number of simulated photons')
         ax.legend()
@@ -749,10 +752,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     wmax = wv_crval1 + (naxis1_detector + 0.5 * u.pix - wv_crpix1) * wv_cdelt1
 
     # render scene
-    required_keys_in_scene = ['spectrum', 'geometry', 'nphotons', 'render']
-    required_keys_in_scene.sort()  # in place
-    required_keys_in_spectrum = ['type', 'wave_unit', 'wave_min', 'wave_max']
-    required_keys_in_spectrum.sort()  # i place
+    required_keys_in_scene = {'spectrum', 'geometry', 'nphotons', 'render'}
+    expected_keys_in_spectrum = {'type', 'wave_unit', 'wave_min', 'wave_max'}
 
     nphotons_all = 0
     simulated_wave_all = None
@@ -762,8 +763,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     with open(scene, 'rt') as fstream:
         scene_dict = yaml.safe_load_all(fstream)
         for document in scene_dict:
-            document_keys = list(document.keys())
-            document_keys.sort()  # in place
+            document_keys = set(document.keys())
             if document_keys != required_keys_in_scene:
                 print(f'ERROR while processing: {scene}')
                 print(f'expected keys: {required_keys_in_scene}')
@@ -778,11 +778,10 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             if nphotons > 0 and render:
                 # ---
                 # wavelength range and units
-                spectrum_keys = list(document['spectrum'].keys())
-                spectrum_keys.sort()  # in place
-                if spectrum_keys != required_keys_in_spectrum:
+                spectrum_keys = set(document['spectrum'].keys())
+                if not expected_keys_in_spectrum.issubset(spectrum_keys) :
                     print(f'ERROR while processing: {scene}')
-                    print(f'expected keys: {required_keys_in_spectrum}')
+                    print(f'expected keys: {expected_keys_in_spectrum}')
                     print(f'keys found...: {spectrum_keys}')
                     pp.pprint(document)
                     raise ValueError(f'Invalid format in file: {scene}')
@@ -814,6 +813,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         filename = faux_dict[filename[1:]]
                     catlines = np.genfromtxt(filename)
                     line_wave = catlines[:, wave_column] * Unit(wave_unit)
+                    if not np.all(np.diff(line_wave.value) > 0):
+                        raise ValueError(f"Wavelength array 'line_wave'={line_wave} is not sorted!")
                     line_flux = catlines[:, flux_column]
                     simulated_wave = simulate_delta_lines(
                         line_wave=line_wave,
@@ -829,6 +830,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     with fits.open(faux_skycalc) as hdul:
                         skycalc_table = hdul[1].data
                     wave = skycalc_table['lam'] * Unit(wave_unit)
+                    if not np.all(np.diff(wave.value) > 0):
+                        raise ValueError(f"Wavelength array 'wave'={wave} is not sorted!")
                     flux = skycalc_table['flux']
                     simulated_wave = simulate_spectrum(
                         wave=wave,
@@ -838,7 +841,30 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         wmin=wave_min,
                         wmax=wave_max,
                         nbins_histo=naxis1_detector.value,
-                        plots=True
+                        plots=plots
+                    )
+                elif spectrum_type == 'tabulated-spectrum':
+                    filename = document['spectrum']['filename']
+                    wave_column = document['spectrum']['wave_column'] - 1
+                    flux_column = document['spectrum']['flux_column'] - 1
+                    if 'redshift' in document['spectrum']:
+                        redshift = document['spectrum']['redshift']
+                    else:
+                        redshift = 0.0
+                    table_data = np.genfromtxt(filename)
+                    wave = table_data[:, wave_column] * (1 + redshift) * Unit(wave_unit)
+                    if not np.all(np.diff(wave.value) > 0):
+                        raise ValueError(f"Wavelength array 'wave'={wave} is not sorted!")
+                    flux = table_data[:, flux_column]
+                    simulated_wave = simulate_spectrum(
+                        wave=wave,
+                        flux=flux,
+                        nphotons=nphotons,
+                        rng=rng,
+                        wmin=wave_min,
+                        wmax=wave_max,
+                        nbins_histo=naxis1_detector.value,
+                        plots=plots
                     )
                 elif spectrum_type == 'constant-flux':
                     simulated_wave = simulate_constant_flux(
