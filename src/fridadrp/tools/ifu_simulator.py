@@ -749,8 +749,10 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     wmax = wv_crval1 + (naxis1_detector + 0.5 * u.pix - wv_crpix1) * wv_cdelt1
 
     # render scene
-    required_keys = ['spectrum', 'geometry', 'nphotons', 'render']
-    required_keys.sort()  # in place
+    required_keys_in_scene = ['spectrum', 'geometry', 'nphotons', 'render']
+    required_keys_in_scene.sort()  # in place
+    required_keys_in_spectrum = ['type', 'wave_unit', 'wave_min', 'wave_max']
+    required_keys_in_spectrum.sort()  # i place
 
     nphotons_all = 0
     simulated_wave_all = None
@@ -762,165 +764,174 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         for document in scene_dict:
             document_keys = list(document.keys())
             document_keys.sort()  # in place
-            if document_keys == required_keys:
-                if verbose:
-                    print('\n* Processing:')
-                    pp.pprint(document)
-                nphotons = int(float(document['nphotons']))
-                render = document['render']
-                if nphotons > 0 and render:
-                    # ---
-                    # wavelength range and units
-                    wave_unit = document['spectrum']['wave_unit']
-                    if wave_unit is None:
-                        wave_min = wmin
-                        wave_max = wmax
-                    else:
-                        wave_min = document['spectrum']['wave_min']
-                        if wave_min is None:
-                            wave_min = wmin.to(wave_unit)
-                        else:
-                            wave_min *= Unit(wave_unit)
-                        wave_max = document['spectrum']['wave_max']
-                        if wave_max is None:
-                            wave_max = wmax.to(wave_unit)
-                        else:
-                            wave_max *= Unit(wave_unit)
-                    # ---
-                    # spectrum type
-                    spectrum_type = document['spectrum']['type']
-                    if spectrum_type == 'delta-lines':
-                        filename = document['spectrum']['filename']
-                        wave_column = document['spectrum']['wave_column'] - 1
-                        flux_column = document['spectrum']['flux_column'] - 1
-                        if filename[0] == '@':
-                            # retrieve file name from dictionary of auxiliary
-                            # file names for the considered instrument
-                            filename = faux_dict[filename[1:]]
-                        catlines = np.genfromtxt(filename)
-                        line_wave = catlines[:, wave_column] * Unit(wave_unit)
-                        line_flux = catlines[:, flux_column]
-                        simulated_wave = simulate_delta_lines(
-                            line_wave=line_wave,
-                            line_flux=line_flux,
-                            nphotons=nphotons,
-                            rng=rng,
-                            wmin=wave_min,
-                            wmax=wave_max,
-                            plots=plots
-                        )
-                    elif spectrum_type == 'skycalc-radiance':
-                        faux_skycalc = faux_dict['skycalc']
-                        with fits.open(faux_skycalc) as hdul:
-                            skycalc_table = hdul[1].data
-                        wave = skycalc_table['lam'] * Unit(wave_unit)
-                        flux = skycalc_table['flux']
-                        simulated_wave = simulate_spectrum(
-                            wave=wave,
-                            flux=flux,
-                            nphotons=nphotons,
-                            rng=rng,
-                            wmin=wave_min,
-                            wmax=wave_max,
-                            nbins_histo=naxis1_detector.value,
-                            plots=True
-                        )
-                    elif spectrum_type == 'constant-flux':
-                        simulated_wave = simulate_constant_flux(
-                            wmin=wave_min,
-                            wmax=wave_max,
-                            nphotons=nphotons,
-                            rng=rng
-                        )
-                    else:
-                        raise ValueError(f'Unexpected spectrum type: "{spectrum_type}" '
-                                         f'in file "{scene}"')
-                    # convert to default wavelength_unit
-                    simulated_wave = simulated_wave.to(wv_cunit1)
-                    if nphotons_all == 0:
-                        simulated_wave_all = simulated_wave
-                    else:
-                        simulated_wave_all = np.concatenate((simulated_wave_all, simulated_wave))
-                    # ---
-                    # geometry
-                    geometry_type = document['geometry']['type']
-                    if geometry_type == 'flatfield':
-                        simulated_x_ifu = rng.uniform(low=min_x_ifu.value, high=max_x_ifu.value, size=nphotons)
-                        simulated_x_ifu *= u.pix
-                        simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
-                        simulated_y_ifu *= u.pix
-                    elif geometry_type == 'gaussian':
-                        ra_deg = document['geometry']['ra_deg'] * u.deg
-                        dec_deg = document['geometry']['dec_deg'] * u.deg
-                        fwhm_ra_arcsec = document['geometry']['fwhm_ra_arcsec'] * u.arcsec
-                        fwhm_dec_arcsec = document['geometry']['fwhm_dec_arcsec'] * u.arcsec
-                        position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
-                        x_center, y_center, w_center = wcs3d.world_to_pixel_values(ra_deg, dec_deg, wave_min)
-                        # the previous pixel coordinates are assumed to be 0 at the center
-                        # of the first pixel in each dimension
-                        x_center += 1
-                        y_center += 1
-                        # plate scale
-                        plate_scale_x = wcs3d.wcs.cd[0, 0] * u.deg / u.pix
-                        plate_scale_y = wcs3d.wcs.cd[1, 1] * u.deg / u.pix
-                        # covariance matrix for the multivariate normal
-                        factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
-                        std_x = fwhm_ra_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
-                        std_y = fwhm_dec_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
-                        rotation_matrix = np.array(  # note the sign to rotate N -> E -> S -> W
-                            [
-                                [np.cos(position_angle_deg), np.sin(position_angle_deg)],
-                                [-np.sin(position_angle_deg), np.cos(position_angle_deg)]
-                            ]
-                        )
-                        covariance = np.diag([std_x.value**2, std_y.value**2])
-                        rotated_covariance = np.dot(rotation_matrix.T, np.dot(covariance, rotation_matrix))
-                        # simulate X, Y values
-                        simulated_xy_ifu = rng.multivariate_normal(
-                            mean=[x_center, y_center],
-                            cov=rotated_covariance,
-                            size=nphotons
-                        )
-                        simulated_x_ifu = simulated_xy_ifu[:, 0] * u.pix
-                        simulated_y_ifu = simulated_xy_ifu[:, 1] * u.pix
-                    else:
-                        raise ValueError(f'Unexpected geometry type: "{geometry_type}" '
-                                         f'in file "{scene}"')
-                    if nphotons_all == 0:
-                        simulated_x_ifu_all = simulated_x_ifu
-                        simulated_y_ifu_all = simulated_y_ifu
-                    else:
-                        simulated_x_ifu_all = np.concatenate((simulated_x_ifu_all, simulated_x_ifu))
-                        simulated_y_ifu_all = np.concatenate((simulated_y_ifu_all, simulated_y_ifu))
-                    # ---
-                    # update nphotons
-                    if verbose:
-                        print(f'--> {nphotons} simulated')
-                    if nphotons_all == 0:
-                        nphotons_all = nphotons
-                    else:
-                        nphotons_all += nphotons
-                    if len({nphotons_all,
-                            len(simulated_wave_all),
-                            len(simulated_x_ifu_all),
-                            len(simulated_y_ifu_all)
-                            }) != 1:
-                        print('ERROR: check the following numbers:')
-                        print(f'{nphotons_all=}')
-                        print(f'{len(simulated_wave_all)=}')
-                        print(f'{len(simulated_x_ifu_all)=}')
-                        print(f'{len(simulated_y_ifu_all)=}')
-                        raise ValueError('Unexpected differences found in the previous numbers')
-                else:
-                    if verbose:
-                        if nphotons == 0:
-                            print('WARNING -> nphotons: 0')
-                        else:
-                            print('WARNING -> render: False')
-            else:
-                print('ERROR while processing:')
+            if document_keys != required_keys_in_scene:
+                print(f'ERROR while processing: {scene}')
+                print(f'expected keys: {required_keys_in_scene}')
+                print(f'keys found...: {document_keys}')
                 pp.pprint(document)
                 raise ValueError(f'Invalid format in file: {scene}')
+            if verbose:
+                print('\n* Processing:')
+                pp.pprint(document)
+            nphotons = int(float(document['nphotons']))
+            render = document['render']
+            if nphotons > 0 and render:
+                # ---
+                # wavelength range and units
+                spectrum_keys = list(document['spectrum'].keys())
+                spectrum_keys.sort()  # in place
+                if spectrum_keys != required_keys_in_spectrum:
+                    print(f'ERROR while processing: {scene}')
+                    print(f'expected keys: {required_keys_in_spectrum}')
+                    print(f'keys found...: {spectrum_keys}')
+                    pp.pprint(document)
+                    raise ValueError(f'Invalid format in file: {scene}')
+                wave_unit = document['spectrum']['wave_unit']
+                if wave_unit is None:
+                    wave_min = wmin
+                    wave_max = wmax
+                else:
+                    wave_min = document['spectrum']['wave_min']
+                    if wave_min is None:
+                        wave_min = wmin.to(wave_unit)
+                    else:
+                        wave_min *= Unit(wave_unit)
+                    wave_max = document['spectrum']['wave_max']
+                    if wave_max is None:
+                        wave_max = wmax.to(wave_unit)
+                    else:
+                        wave_max *= Unit(wave_unit)
+                # ---
+                # spectrum type
+                spectrum_type = document['spectrum']['type']
+                if spectrum_type == 'delta-lines':
+                    filename = document['spectrum']['filename']
+                    wave_column = document['spectrum']['wave_column'] - 1
+                    flux_column = document['spectrum']['flux_column'] - 1
+                    if filename[0] == '@':
+                        # retrieve file name from dictionary of auxiliary
+                        # file names for the considered instrument
+                        filename = faux_dict[filename[1:]]
+                    catlines = np.genfromtxt(filename)
+                    line_wave = catlines[:, wave_column] * Unit(wave_unit)
+                    line_flux = catlines[:, flux_column]
+                    simulated_wave = simulate_delta_lines(
+                        line_wave=line_wave,
+                        line_flux=line_flux,
+                        nphotons=nphotons,
+                        rng=rng,
+                        wmin=wave_min,
+                        wmax=wave_max,
+                        plots=plots
+                    )
+                elif spectrum_type == 'skycalc-radiance':
+                    faux_skycalc = faux_dict['skycalc']
+                    with fits.open(faux_skycalc) as hdul:
+                        skycalc_table = hdul[1].data
+                    wave = skycalc_table['lam'] * Unit(wave_unit)
+                    flux = skycalc_table['flux']
+                    simulated_wave = simulate_spectrum(
+                        wave=wave,
+                        flux=flux,
+                        nphotons=nphotons,
+                        rng=rng,
+                        wmin=wave_min,
+                        wmax=wave_max,
+                        nbins_histo=naxis1_detector.value,
+                        plots=True
+                    )
+                elif spectrum_type == 'constant-flux':
+                    simulated_wave = simulate_constant_flux(
+                        wmin=wave_min,
+                        wmax=wave_max,
+                        nphotons=nphotons,
+                        rng=rng
+                    )
+                else:
+                    raise ValueError(f'Unexpected spectrum type: "{spectrum_type}" '
+                                     f'in file "{scene}"')
+                # convert to default wavelength_unit
+                simulated_wave = simulated_wave.to(wv_cunit1)
+                if nphotons_all == 0:
+                    simulated_wave_all = simulated_wave
+                else:
+                    simulated_wave_all = np.concatenate((simulated_wave_all, simulated_wave))
+                # ---
+                # geometry
+                geometry_type = document['geometry']['type']
+                if geometry_type == 'flatfield':
+                    simulated_x_ifu = rng.uniform(low=min_x_ifu.value, high=max_x_ifu.value, size=nphotons)
+                    simulated_x_ifu *= u.pix
+                    simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
+                    simulated_y_ifu *= u.pix
+                elif geometry_type == 'gaussian':
+                    ra_deg = document['geometry']['ra_deg'] * u.deg
+                    dec_deg = document['geometry']['dec_deg'] * u.deg
+                    fwhm_ra_arcsec = document['geometry']['fwhm_ra_arcsec'] * u.arcsec
+                    fwhm_dec_arcsec = document['geometry']['fwhm_dec_arcsec'] * u.arcsec
+                    position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
+                    x_center, y_center, w_center = wcs3d.world_to_pixel_values(ra_deg, dec_deg, wave_min)
+                    # the previous pixel coordinates are assumed to be 0 at the center
+                    # of the first pixel in each dimension
+                    x_center += 1
+                    y_center += 1
+                    # plate scale
+                    plate_scale_x = wcs3d.wcs.cd[0, 0] * u.deg / u.pix
+                    plate_scale_y = wcs3d.wcs.cd[1, 1] * u.deg / u.pix
+                    # covariance matrix for the multivariate normal
+                    factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
+                    std_x = fwhm_ra_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
+                    std_y = fwhm_dec_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
+                    rotation_matrix = np.array(  # note the sign to rotate N -> E -> S -> W
+                        [
+                            [np.cos(position_angle_deg), np.sin(position_angle_deg)],
+                            [-np.sin(position_angle_deg), np.cos(position_angle_deg)]
+                        ]
+                    )
+                    covariance = np.diag([std_x.value**2, std_y.value**2])
+                    rotated_covariance = np.dot(rotation_matrix.T, np.dot(covariance, rotation_matrix))
+                    # simulate X, Y values
+                    simulated_xy_ifu = rng.multivariate_normal(
+                        mean=[x_center, y_center],
+                        cov=rotated_covariance,
+                        size=nphotons
+                    )
+                    simulated_x_ifu = simulated_xy_ifu[:, 0] * u.pix
+                    simulated_y_ifu = simulated_xy_ifu[:, 1] * u.pix
+                else:
+                    raise ValueError(f'Unexpected geometry type: "{geometry_type}" '
+                                     f'in file "{scene}"')
+                if nphotons_all == 0:
+                    simulated_x_ifu_all = simulated_x_ifu
+                    simulated_y_ifu_all = simulated_y_ifu
+                else:
+                    simulated_x_ifu_all = np.concatenate((simulated_x_ifu_all, simulated_x_ifu))
+                    simulated_y_ifu_all = np.concatenate((simulated_y_ifu_all, simulated_y_ifu))
+                # ---
+                # update nphotons
+                if verbose:
+                    print(f'--> {nphotons} simulated')
+                if nphotons_all == 0:
+                    nphotons_all = nphotons
+                else:
+                    nphotons_all += nphotons
+                if len({nphotons_all,
+                        len(simulated_wave_all),
+                        len(simulated_x_ifu_all),
+                        len(simulated_y_ifu_all)
+                        }) != 1:
+                    print('ERROR: check the following numbers:')
+                    print(f'{nphotons_all=}')
+                    print(f'{len(simulated_wave_all)=}')
+                    print(f'{len(simulated_x_ifu_all)=}')
+                    print(f'{len(simulated_y_ifu_all)=}')
+                    raise ValueError('Unexpected differences found in the previous numbers')
+            else:
+                if verbose:
+                    if nphotons == 0:
+                        print('WARNING -> nphotons: 0')
+                    else:
+                        print('WARNING -> render: False')
 
     # filter simulated photons to keep only those that fall within
     # the IFU field of view and within the expected spectral range
