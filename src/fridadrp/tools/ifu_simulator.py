@@ -17,6 +17,7 @@ import json
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
+import os
 import pprint
 import yaml
 
@@ -95,7 +96,7 @@ def simulate_constant_photlam(wmin, wmax, nphotons, rng):
     return simulated_wave
 
 
-def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=None, plots=False):
+def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=None, plots=False, plot_title=None):
     """Simulate spectrum defined from isolated wavelengths.
 
     Parameters
@@ -115,6 +116,8 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
         Maximum wavelength to be considered.
     plots : bool
         If True, plot input and output results.
+    plot_title : str or None
+        Plot title. Used only when 'plots' is True.
 
     Returns
     -------
@@ -167,6 +170,8 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
             ax.axvline(wmax.value, linestyle='--', color='gray')
         ax.set_xlabel(f'Wavelength ({wave_unit})')
         ax.set_ylabel('Intensity (arbitrary units)')
+        if plot_title is not None:
+            ax.set_title(plot_title)
         plt.tight_layout()
         plt.show()
 
@@ -186,6 +191,8 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
             ax.axvline(wmax.value, linestyle='--', color='gray')
         ax.set_xlabel(f'Wavelength ({wave_unit})')
         ax.set_ylabel('Cumulative sum')
+        if plot_title is not None:
+            ax.set_title(plot_title)
         plt.tight_layout()
         plt.show()
 
@@ -217,13 +224,15 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
             ax.axvline(wmax.value, linestyle='--', color='gray')
         ax.set_xlabel(f'Wavelength ({wave_unit})')
         ax.set_ylabel('Intensity (number of photons)')
+        if plot_title is not None:
+            ax.set_title(plot_title)
         plt.tight_layout()
         plt.show()
 
     return simulated_wave
 
 
-def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_histo, plots):
+def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_histo, plots, plot_title):
     """Simulate spectrum defined by tabulated wave and flux data.
 
     Parameters
@@ -249,6 +258,8 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
         Number of bins for histogram plot.
     plots : bool
         If True, plot input and output results.
+    plot_title : str or None
+        Plot title. Used only when 'plots' is True.
 
     Returns
     -------
@@ -303,6 +314,8 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
             ax.axvline(wmax.value, linestyle='--', color='gray')
         ax.set_xlabel(f'Wavelength ({wave_unit})')
         ax.set_ylabel('Flux (arbitrary units)')
+        if plot_title is not None:
+            ax.set_title(plot_title)
         plt.tight_layout()
         plt.show()
 
@@ -332,6 +345,8 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
         ax.axvline(wmax_eff.value, linestyle='--', color='gray')
         ax.set_xlabel(f'Wavelength ({wave_unit})')
         ax.set_ylabel('Normalized cumulative area')
+        if plot_title is not None:
+            ax.set_title(plot_title)
         plt.tight_layout()
         plt.show()
 
@@ -353,6 +368,8 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
         ax.axvline(wmax_eff.value, linestyle='--', color='gray')
         ax.set_xlabel(f'Wavelength ({wave_unit})')
         ax.set_ylabel('Number of simulated photons')
+        if plot_title is not None:
+            ax.set_title(plot_title)
         ax.legend()
         plt.tight_layout()
         plt.show()
@@ -836,7 +853,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         rng=rng,
                         wmin=wave_min,
                         wmax=wave_max,
-                        plots=plots
+                        plots=plots,
+                        plot_title=filename
                     )
                 elif spectrum_type == 'skycalc-radiance':
                     faux_skycalc = faux_dict['skycalc']
@@ -856,7 +874,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         wmin=wave_min,
                         wmax=wave_max,
                         nbins_histo=naxis1_detector.value,
-                        plots=plots
+                        plots=plots,
+                        plot_title=os.path.basename(faux_skycalc)
                     )
                 elif spectrum_type == 'tabulated-spectrum':
                     filename = document['spectrum']['filename']
@@ -881,7 +900,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         wmin=wave_min,
                         wmax=wave_max,
                         nbins_histo=naxis1_detector.value,
-                        plots=plots
+                        plots=plots,
+                        plot_title=os.path.basename(filename)
                     )
                 elif spectrum_type == 'constant-flux':
                     simulated_wave = simulate_constant_photlam(
