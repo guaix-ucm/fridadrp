@@ -34,6 +34,7 @@ dependencies = [
     "numpy >= 1.20",
     "pooch",
     "scipy",
+    "tqdm",
 ]
 
 [project.optional-dependencies]
