@@ -305,6 +305,13 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
     else:
         upper_index = len(wave)
 
+    if lower_index == upper_index:
+        if plot_title is not None:
+            print(f'Working with data from: {plot_title}')
+        print(f'Tabulated wavelength range: {wave[0]} - {wave[-1]}')
+        print(f'Requested wavelength range: {wmin} - {wmax}')
+        raise ValueError('Wavelength ranges without intersection')
+
     if plots:
         fig, ax = plt.subplots()
         ax.plot(wave.value, flux, '-')
