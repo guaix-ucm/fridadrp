@@ -7,6 +7,7 @@
 # License-Filename: LICENSE.txt
 #
 from astropy import wcs
+import astropy.constants as constants
 from astropy.io import fits
 from astropy.units import Quantity
 import astropy.units as u
@@ -65,8 +66,8 @@ def display_skycalc(faux_skycalc):
     plt.show()
 
 
-def simulate_constant_flux(wmin, wmax, nphotons, rng):
-    """Simulate spectrum with constant flux (per unit wavelength).
+def simulate_constant_photlam(wmin, wmax, nphotons, rng):
+    """Simulate spectrum with constant flux (in PHOTLAM units).
 
     Parameters
     ----------
@@ -222,7 +223,7 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
     return simulated_wave
 
 
-def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, nbins_histo, plots):
+def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_histo, plots):
     """Simulate spectrum defined by tabulated wave and flux data.
 
     Parameters
@@ -232,6 +233,10 @@ def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, nbins_histo, plots)
         wavelength.
     flux : array_like
         Array-like object containing the tabulated flux.
+    flux_type : str
+        Relative flux unit. Valid options are:
+        - flam: proportional to erg s^-1 cm^-2 A^-1
+        - photlam: proportional to photon s^-1 cm^-2 A^-1
     nphotons : int
         Number of photons to be simulated
     rng : `~numpy.random._generator.Generator`
@@ -257,6 +262,9 @@ def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, nbins_histo, plots)
 
     if np.any(flux < 0):
         raise ValueError(f'Negative flux values cannot be handled')
+
+    if flux_type.lower() not in ['flam', 'photlam']:
+        raise ValueError(f"Flux type: {flux_type} is not any of the valid values: 'flam', 'photlam'")
 
     if not isinstance(wave, u.Quantity):
         raise ValueError(f"Object 'wave': {wave} is not a Quantity instance")
@@ -300,6 +308,11 @@ def simulate_spectrum(wave, flux, nphotons, rng, wmin, wmax, nbins_histo, plots)
 
     wave = wave[lower_index:upper_index]
     flux = flux[lower_index:upper_index]
+
+    # convert FLAM to PHOTLAM
+    if flux_type.lower() == 'flam':
+        flux_conversion = wave.to(u.m) / (constants.h * constants.c)
+        flux *= flux_conversion.value
 
     wmin_eff = wave[0]
     wmax_eff = wave[-1]
@@ -833,9 +846,11 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     if not np.all(np.diff(wave.value) > 0):
                         raise ValueError(f"Wavelength array 'wave'={wave} is not sorted!")
                     flux = skycalc_table['flux']
+                    flux_type = 'photlam'
                     simulated_wave = simulate_spectrum(
                         wave=wave,
                         flux=flux,
+                        flux_type=flux_type,
                         nphotons=nphotons,
                         rng=rng,
                         wmin=wave_min,
@@ -847,6 +862,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     filename = document['spectrum']['filename']
                     wave_column = document['spectrum']['wave_column'] - 1
                     flux_column = document['spectrum']['flux_column'] - 1
+                    flux_type = document['spectrum']['flux_type']
                     if 'redshift' in document['spectrum']:
                         redshift = document['spectrum']['redshift']
                     else:
@@ -859,6 +875,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     simulated_wave = simulate_spectrum(
                         wave=wave,
                         flux=flux,
+                        flux_type=flux_type,
                         nphotons=nphotons,
                         rng=rng,
                         wmin=wave_min,
@@ -867,7 +884,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         plots=plots
                     )
                 elif spectrum_type == 'constant-flux':
-                    simulated_wave = simulate_constant_flux(
+                    simulated_wave = simulate_constant_photlam(
                         wmin=wave_min,
                         wmax=wave_max,
                         nphotons=nphotons,
