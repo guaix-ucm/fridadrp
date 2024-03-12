@@ -722,7 +722,9 @@ def save_image2d_rss_detector_method0(
 
 def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                   noversampling_whitelight,
-                  scene, faux_dict, rng,
+                  scene,
+                  seeing_fwhm_arcsec, seeing_psf,
+                  faux_dict, rng,
                   prefix_intermediate_fits,
                   verbose=False, instname=None, subtitle=None, plots=False):
     """IFU simulator.
@@ -742,6 +744,10 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         light image.
     scene : str
         YAML scene file name.
+    seeing_fwhm_arcsec : `~astropy.units.Quantity`
+        Seeing FWHM (arcsec).
+    seeing_psf : str
+        Seeing PSF.
     faux_dict : Python dictionary
         File names of auxiliary files:
         - skycalc: table with SKYCALC Sky Model Calculator predictions
@@ -934,12 +940,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     simulated_x_ifu *= u.pix
                     simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
                     simulated_y_ifu *= u.pix
-                elif geometry_type == 'gaussian':
+                elif geometry_type in ['gaussian', 'point-like']:
                     ra_deg = document['geometry']['ra_deg'] * u.deg
                     dec_deg = document['geometry']['dec_deg'] * u.deg
-                    fwhm_ra_arcsec = document['geometry']['fwhm_ra_arcsec'] * u.arcsec
-                    fwhm_dec_arcsec = document['geometry']['fwhm_dec_arcsec'] * u.arcsec
-                    position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
                     x_center, y_center, w_center = wcs3d.world_to_pixel_values(ra_deg, dec_deg, wave_min)
                     # the previous pixel coordinates are assumed to be 0 at the center
                     # of the first pixel in each dimension
@@ -948,26 +951,49 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     # plate scale
                     plate_scale_x = wcs3d.wcs.cd[0, 0] * u.deg / u.pix
                     plate_scale_y = wcs3d.wcs.cd[1, 1] * u.deg / u.pix
-                    # covariance matrix for the multivariate normal
                     factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
-                    std_x = fwhm_ra_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
-                    std_y = fwhm_dec_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
-                    rotation_matrix = np.array(  # note the sign to rotate N -> E -> S -> W
-                        [
-                            [np.cos(position_angle_deg), np.sin(position_angle_deg)],
-                            [-np.sin(position_angle_deg), np.cos(position_angle_deg)]
-                        ]
-                    )
-                    covariance = np.diag([std_x.value**2, std_y.value**2])
-                    rotated_covariance = np.dot(rotation_matrix.T, np.dot(covariance, rotation_matrix))
-                    # simulate X, Y values
-                    simulated_xy_ifu = rng.multivariate_normal(
-                        mean=[x_center, y_center],
-                        cov=rotated_covariance,
-                        size=nphotons
-                    )
-                    simulated_x_ifu = simulated_xy_ifu[:, 0] * u.pix
-                    simulated_y_ifu = simulated_xy_ifu[:, 1] * u.pix
+                    if geometry_type == 'gaussian':
+                        fwhm_ra_arcsec = document['geometry']['fwhm_ra_arcsec'] * u.arcsec
+                        fwhm_dec_arcsec = document['geometry']['fwhm_dec_arcsec'] * u.arcsec
+                        position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
+                        # covariance matrix for the multivariate normal
+                        std_x = fwhm_ra_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
+                        std_y = fwhm_dec_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
+                        rotation_matrix = np.array(  # note the sign to rotate N -> E -> S -> W
+                            [
+                                [np.cos(position_angle_deg), np.sin(position_angle_deg)],
+                                [-np.sin(position_angle_deg), np.cos(position_angle_deg)]
+                            ]
+                        )
+                        covariance = np.diag([std_x.value**2, std_y.value**2])
+                        rotated_covariance = np.dot(rotation_matrix.T, np.dot(covariance, rotation_matrix))
+                        # simulate X, Y values
+                        simulated_xy_ifu = rng.multivariate_normal(
+                            mean=[x_center, y_center],
+                            cov=rotated_covariance,
+                            size=nphotons
+                        )
+                        simulated_x_ifu = simulated_xy_ifu[:, 0]
+                        simulated_y_ifu = simulated_xy_ifu[:, 1]
+                    elif geometry_type == 'point-like':
+                        simulated_x_ifu = np.repeat(x_center, nphotons)
+                        simulated_y_ifu = np.repeat(y_center, nphotons)
+                    else:
+                        raise ValueError(f'Unexpected {geometry_type=}')
+                    # apply seeing
+                    if seeing_fwhm_arcsec.value > 0:
+                        if seeing_psf == "gaussian":
+                            std_x = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
+                            print(f'{std_x=}')
+                            simulated_x_ifu += rng.normal(loc=0, scale=abs(std_x.value), size=nphotons)
+                            std_y = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
+                            print(f'{std_y=}')
+                            simulated_y_ifu += rng.normal(loc=0, scale=abs(std_y.value), size=nphotons)
+                        else:
+                            raise ValueError(f'Unexpected {seeing_psf=}')
+                    # add units
+                    simulated_x_ifu *= u.pix
+                    simulated_y_ifu *= u.pix
                 else:
                     raise ValueError(f'Unexpected geometry type: "{geometry_type}" '
                                      f'in file "{scene}"')

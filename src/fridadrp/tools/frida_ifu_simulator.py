@@ -139,6 +139,9 @@ def main(args=None):
     parser.add_argument("--dec_teles_deg", help="Telescope central DEC (deg)", type=float, default=0.0)
     parser.add_argument("--delta_ra_teles_arcsec", help="Offset in RA (arcsec)", type=float, default=0.0)
     parser.add_argument("--delta_dec_teles_arcsec", help="Offset in DEC (arcsec)", type=float, default=0.0)
+    parser.add_argument("--seeing_fwhm_arcsec", help="Seeing FWHM (arcsec)", type=float, default=0.0)
+    parser.add_argument("--seeing_psf", help="Seeing PSF", type=str, default="gaussian",
+                        choices=["gaussian"])
     parser.add_argument("--noversampling_whitelight", help="Oversampling white light image", type=int, default=10)
     parser.add_argument("--transmission", help="Apply atmosphere transmission", action="store_true")
     parser.add_argument("--rnoise", help="Readout noise (ADU)", type=float, default=0)
@@ -165,10 +168,10 @@ def main(args=None):
     scene = args.scene
     grating = args.grating
     scale = args.scale
-    ra_teles_deg = args.ra_teles_deg
-    dec_teles_deg = args.dec_teles_deg
-    delta_ra_teles_arcsec = args.delta_ra_teles_arcsec
-    delta_dec_teles_arcsec = args.delta_dec_teles_arcsec
+    seeing_fwhm_arcsec = args.seeing_fwhm_arcsec * u.arcsec
+    if seeing_fwhm_arcsec.value < 0:
+        raise ValueError(f'Unexpected {seeing_fwhm_arcsec=}. This number must be >= 0.')
+    seeing_psf = args.seeing_psf
     noversampling_whitelight = args.noversampling_whitelight
     if noversampling_whitelight < 1:
         raise ValueError(f'Unexpected {noversampling_whitelight=} (must be > 1)')
@@ -186,6 +189,10 @@ def main(args=None):
     faux_dict = define_auxiliary_files(grating, verbose=verbose)
 
     # World Coordinate System of the data cube
+    ra_teles_deg = args.ra_teles_deg
+    dec_teles_deg = args.dec_teles_deg
+    delta_ra_teles_arcsec = args.delta_ra_teles_arcsec
+    delta_dec_teles_arcsec = args.delta_dec_teles_arcsec
     skycoord_center = SkyCoord(
         ra=ra_teles_deg * u.deg + (delta_ra_teles_arcsec * u.arcsec).to(u.deg),
         dec=dec_teles_deg * u.deg + (delta_dec_teles_arcsec * u.arcsec).to(u.deg),
@@ -218,6 +225,8 @@ def main(args=None):
         nslices=FRIDA_NSLICES,
         noversampling_whitelight=noversampling_whitelight,
         scene=scene,
+        seeing_fwhm_arcsec=seeing_fwhm_arcsec,
+        seeing_psf=seeing_psf,
         faux_dict=faux_dict,
         rng=rng,
         prefix_intermediate_fits=prefix_intermediate_fits,
