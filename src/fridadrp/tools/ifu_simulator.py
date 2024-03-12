@@ -232,7 +232,8 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
     return simulated_wave
 
 
-def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_histo, plots, plot_title):
+def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve_sigma_km_s,
+                      nbins_histo, plots, plot_title):
     """Simulate spectrum defined by tabulated wave and flux data.
 
     Parameters
@@ -254,6 +255,8 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
         Minimum wavelength to be considered.
     wmax : `~astroppy.units.Quantity`
         Maximum wavelength to be considered.
+    convolve_sigma_km_s : `~astropy.units.Quantity`
+        Gaussian broadening (sigma) in km/s to be applied.
     nbins_histo : int
         Number of bins for histogram plot.
     plots : bool
@@ -278,7 +281,7 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
         raise ValueError(f"Flux type: {flux_type} is not any of the valid values: 'flam', 'photlam'")
 
     if not isinstance(wave, u.Quantity):
-        raise ValueError(f"Object 'wave': {wave} is not a Quantity instance")
+        raise ValueError(f"Object {wave=} is not a Quantity instance")
     wave_unit = wave.unit
     if not wave_unit.is_equivalent(u.m):
         raise ValueError(f"Unexpected unit for 'wave': {wave_unit}")
@@ -286,7 +289,7 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
     # lower wavelength limit
     if wmin is not None:
         if not isinstance(wmin, u.Quantity):
-            raise ValueError(f"Object 'wmin':{wmin}  is not a Quantity instance")
+            raise ValueError(f"Object {wmin=} is not a Quantity instance")
         if not wmin.unit.is_equivalent(u.m):
             raise ValueError(f"Unexpected unit for 'wmin': {wmin}")
         wmin = wmin.to(wave_unit)
@@ -297,7 +300,7 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
     # upper wavelength limit
     if wmax is not None:
         if not isinstance(wmax, u.Quantity):
-            raise ValueError(f"Object 'wmax': {wmax} is not a Quantity instance")
+            raise ValueError(f"Object {wmax=} is not a Quantity instance")
         if not wmax.unit.is_equivalent(u.m):
             raise ValueError(f"Unexpected unit for 'wmax': {wmin}")
         wmax = wmax.to(wave_unit)
@@ -311,6 +314,13 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
         print(f'Tabulated wavelength range: {wave[0]} - {wave[-1]}')
         print(f'Requested wavelength range: {wmin} - {wmax}')
         raise ValueError('Wavelength ranges without intersection')
+
+    if not isinstance(convolve_sigma_km_s, u.Quantity):
+        raise ValueError(f'Object {convolve_sigma_km_s=} is not a Quantity instance')
+    if convolve_sigma_km_s.unit != u.km / u.s:
+        raise ValueError(f'Unexpected unit for {convolve_sigma_km_s}')
+    if convolve_sigma_km_s.value < 0:
+        raise ValueError(f'Unexpected negative value for {convolve_sigma_km_s}')
 
     if plots:
         fig, ax = plt.subplots()
@@ -360,6 +370,13 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, nbins_hi
     # samples following a uniform distribution
     unisamples = rng.uniform(low=0, high=1, size=nphotons)
     simulated_wave = np.interp(x=unisamples, xp=normalized_cumulative_area, fp=wave.value)
+
+    # apply Gaussian broadening
+    if convolve_sigma_km_s.value > 0:
+        sigma_wave = convolve_sigma_km_s / constants.c.to(u.km / u.s) * simulated_wave
+        simulated_wave = rng.normal(loc=simulated_wave, scale=sigma_wave)
+
+    # add units
     simulated_wave *= wave_unit
 
     if plots:
@@ -819,8 +836,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             nphotons = int(float(document['nphotons']))
             render = document['render']
             if nphotons > 0 and render:
-                # ---
+                # --------------------------
                 # wavelength range and units
+                # --------------------------
                 spectrum_keys = set(document['spectrum'].keys())
                 if not expected_keys_in_spectrum.issubset(spectrum_keys) :
                     print(f'ERROR while processing: {scene}')
@@ -843,8 +861,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         wave_max = wmax.to(wave_unit)
                     else:
                         wave_max *= Unit(wave_unit)
-                # ---
+                # -------------
                 # spectrum type
+                # -------------
                 spectrum_type = document['spectrum']['type']
                 if spectrum_type == 'delta-lines':
                     filename = document['spectrum']['filename']
@@ -886,6 +905,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         rng=rng,
                         wmin=wave_min,
                         wmax=wave_max,
+                        convolve_sigma_km_s=0*u.km/u.s,
                         nbins_histo=naxis1_detector.value,
                         plots=plots,
                         plot_title=os.path.basename(faux_skycalc)
@@ -899,6 +919,12 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         redshift = document['spectrum']['redshift']
                     else:
                         redshift = 0.0
+                    if 'convolve_sigma_km_s' in document['spectrum']:
+                        convolve_sigma_km_s = document['spectrum']['convolve_sigma_km_s']
+                    else:
+                        convolve_sigma_km_s = 0.0
+                    convolve_sigma_km_s *= u.km / u.s
+                    # read data
                     table_data = np.genfromtxt(filename)
                     wave = table_data[:, wave_column] * (1 + redshift) * Unit(wave_unit)
                     if not np.all(np.diff(wave.value) > 0):
@@ -912,6 +938,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         rng=rng,
                         wmin=wave_min,
                         wmax=wave_max,
+                        convolve_sigma_km_s=convolve_sigma_km_s,
                         nbins_histo=naxis1_detector.value,
                         plots=plots,
                         plot_title=os.path.basename(filename)
@@ -932,8 +959,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     simulated_wave_all = simulated_wave
                 else:
                     simulated_wave_all = np.concatenate((simulated_wave_all, simulated_wave))
-                # ---
+                # --------
                 # geometry
+                # --------
                 geometry_type = document['geometry']['type']
                 if geometry_type == 'flatfield':
                     simulated_x_ifu = rng.uniform(low=min_x_ifu.value, high=max_x_ifu.value, size=nphotons)
