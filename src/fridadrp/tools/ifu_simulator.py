@@ -813,7 +813,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
 
     # render scene
     required_keys_in_scene = {'spectrum', 'geometry', 'nphotons', 'render'}
-    expected_keys_in_spectrum = {'type', 'wave_unit', 'wave_min', 'wave_max'}
+    expected_keys_in_spectrum = {'type', 'wave_unit'}
 
     nphotons_all = 0
     simulated_wave_all = None
@@ -847,16 +847,22 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     pp.pprint(document)
                     raise ValueError(f'Invalid format in file: {scene}')
                 wave_unit = document['spectrum']['wave_unit']
-                if wave_unit is None:
+                if wave_unit is None:   # useful for type="constant-flux"
                     wave_min = wmin
                     wave_max = wmax
                 else:
-                    wave_min = document['spectrum']['wave_min']
+                    if 'wave_min' in document['spectrum']:
+                        wave_min = document['spectrum']['wave_min']
+                    else:
+                        wave_min = None
                     if wave_min is None:
                         wave_min = wmin.to(wave_unit)
                     else:
                         wave_min *= Unit(wave_unit)
-                    wave_max = document['spectrum']['wave_max']
+                    if 'wave_max' in document['spectrum']:
+                        wave_max = document['spectrum']['wave_max']
+                    else:
+                        wave_max = None
                     if wave_max is None:
                         wave_max = wmax.to(wave_unit)
                     else:
