@@ -719,8 +719,8 @@ def update_image2d_rss_detector_method0(
         # -------------------------------------------------
         h, xedges, yedges = np.histogram2d(
             x=simulated_x_ifu_all.value[iok],
-            y=simulated_wave_all.value[iok] + \
-              (simulated_y_ifu_all.value[iok] - y_ifu_expected) * wv_cdelt1.value + \
+            y=simulated_wave_all.value[iok] +
+              (simulated_y_ifu_all.value[iok] - y_ifu_expected) * wv_cdelt1.value +
               extra_degradation_spectral_direction.value[iok] * wv_cdelt1.value,
             bins=(bins_x_ifu.value, bins_wave.value)
         )
@@ -856,9 +856,11 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         applied or not. Two possible values:
         - 'default': use default flatfield defined in 'faux_dict'
         - 'none': do not apply flatfield
-    atmosphere_transmission : bool
-        If True, apply atmosphere transmission curve, which is
-        defined in 'faux_dict'.
+    atmosphere_transmission : str
+        String indicating whether the atmosphere transmission of
+        the atmosphere is applied or not. Two possible values are:
+        - 'default': use default curve defined in 'faux_dict'
+        - 'none': do not apply atmosphere transmission
     rnoise : `~astropy.units.Quantity`
         Readout noise standard deviation (in ADU). Assumed to be
         Gaussian.
@@ -909,7 +911,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     wmax = wv_crval1 + (naxis1_detector + 0.5 * u.pix - wv_crpix1) * wv_cdelt1
 
     # load atmosphere transmission curve
-    if atmosphere_transmission:
+    if atmosphere_transmission == "default":
         infile = faux_dict['skycalc']
         if verbose:
             print(f'\nLoading atmosphere transmission curve {os.path.basename(infile)}')
@@ -962,7 +964,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 # wavelength range and units
                 # --------------------------
                 spectrum_keys = set(document['spectrum'].keys())
-                if not expected_keys_in_spectrum.issubset(spectrum_keys) :
+                if not expected_keys_in_spectrum.issubset(spectrum_keys):
                     print(ctext(f'ERROR while processing: {scene}', fg='red'))
                     print(f'expected keys: {expected_keys_in_spectrum}')
                     print(f'keys found...: {spectrum_keys}')
@@ -1020,8 +1022,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         plots=plots,
                         plot_title=filename
                     )
-                    if atmosphere_transmission:
-                        print('No atmosphere transmission applied to this block')
+                    if atmosphere_transmission == "default":
+                        print('No atmosphere transmission applied to this type of data')
                 elif spectrum_type == 'skycalc-radiance':
                     faux_skycalc = faux_dict['skycalc']
                     with fits.open(faux_skycalc) as hdul:
@@ -1045,8 +1047,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         plot_title=os.path.basename(faux_skycalc),
                         verbose=verbose
                     )
-                    if atmosphere_transmission:
-                        print('No atmosphere transmission applied to this block')
+                    if atmosphere_transmission == "default":
+                        print('No atmosphere transmission applied to this type of data')
                 elif spectrum_type == 'tabulated-spectrum':
                     filename = document['spectrum']['filename']
                     wave_column = document['spectrum']['wave_column'] - 1
@@ -1085,7 +1087,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         plot_title=os.path.basename(filename),
                         verbose=verbose
                     )
-                    if atmosphere_transmission:
+                    if atmosphere_transmission == "default":
                         apply_atmosphere_transmission(
                             simulated_wave=simulated_wave,
                             wave_transmission=wave_transmission,
@@ -1101,7 +1103,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         nphotons=nphotons,
                         rng=rng
                     )
-                    if atmosphere_transmission:
+                    if atmosphere_transmission == "default":
                         apply_atmosphere_transmission(
                             simulated_wave=simulated_wave,
                             wave_transmission=wave_transmission,

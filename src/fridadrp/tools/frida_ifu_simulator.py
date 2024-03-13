@@ -143,7 +143,8 @@ def main(args=None):
     parser.add_argument("--seeing_psf", help="Seeing PSF", type=str, default="gaussian",
                         choices=["gaussian"])
     parser.add_argument("--noversampling_whitelight", help="Oversampling white light image", type=int, default=10)
-    parser.add_argument("--transmission", help="Apply atmosphere transmission", action="store_true")
+    parser.add_argument("--transmission", help="Atmosphere transmission", type=str, default="default",
+                        choices=["default", "none"])
     parser.add_argument("--rnoise", help="Readout noise standard deviation (ADU)", type=float, default=0)
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
                         choices=["default", "none"])
@@ -175,7 +176,7 @@ def main(args=None):
     noversampling_whitelight = args.noversampling_whitelight
     if noversampling_whitelight < 1:
         raise ValueError(f'Unexpected {noversampling_whitelight=} (must be > 1)')
-    atmosphere_transmission = args.transmission  # ToDo: take into account
+    atmosphere_transmission = args.transmission
     rnoise = args.rnoise
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
