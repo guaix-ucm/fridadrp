@@ -969,9 +969,31 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
                     simulated_y_ifu *= u.pix
                 elif geometry_type in ['gaussian', 'point-like']:
-                    ra_deg = document['geometry']['ra_deg'] * u.deg
-                    dec_deg = document['geometry']['dec_deg'] * u.deg
-                    x_center, y_center, w_center = wcs3d.world_to_pixel_values(ra_deg, dec_deg, wave_min)
+                    if 'ra_deg' in document['geometry']:
+                        ra_deg = document['geometry']['ra_deg']
+                    else:
+                        ra_deg = 0.0
+                    ra_deg *= u.deg
+                    if 'dec_deg' in document['geometry']:
+                        dec_deg = document['geometry']['dec_deg']
+                    else:
+                        dec_deg = 0.0
+                    dec_deg *= u.deg
+                    if 'delta_ra_arcsec' in document['geometry']:
+                        delta_ra_arcsec = document['geometry']['delta_ra_arcsec']
+                    else:
+                        delta_ra_arcsec = 0.0
+                    delta_ra_arcsec *= u.arcsec
+                    if 'delta_dec_arcsec' in document['geometry']:
+                        delta_dec_arcsec = document['geometry']['delta_dec_arcsec']
+                    else:
+                        delta_dec_arcsec = 0.0
+                    delta_dec_arcsec *= u.arcsec
+                    x_center, y_center, w_center = wcs3d.world_to_pixel_values(
+                        ra_deg + delta_ra_arcsec.to(u.deg),
+                        dec_deg + delta_dec_arcsec.to(u.deg),
+                        wave_min
+                    )
                     # the previous pixel coordinates are assumed to be 0 at the center
                     # of the first pixel in each dimension
                     x_center += 1
@@ -1012,10 +1034,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     if seeing_fwhm_arcsec.value > 0:
                         if seeing_psf == "gaussian":
                             std_x = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
-                            print(f'{std_x=}')
                             simulated_x_ifu += rng.normal(loc=0, scale=abs(std_x.value), size=nphotons)
                             std_y = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
-                            print(f'{std_y=}')
                             simulated_y_ifu += rng.normal(loc=0, scale=abs(std_y.value), size=nphotons)
                         else:
                             raise ValueError(f'Unexpected {seeing_psf=}')
