@@ -176,11 +176,11 @@ def main(args=None):
     if noversampling_whitelight < 1:
         raise ValueError(f'Unexpected {noversampling_whitelight=} (must be > 1)')
     transmission = args.transmission  # ToDo: take into account
-    rnoise = args.rnoise  # ToDo: take into account
+    rnoise = args.rnoise
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
     rnoise *= u.adu
-    flatpix2pix = args.flatpix2pix  # ToDo: take into account
+    flatpix2pix = args.flatpix2pix
     prefix_intermediate_fits = args.prefix_intermediate_FITS
     seed = args.seed
     verbose = args.verbose
@@ -228,6 +228,7 @@ def main(args=None):
         scene=scene,
         seeing_fwhm_arcsec=seeing_fwhm_arcsec,
         seeing_psf=seeing_psf,
+        flatpix2pix=flatpix2pix,
         rnoise=rnoise,
         faux_dict=faux_dict,
         rng=rng,

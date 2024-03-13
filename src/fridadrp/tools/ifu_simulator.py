@@ -753,6 +753,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                   noversampling_whitelight,
                   scene,
                   seeing_fwhm_arcsec, seeing_psf,
+                  flatpix2pix,
                   rnoise,
                   faux_dict, rng,
                   prefix_intermediate_fits,
@@ -778,6 +779,11 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         Seeing FWHM (arcsec).
     seeing_psf : str
         Seeing PSF.
+    flatpix2pix : str
+        String indicating whether a pixel-to-pixel flatfield is
+        applied or not. Two possible values:
+        - 'default': use the default flatfield defined in 'faux_dict'
+        - 'none': do not apply flatfield
     rnoise : `~astropy.units.Quantity`
         Readout noise standard deviation (in ADU). Assumed to be
         Gaussian.
@@ -808,7 +814,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     if verbose:
         print(' ')
         for item in faux_dict:
-            print(f'- Required file for item {item}:\n  {faux_dict[item]}')
+            print(ctext(f'- Required file for item {item}:\n  {faux_dict[item]}', faint=True))
 
     if plots:
         # display SKYCALC predictions for sky radiance and transmission
@@ -1221,6 +1227,30 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             image2d_detector_method0=image2d_detector_method0
         ) for islice in range(nslices))
 
+    # apply flatpix2pix
+    if flatpix2pix not in ['default', 'none']:
+        raise_ValueError(f'Invalid {flatpix2pix=}')
+    if flatpix2pix == 'default':
+        infile = faux_dict['flatpix2pix']
+        with fits.open(infile) as hdul:
+            image2d_flatpix2pix = hdul[0].data
+        if np.min(image2d_flatpix2pix) <= 0:
+            print(f'- minimum flatpix2pix value: {np.min(image2d_flatpix2pix)}')
+            raise_ValueError(f'Unexpected signal in flatpix2pix <= 0')
+        naxis2_flatpix2pix, naxis1_flatpix2pix = image2d_flatpix2pix.shape
+        naxis1_flatpix2pix *= u.pix
+        naxis2_flatpix2pix *= u.pix
+        if (naxis1_flatpix2pix != naxis1_detector) or (naxis2_flatpix2pix != naxis2_detector):
+            raise_ValueError(f'Unexpected flatpix2pix shape: naxis1={naxis1_flatpix2pix}, naxis2={naxis2_flatpix2pix}')
+        if verbose:
+            print(f'Applying flatpix2pix: {os.path.basename(infile)} to detector image')
+            print(f'- minimum flatpix2pix value: {np.min(image2d_flatpix2pix)}')
+            print(f'- maximum flatpix2pix value: {np.max(image2d_flatpix2pix)}')
+        image2d_detector_method0 /= image2d_flatpix2pix
+    else:
+        if verbose:
+            print('Skipping applying flatpix2pix')
+
     # apply Gaussian readout noise to detector image
     if rnoise.value > 0:
         if verbose:
@@ -1228,6 +1258,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         ntot_pixels = naxis1_detector.value * naxis2_detector.value
         image2d_rnoise_flatten = rng.normal(loc=0.0, scale=rnoise.value, size=ntot_pixels)
         image2d_detector_method0 += image2d_rnoise_flatten.reshape((naxis2_detector.value, naxis1_detector.value))
+    else:
+        if verbose:
+            print('Skipping adding Gaussian readout noise')
 
     save_image2d_rss_detector_method0(
         wcs3d=wcs3d,
