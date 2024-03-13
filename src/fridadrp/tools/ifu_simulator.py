@@ -23,6 +23,7 @@ import yaml
 
 from fridadrp.processing.define_3d_wcs import get_wvparam_from_wcs3d
 from numina.array.distortion import fmap
+from numina.tools.ctext import ctext
 
 
 pp = pprint.PrettyPrinter(indent=1, sort_dicts=False)
@@ -825,13 +826,13 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         for document in scene_dict:
             document_keys = set(document.keys())
             if document_keys != required_keys_in_scene:
-                print(f'ERROR while processing: {scene}')
+                print(ctext(f'ERROR while processing: {scene}', fg='red'))
                 print(f'expected keys: {required_keys_in_scene}')
                 print(f'keys found...: {document_keys}')
                 pp.pprint(document)
-                raise ValueError(f'Invalid format in file: {scene}')
+                raise ValueError(ctext(f'Invalid format in file: {scene}', fg='red'))
             if verbose:
-                print('\n* Processing:')
+                print(ctext('\n* Processing:', fg='green'))
                 pp.pprint(document)
             nphotons = int(float(document['nphotons']))
             render = document['render']
@@ -841,11 +842,11 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 # --------------------------
                 spectrum_keys = set(document['spectrum'].keys())
                 if not expected_keys_in_spectrum.issubset(spectrum_keys) :
-                    print(f'ERROR while processing: {scene}')
+                    print(ctext(f'ERROR while processing: {scene}', fg='red'))
                     print(f'expected keys: {expected_keys_in_spectrum}')
                     print(f'keys found...: {spectrum_keys}')
                     pp.pprint(document)
-                    raise ValueError(f'Invalid format in file: {scene}')
+                    raise ValueError(ctext(f'Invalid format in file: {scene}', fg='red'))
                 wave_unit = document['spectrum']['wave_unit']
                 if wave_unit is None:   # useful for type="constant-flux"
                     wave_min = wmin
@@ -854,6 +855,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     if 'wave_min' in document['spectrum']:
                         wave_min = document['spectrum']['wave_min']
                     else:
+                        if verbose:
+                            print(ctext('Assuming wave_min: null', faint=True))
                         wave_min = None
                     if wave_min is None:
                         wave_min = wmin.to(wave_unit)
@@ -862,6 +865,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     if 'wave_max' in document['spectrum']:
                         wave_max = document['spectrum']['wave_max']
                     else:
+                        if verbose:
+                            print(ctext('Assuming wave_max: null', faint=True))
                         wave_max = None
                     if wave_max is None:
                         wave_max = wmax.to(wave_unit)
@@ -882,7 +887,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     catlines = np.genfromtxt(filename)
                     line_wave = catlines[:, wave_column] * Unit(wave_unit)
                     if not np.all(np.diff(line_wave.value) > 0):
-                        raise ValueError(f"Wavelength array 'line_wave'={line_wave} is not sorted!")
+                        raise ValueError(ctext(f'Wavelength array {line_wave=} is not sorted!', fg='red'))
                     line_flux = catlines[:, flux_column]
                     simulated_wave = simulate_delta_lines(
                         line_wave=line_wave,
@@ -900,7 +905,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         skycalc_table = hdul[1].data
                     wave = skycalc_table['lam'] * Unit(wave_unit)
                     if not np.all(np.diff(wave.value) > 0):
-                        raise ValueError(f"Wavelength array 'wave'={wave} is not sorted!")
+                        raise ValueError(ctext(f'Wavelength array {wave=} is not sorted!', fg='red'))
                     flux = skycalc_table['flux']
                     flux_type = 'photlam'
                     simulated_wave = simulate_spectrum(
@@ -924,17 +929,21 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     if 'redshift' in document['spectrum']:
                         redshift = document['spectrum']['redshift']
                     else:
+                        if verbose:
+                            print(ctext('Assuming redshift: 0', faint=True))
                         redshift = 0.0
                     if 'convolve_sigma_km_s' in document['spectrum']:
                         convolve_sigma_km_s = document['spectrum']['convolve_sigma_km_s']
                     else:
+                        if verbose:
+                            print(ctext('Assuming convolve_sigma_km_s: 0', faint=True))
                         convolve_sigma_km_s = 0.0
                     convolve_sigma_km_s *= u.km / u.s
                     # read data
                     table_data = np.genfromtxt(filename)
                     wave = table_data[:, wave_column] * (1 + redshift) * Unit(wave_unit)
                     if not np.all(np.diff(wave.value) > 0):
-                        raise ValueError(f"Wavelength array 'wave'={wave} is not sorted!")
+                        raise ValueError(ctext(f'Wavelength array {wave=} is not sorted!', fg='red'))
                     flux = table_data[:, flux_column]
                     simulated_wave = simulate_spectrum(
                         wave=wave,
@@ -957,8 +966,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         rng=rng
                     )
                 else:
-                    raise ValueError(f'Unexpected spectrum type: "{spectrum_type}" '
-                                     f'in file "{scene}"')
+                    raise ValueError(ctext(f'Unexpected {spectrum_type=} in file {scene}', fg='red'))
                 # convert to default wavelength_unit
                 simulated_wave = simulated_wave.to(wv_cunit1)
                 if nphotons_all == 0:
@@ -978,21 +986,29 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     if 'ra_deg' in document['geometry']:
                         ra_deg = document['geometry']['ra_deg']
                     else:
+                        if verbose:
+                            print(ctext('Assuming ra_deg: 0', faint=True))
                         ra_deg = 0.0
                     ra_deg *= u.deg
                     if 'dec_deg' in document['geometry']:
                         dec_deg = document['geometry']['dec_deg']
                     else:
+                        if verbose:
+                            print(ctext('Assuming dec_deg: 0', faint=True))
                         dec_deg = 0.0
                     dec_deg *= u.deg
                     if 'delta_ra_arcsec' in document['geometry']:
                         delta_ra_arcsec = document['geometry']['delta_ra_arcsec']
                     else:
+                        if verbose:
+                            print(ctext('Assuming delta_ra_deg: 0', faint=True))
                         delta_ra_arcsec = 0.0
                     delta_ra_arcsec *= u.arcsec
                     if 'delta_dec_arcsec' in document['geometry']:
                         delta_dec_arcsec = document['geometry']['delta_dec_arcsec']
                     else:
+                        if verbose:
+                            print(ctext('Assuming delta_dec_deg: 0', faint=True))
                         delta_dec_arcsec = 0.0
                     delta_dec_arcsec *= u.arcsec
                     x_center, y_center, w_center = wcs3d.world_to_pixel_values(
@@ -1035,7 +1051,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         simulated_x_ifu = np.repeat(x_center, nphotons)
                         simulated_y_ifu = np.repeat(y_center, nphotons)
                     else:
-                        raise ValueError(f'Unexpected {geometry_type=}')
+                        raise ValueError(ctext(f'Unexpected {geometry_type=}', fg='red'))
                     # apply seeing
                     if seeing_fwhm_arcsec.value > 0:
                         if seeing_psf == "gaussian":
@@ -1044,13 +1060,12 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                             std_y = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
                             simulated_y_ifu += rng.normal(loc=0, scale=abs(std_y.value), size=nphotons)
                         else:
-                            raise ValueError(f'Unexpected {seeing_psf=}')
+                            raise ValueError(ctext(f'Unexpected {seeing_psf=}', fg='red'))
                     # add units
                     simulated_x_ifu *= u.pix
                     simulated_y_ifu *= u.pix
                 else:
-                    raise ValueError(f'Unexpected geometry type: "{geometry_type}" '
-                                     f'in file "{scene}"')
+                    raise ValueError(ctext(f'Unexpected {geometry_type=} in file {scene}', fg='red'))
                 if nphotons_all == 0:
                     simulated_x_ifu_all = simulated_x_ifu
                     simulated_y_ifu_all = simulated_y_ifu
@@ -1060,7 +1075,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 # ---
                 # update nphotons
                 if verbose:
-                    print(f'--> {nphotons} simulated')
+                    print(ctext(f'--> {nphotons} photons simulated', fg='blue'))
                 if nphotons_all == 0:
                     nphotons_all = nphotons
                 else:
@@ -1070,24 +1085,24 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         len(simulated_x_ifu_all),
                         len(simulated_y_ifu_all)
                         }) != 1:
-                    print('ERROR: check the following numbers:')
+                    print(ctext('ERROR: check the following numbers:', fg='red'))
                     print(f'{nphotons_all=}')
                     print(f'{len(simulated_wave_all)=}')
                     print(f'{len(simulated_x_ifu_all)=}')
                     print(f'{len(simulated_y_ifu_all)=}')
-                    raise ValueError('Unexpected differences found in the previous numbers')
+                    raise ValueError(ctext('Unexpected differences found in the previous numbers', fg='red'))
             else:
                 if verbose:
                     if nphotons == 0:
-                        print('WARNING -> nphotons: 0')
+                        print(ctext('WARNING -> nphotons: 0', fg='cyan'))
                     else:
-                        print('WARNING -> render: False')
+                        print(ctext('WARNING -> render: False', fg='cyan'))
 
     # filter simulated photons to keep only those that fall within
     # the IFU field of view and within the expected spectral range
     textwidth_nphotons_number = len(str(nphotons_all))
     if verbose:
-        print('Filtering photons within IFU field of view and spectral range...')
+        print('\nFiltering photons within IFU field of view and spectral range...')
         print(f'Initial number of simulated photons: {nphotons_all:>{textwidth_nphotons_number}}')
     cond1 = simulated_x_ifu_all >= min_x_ifu
     cond2 = simulated_x_ifu_all <= max_x_ifu
@@ -1103,11 +1118,13 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         simulated_wave_all = simulated_wave_all[iok]
         nphotons_all = len(iok)
     if verbose:
-        print(f'Final number of simulated photons..: {nphotons_all:>{textwidth_nphotons_number}}')
+        print(ctext(f'Final number of simulated photons..: {nphotons_all:>{textwidth_nphotons_number}}', fg='blue'))
 
     # ---------------------------------------------------------------
     # compute image2d IFU, white image, with and without oversampling
     # ---------------------------------------------------------------
+    if verbose:
+        print(ctext('\n* Computing image2d IFU (method 0) with and without oversampling', fg='green'))
     for noversampling in [noversampling_whitelight, 1]:
         generate_image2d_method0_ifu(
             wcs3d=wcs3d,
@@ -1124,6 +1141,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     # ----------------------------
     # compute image3d IFU, method0
     # ----------------------------
+    if verbose:
+        print(ctext('\n* Computing image3d IFU (method 0)', fg='green'))
     bins_x_ifu = (0.5 + np.arange(naxis1_ifu.value + 1)) * u.pix
     bins_y_ifu = (0.5 + np.arange(naxis2_ifu.value + 1)) * u.pix
     bins_wave = wv_crval1 + \
@@ -1142,6 +1161,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     # --------------------------------------------
     # compute image2d RSS and in detector, method0
     # --------------------------------------------
+    if verbose:
+        print(ctext('\n* Computing image2d RSS (method 0)', fg='green'))
     bins_x_detector = np.linspace(start=0.5, stop=naxis1_detector.value + 0.5, num=naxis1_detector.value + 1)
     bins_y_detector = np.linspace(start=0.5, stop=naxis2_detector.value + 0.5, num=naxis2_detector.value + 1)
 
