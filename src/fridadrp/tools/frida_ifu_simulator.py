@@ -144,7 +144,7 @@ def main(args=None):
                         choices=["gaussian"])
     parser.add_argument("--noversampling_whitelight", help="Oversampling white light image", type=int, default=10)
     parser.add_argument("--transmission", help="Apply atmosphere transmission", action="store_true")
-    parser.add_argument("--rnoise", help="Readout noise (ADU)", type=float, default=0)
+    parser.add_argument("--rnoise", help="Readout noise standard deviation (ADU)", type=float, default=0)
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
                         choices=["default", "none"])
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=1234)
@@ -179,6 +179,7 @@ def main(args=None):
     rnoise = args.rnoise  # ToDo: take into account
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
+    rnoise *= u.adu
     flatpix2pix = args.flatpix2pix  # ToDo: take into account
     prefix_intermediate_fits = args.prefix_intermediate_FITS
     seed = args.seed
@@ -227,6 +228,7 @@ def main(args=None):
         scene=scene,
         seeing_fwhm_arcsec=seeing_fwhm_arcsec,
         seeing_psf=seeing_psf,
+        rnoise=rnoise,
         faux_dict=faux_dict,
         rng=rng,
         prefix_intermediate_fits=prefix_intermediate_fits,

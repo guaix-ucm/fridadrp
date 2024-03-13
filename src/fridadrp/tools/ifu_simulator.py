@@ -753,6 +753,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                   noversampling_whitelight,
                   scene,
                   seeing_fwhm_arcsec, seeing_psf,
+                  rnoise,
                   faux_dict, rng,
                   prefix_intermediate_fits,
                   verbose=False, instname=None, subtitle=None, plots=False):
@@ -777,6 +778,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         Seeing FWHM (arcsec).
     seeing_psf : str
         Seeing PSF.
+    rnoise : `~astropy.units.Quantity`
+        Readout noise standard deviation (in ADU). Assumed to be
+        Gaussian.
     faux_dict : Python dictionary
         File names of auxiliary files:
         - skycalc: table with SKYCALC Sky Model Calculator predictions
@@ -1177,7 +1181,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     # compute image2d RSS and in detector, method0
     # --------------------------------------------
     if verbose:
-        print(ctext('\n* Computing image2d RSS (method 0)', fg='green'))
+        print(ctext('\n* Computing image2d RSS and detector (method 0)', fg='green'))
     bins_x_detector = np.linspace(start=0.5, stop=naxis1_detector.value + 0.5, num=naxis1_detector.value + 1)
     bins_y_detector = np.linspace(start=0.5, stop=naxis2_detector.value + 0.5, num=naxis2_detector.value + 1)
 
@@ -1216,6 +1220,14 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             image2d_rss_method0=image2d_rss_method0,
             image2d_detector_method0=image2d_detector_method0
         ) for islice in range(nslices))
+
+    # apply Gaussian readout noise to detector image
+    if rnoise.value > 0:
+        if verbose:
+            print(f'Applying Gaussian {rnoise=} to detector image')
+        ntot_pixels = naxis1_detector.value * naxis2_detector.value
+        image2d_rnoise_flatten = rng.normal(loc=0.0, scale=rnoise.value, size=ntot_pixels)
+        image2d_detector_method0 += image2d_rnoise_flatten.reshape((naxis2_detector.value, naxis1_detector.value))
 
     save_image2d_rss_detector_method0(
         wcs3d=wcs3d,
