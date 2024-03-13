@@ -49,7 +49,14 @@ def display_skycalc(faux_skycalc):
     """
 
     with fits.open(faux_skycalc) as hdul:
+        skycalc_header = hdul[1].header
         skycalc_table = hdul[1].data
+
+    if skycalc_header['TTYPE1'] != 'lam':
+        raise_ValueError(f"Unexpected TTYPE1: {skycalc_header['TTYPE1']}")
+    if skycalc_header['TTYPE2'] != 'flux':
+        raise_ValueError(f"Unexpected TTYPE2: {skycalc_header['TTYPE2']}")
+
     wave = skycalc_table['lam']
     flux = skycalc_table['flux']
     trans = skycalc_table['trans']
@@ -57,8 +64,10 @@ def display_skycalc(faux_skycalc):
     # plot radiance
     fig, ax = plt.subplots()
     ax.plot(wave, flux, '-', linewidth=1)
-    ax.set_xlabel('Vacuum Wavelength (nm)')
-    ax.set_ylabel('ph/s/m2/micron/arcsec2')
+    cwave_unit = skycalc_header['TUNIT1']
+    cflux_unit = skycalc_header['TUNIT2']
+    ax.set_xlabel(f'Vacuum Wavelength ({cwave_unit})')
+    ax.set_ylabel(f'{cflux_unit}')
     ax.set_title('SKYCALC prediction')
     plt.tight_layout()
     plt.show()
@@ -66,7 +75,7 @@ def display_skycalc(faux_skycalc):
     # plot transmission
     fig, ax = plt.subplots()
     ax.plot(wave, trans, '-', linewidth=1)
-    ax.set_xlabel('Vacuum Wavelength (nm)')
+    ax.set_xlabel(f'Vacuum Wavelength ({cwave_unit})')
     ax.set_ylabel('Transmission fraction')
     ax.set_title('SKYCALC prediction')
     plt.tight_layout()
@@ -413,6 +422,68 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
     return simulated_wave
 
 
+def apply_atmosphere_transmission(simulated_wave, wave_transmission, curve_transmission, rng,
+                                  plots=False, verbose=False):
+    """Apply atmosphere transmission.
+
+    The input wavelength of each photon is converted into -1
+    if the photon is absorbed. These photons are discarded later
+    when the code removes those outside [wmin, vmax].
+
+    Parameters
+    ----------
+    simulated_wave : `~astropy.units.Quantity`
+        Array containing the simulated wavelengths. If the photon is
+        absorbed, the wavelength is changed to -1. Note that this
+        input array is also the output of this function.
+    wave_transmission : `~astropy.units.Quantity`
+        Wavelength column of the tabulated transmission curve.
+    curve_transmission : `~astropy.units.Quantity`
+        Transmission values for the wavelengths given in
+        'wave_transmission'.
+    rng : `~numpy.random._generator.Generator`
+        Random number generator.
+    plots : bool
+        If True, plot input and output results.
+    verbose : bool
+        If True, display additional information.
+
+    """
+
+    wave_unit = simulated_wave.unit
+
+    # compute transmission at the wavelengths of the simulated photons
+    transmission_values = np.interp(
+        x=simulated_wave.value,
+        xp=wave_transmission.to(wave_unit).value,
+        fp=curve_transmission
+    )
+
+    if plots:
+        fig, ax = plt.subplots()
+        ax.plot(wave_transmission.to(wave_unit), curve_transmission, '-', label='SKYCALC curve')
+        ax.plot(simulated_wave, transmission_values, ',', alpha=0.5, label='interpolated values')
+        ax.set_xlabel(f'Wavelength ({wave_unit})')
+        ax.set_ylabel('Transmission fraction')
+        ax.legend(loc=3)  # loc="best" can be slow with large amounts of data
+        plt.tight_layout()
+        plt.show()
+
+    # generate random values in the interval [0, 1] and discard photons whose
+    # transmission value is lower than the random value
+    nphotons = len(simulated_wave)
+    survival_probability = rng.uniform(low=0, high=1, size=nphotons)
+    iremove = np.argwhere(transmission_values < survival_probability)
+    simulated_wave[iremove] = -1 * wave_unit
+
+    if verbose:
+        print('Applying atmosphere transmission:')
+        print(f'- initial number of photons: {nphotons}')
+        textwidth_nphotons_number = len(str(nphotons))
+        percentage = np.round(100 * len(iremove) / nphotons, 2)
+        print(f'- number of photons removed: {len(iremove):>{textwidth_nphotons_number}}  ({percentage}%)')
+
+
 def generate_image2d_method0_ifu(
         wcs3d,
         noversampling_whitelight,
@@ -754,6 +825,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                   scene,
                   seeing_fwhm_arcsec, seeing_psf,
                   flatpix2pix,
+                  atmosphere_transmission,
                   rnoise,
                   faux_dict, rng,
                   prefix_intermediate_fits,
@@ -782,8 +854,11 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     flatpix2pix : str
         String indicating whether a pixel-to-pixel flatfield is
         applied or not. Two possible values:
-        - 'default': use the default flatfield defined in 'faux_dict'
+        - 'default': use default flatfield defined in 'faux_dict'
         - 'none': do not apply flatfield
+    atmosphere_transmission : bool
+        If True, apply atmosphere transmission curve, which is
+        defined in 'faux_dict'.
     rnoise : `~astropy.units.Quantity`
         Readout noise standard deviation (in ADU). Assumed to be
         Gaussian.
@@ -832,6 +907,31 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     wv_cunit1, wv_crpix1, wv_crval1, wv_cdelt1 = get_wvparam_from_wcs3d(wcs3d)
     wmin = wv_crval1 + (0.5 * u.pix - wv_crpix1) * wv_cdelt1
     wmax = wv_crval1 + (naxis1_detector + 0.5 * u.pix - wv_crpix1) * wv_cdelt1
+
+    # load atmosphere transmission curve
+    if atmosphere_transmission:
+        infile = faux_dict['skycalc']
+        if verbose:
+            print(f'\nLoading atmosphere transmission curve {os.path.basename(infile)}')
+        with fits.open(infile) as hdul:
+            skycalc_header = hdul[1].header
+            skycalc_table = hdul[1].data
+        if skycalc_header['TTYPE1'] != 'lam':
+            raise_ValueError(f"Unexpected TTYPE1: {skycalc_header['TTYPE1']}")
+        cwave_unit = skycalc_header['TUNIT1']
+        wave_transmission = skycalc_table['lam'] * Unit(cwave_unit)
+        curve_transmission = skycalc_table['trans']
+        if wmin < np.min(wave_transmission) or wmax > np.max(wave_transmission):
+            print(f'{wmin=} (simulated photons)')
+            print(f'{wmax=} (simulated photons)')
+            print(f'{np.min(wave_transmission.to(wv_cunit1))=} (transmission curve)')
+            print(f'{np.max(wave_transmission.to(wv_cunit1))=} (transmission curve)')
+            raise_ValueError('Wavelength range covered by the tabulated transmission curve is insufficient')
+    else:
+        wave_transmission = None
+        curve_transmission = None
+        if verbose:
+            print('Skipping application of the atmosphere transmission')
 
     # render scene
     required_keys_in_scene = {'spectrum', 'geometry', 'nphotons', 'render'}
@@ -920,6 +1020,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         plots=plots,
                         plot_title=filename
                     )
+                    if atmosphere_transmission:
+                        print('No atmosphere transmission applied to this block')
                 elif spectrum_type == 'skycalc-radiance':
                     faux_skycalc = faux_dict['skycalc']
                     with fits.open(faux_skycalc) as hdul:
@@ -943,6 +1045,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         plot_title=os.path.basename(faux_skycalc),
                         verbose=verbose
                     )
+                    if atmosphere_transmission:
+                        print('No atmosphere transmission applied to this block')
                 elif spectrum_type == 'tabulated-spectrum':
                     filename = document['spectrum']['filename']
                     wave_column = document['spectrum']['wave_column'] - 1
@@ -981,6 +1085,15 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         plot_title=os.path.basename(filename),
                         verbose=verbose
                     )
+                    if atmosphere_transmission:
+                        apply_atmosphere_transmission(
+                            simulated_wave=simulated_wave,
+                            wave_transmission=wave_transmission,
+                            curve_transmission=curve_transmission,
+                            rng=rng,
+                            verbose=verbose,
+                            plots=plots
+                        )
                 elif spectrum_type == 'constant-flux':
                     simulated_wave = simulate_constant_photlam(
                         wmin=wave_min,
@@ -988,6 +1101,15 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         nphotons=nphotons,
                         rng=rng
                     )
+                    if atmosphere_transmission:
+                        apply_atmosphere_transmission(
+                            simulated_wave=simulated_wave,
+                            wave_transmission=wave_transmission,
+                            curve_transmission=curve_transmission,
+                            rng=rng,
+                            verbose=verbose,
+                            plots=plots
+                        )
                 else:
                     raise_ValueError(f'Unexpected {spectrum_type=} in file {scene}')
                 # convert to default wavelength_unit
@@ -1125,6 +1247,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
 
     # filter simulated photons to keep only those that fall within
     # the IFU field of view and within the expected spectral range
+    # (note that this step also removes simulated photons with
+    # negative wavelength value corresponding to those absorbed by
+    # the atmosphere when applying the transmission curve)
     textwidth_nphotons_number = len(str(nphotons_all))
     if verbose:
         print('\nFiltering photons within IFU field of view and spectral range...')

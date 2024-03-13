@@ -175,7 +175,7 @@ def main(args=None):
     noversampling_whitelight = args.noversampling_whitelight
     if noversampling_whitelight < 1:
         raise ValueError(f'Unexpected {noversampling_whitelight=} (must be > 1)')
-    transmission = args.transmission  # ToDo: take into account
+    atmosphere_transmission = args.transmission  # ToDo: take into account
     rnoise = args.rnoise
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
@@ -229,6 +229,7 @@ def main(args=None):
         seeing_fwhm_arcsec=seeing_fwhm_arcsec,
         seeing_psf=seeing_psf,
         flatpix2pix=flatpix2pix,
+        atmosphere_transmission=atmosphere_transmission,
         rnoise=rnoise,
         faux_dict=faux_dict,
         rng=rng,
