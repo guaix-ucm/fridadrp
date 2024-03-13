@@ -29,6 +29,11 @@ from numina.tools.ctext import ctext
 pp = pprint.PrettyPrinter(indent=1, sort_dicts=False)
 
 
+def raise_ValueError(msg):
+    """Raise exception showing a coloured message."""
+    raise ValueError(ctext(msg, fg='red'))
+
+
 def display_skycalc(faux_skycalc):
     """
     Display sky radiance and transmission.
@@ -85,11 +90,11 @@ def simulate_constant_photlam(wmin, wmax, nphotons, rng):
     """
 
     if not isinstance(wmin, u.Quantity):
-        raise ValueError(f"Object 'wmin': {wmin} is not a Quantity instance")
+        raise_ValueError(f"Object 'wmin': {wmin} is not a Quantity instance")
     if not isinstance(wmax, u.Quantity):
-        raise ValueError(f"Object 'wmax': {wmax} is not a Quantity instance")
+        raise_ValueError(f"Object 'wmax': {wmax} is not a Quantity instance")
     if wmin.unit != wmax.unit:
-        raise ValueError(f"Different units used for 'wmin' and 'wmax': {wmin.unit}, {wmax.unit}.\n"
+        raise_ValueError(f"Different units used for 'wmin' and 'wmax': {wmin.unit}, {wmax.unit}.\n" +
                          "Employ the same unit to unambiguously define the output result.")
 
     simulated_wave = rng.uniform(low=wmin.value, high=wmax.value, size=nphotons)
@@ -129,23 +134,23 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
 
     line_flux = np.asarray(line_flux)
     if len(line_wave) != len(line_flux):
-        raise ValueError(f"Incompatible array length: 'line_wave' ({len(line_wave)}), 'line_flux' ({len(line_flux)})")
+        raise_ValueError(f"Incompatible array length: 'line_wave' ({len(line_wave)}), 'line_flux' ({len(line_flux)})")
 
     if np.any(line_flux < 0):
-        raise ValueError(f'Negative line fluxes cannot be handled')
+        raise_ValueError(f'Negative line fluxes cannot be handled')
 
     if not isinstance(line_wave, u.Quantity):
-        raise ValueError(f"Object 'line_wave': {line_wave} is not a Quantity instance")
+        raise_ValueError(f"Object 'line_wave': {line_wave} is not a Quantity instance")
     wave_unit = line_wave.unit
     if not wave_unit.is_equivalent(u.m):
-        raise ValueError(f"Unexpected unit for 'line_wave': {wave_unit}")
+        raise_ValueError(f"Unexpected unit for 'line_wave': {wave_unit}")
 
     # lower wavelength limit
     if wmin is not None:
         if not isinstance(wmin, u.Quantity):
-            raise ValueError(f"Object 'wmin':{wmin}  is not a Quantity instance")
+            raise_ValueError(f"Object 'wmin':{wmin}  is not a Quantity instance")
         if not wmin.unit.is_equivalent(u.m):
-            raise ValueError(f"Unexpected unit for 'wmin': {wmin}")
+            raise_ValueError(f"Unexpected unit for 'wmin': {wmin}")
         wmin = wmin.to(wave_unit)
         lower_index = np.searchsorted(line_wave.value, wmin.value, side='left')
     else:
@@ -154,9 +159,9 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
     # upper wavelength limit
     if wmax is not None:
         if not isinstance(wmax, u.Quantity):
-            raise ValueError(f"Object 'wmax': {wmax} is not a Quantity instance")
+            raise_ValueError(f"Object 'wmax': {wmax} is not a Quantity instance")
         if not wmax.unit.is_equivalent(u.m):
-            raise ValueError(f"Unexpected unit for 'wmax': {wmin}")
+            raise_ValueError(f"Unexpected unit for 'wmax': {wmin}")
         wmax = wmax.to(wave_unit)
         upper_index = np.searchsorted(line_wave.value, wmax.value, side='right')
     else:
@@ -234,7 +239,7 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
 
 
 def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve_sigma_km_s,
-                      nbins_histo, plots, plot_title):
+                      nbins_histo, plots, plot_title, verbose):
     """Simulate spectrum defined by tabulated wave and flux data.
 
     Parameters
@@ -264,6 +269,8 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
         If True, plot input and output results.
     plot_title : str or None
         Plot title. Used only when 'plots' is True.
+    verbose : bool
+        If True, display additional information.
 
     Returns
     -------
@@ -273,26 +280,26 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
 
     flux = np.asarray(flux)
     if len(wave) != len(flux):
-        raise ValueError(f"Incompatible array length: 'wave' ({len(wave)}), 'flux' ({len(flux)})")
+        raise_ValueError(f"Incompatible array length: 'wave' ({len(wave)}), 'flux' ({len(flux)})")
 
     if np.any(flux < 0):
-        raise ValueError(f'Negative flux values cannot be handled')
+        raise_ValueError(f'Negative flux values cannot be handled')
 
     if flux_type.lower() not in ['flam', 'photlam']:
-        raise ValueError(f"Flux type: {flux_type} is not any of the valid values: 'flam', 'photlam'")
+        raise_ValueError(f"Flux type: {flux_type} is not any of the valid values: 'flam', 'photlam'")
 
     if not isinstance(wave, u.Quantity):
-        raise ValueError(f"Object {wave=} is not a Quantity instance")
+        raise_ValueError(f"Object {wave=} is not a Quantity instance")
     wave_unit = wave.unit
     if not wave_unit.is_equivalent(u.m):
-        raise ValueError(f"Unexpected unit for 'wave': {wave_unit}")
+        raise_ValueError(f"Unexpected unit for 'wave': {wave_unit}")
 
     # lower wavelength limit
     if wmin is not None:
         if not isinstance(wmin, u.Quantity):
-            raise ValueError(f"Object {wmin=} is not a Quantity instance")
+            raise_ValueError(f"Object {wmin=} is not a Quantity instance")
         if not wmin.unit.is_equivalent(u.m):
-            raise ValueError(f"Unexpected unit for 'wmin': {wmin}")
+            raise_ValueError(f"Unexpected unit for 'wmin': {wmin}")
         wmin = wmin.to(wave_unit)
         lower_index = np.searchsorted(wave.value, wmin.value, side='left')
     else:
@@ -301,9 +308,9 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
     # upper wavelength limit
     if wmax is not None:
         if not isinstance(wmax, u.Quantity):
-            raise ValueError(f"Object {wmax=} is not a Quantity instance")
+            raise_ValueError(f"Object {wmax=} is not a Quantity instance")
         if not wmax.unit.is_equivalent(u.m):
-            raise ValueError(f"Unexpected unit for 'wmax': {wmin}")
+            raise_ValueError(f"Unexpected unit for 'wmax': {wmin}")
         wmax = wmax.to(wave_unit)
         upper_index = np.searchsorted(wave.value, wmax.value, side='right')
     else:
@@ -314,14 +321,14 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
             print(f'Working with data from: {plot_title}')
         print(f'Tabulated wavelength range: {wave[0]} - {wave[-1]}')
         print(f'Requested wavelength range: {wmin} - {wmax}')
-        raise ValueError('Wavelength ranges without intersection')
+        raise_ValueError('Wavelength ranges without intersection')
 
     if not isinstance(convolve_sigma_km_s, u.Quantity):
-        raise ValueError(f'Object {convolve_sigma_km_s=} is not a Quantity instance')
+        raise_ValueError(f'Object {convolve_sigma_km_s=} is not a Quantity instance')
     if convolve_sigma_km_s.unit != u.km / u.s:
-        raise ValueError(f'Unexpected unit for {convolve_sigma_km_s}')
+        raise_ValueError(f'Unexpected unit for {convolve_sigma_km_s}')
     if convolve_sigma_km_s.value < 0:
-        raise ValueError(f'Unexpected negative value for {convolve_sigma_km_s}')
+        raise_ValueError(f'Unexpected negative value for {convolve_sigma_km_s}')
 
     if plots:
         fig, ax = plt.subplots()
@@ -342,6 +349,8 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
 
     # convert FLAM to PHOTLAM
     if flux_type.lower() == 'flam':
+        if verbose:
+            print('Converting FLAM to PHOTLAM')
         flux_conversion = wave.to(u.m) / (constants.h * constants.c)
         flux *= flux_conversion.value
 
@@ -374,6 +383,8 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
 
     # apply Gaussian broadening
     if convolve_sigma_km_s.value > 0:
+        if verbose:
+            print(f'Applying {convolve_sigma_km_s=}')
         sigma_wave = convolve_sigma_km_s / constants.c.to(u.km / u.s) * simulated_wave
         simulated_wave = rng.normal(loc=simulated_wave, scale=sigma_wave)
 
@@ -830,7 +841,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 print(f'expected keys: {required_keys_in_scene}')
                 print(f'keys found...: {document_keys}')
                 pp.pprint(document)
-                raise ValueError(ctext(f'Invalid format in file: {scene}', fg='red'))
+                raise_ValueError(f'Invalid format in file: {scene}')
             if verbose:
                 print(ctext('\n* Processing:', fg='green'))
                 pp.pprint(document)
@@ -846,7 +857,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     print(f'expected keys: {expected_keys_in_spectrum}')
                     print(f'keys found...: {spectrum_keys}')
                     pp.pprint(document)
-                    raise ValueError(ctext(f'Invalid format in file: {scene}', fg='red'))
+                    raise_ValueError(f'Invalid format in file: {scene}')
                 wave_unit = document['spectrum']['wave_unit']
                 if wave_unit is None:   # useful for type="constant-flux"
                     wave_min = wmin
@@ -887,7 +898,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     catlines = np.genfromtxt(filename)
                     line_wave = catlines[:, wave_column] * Unit(wave_unit)
                     if not np.all(np.diff(line_wave.value) > 0):
-                        raise ValueError(ctext(f'Wavelength array {line_wave=} is not sorted!', fg='red'))
+                        raise_ValueError(f'Wavelength array {line_wave=} is not sorted!')
                     line_flux = catlines[:, flux_column]
                     simulated_wave = simulate_delta_lines(
                         line_wave=line_wave,
@@ -905,7 +916,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         skycalc_table = hdul[1].data
                     wave = skycalc_table['lam'] * Unit(wave_unit)
                     if not np.all(np.diff(wave.value) > 0):
-                        raise ValueError(ctext(f'Wavelength array {wave=} is not sorted!', fg='red'))
+                        raise_ValueError(f'Wavelength array {wave=} is not sorted!')
                     flux = skycalc_table['flux']
                     flux_type = 'photlam'
                     simulated_wave = simulate_spectrum(
@@ -919,7 +930,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         convolve_sigma_km_s=0*u.km/u.s,
                         nbins_histo=naxis1_detector.value,
                         plots=plots,
-                        plot_title=os.path.basename(faux_skycalc)
+                        plot_title=os.path.basename(faux_skycalc),
+                        verbose=verbose
                     )
                 elif spectrum_type == 'tabulated-spectrum':
                     filename = document['spectrum']['filename']
@@ -943,7 +955,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     table_data = np.genfromtxt(filename)
                     wave = table_data[:, wave_column] * (1 + redshift) * Unit(wave_unit)
                     if not np.all(np.diff(wave.value) > 0):
-                        raise ValueError(ctext(f'Wavelength array {wave=} is not sorted!', fg='red'))
+                        raise_ValueError(f'Wavelength array {wave=} is not sorted!')
                     flux = table_data[:, flux_column]
                     simulated_wave = simulate_spectrum(
                         wave=wave,
@@ -956,7 +968,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         convolve_sigma_km_s=convolve_sigma_km_s,
                         nbins_histo=naxis1_detector.value,
                         plots=plots,
-                        plot_title=os.path.basename(filename)
+                        plot_title=os.path.basename(filename),
+                        verbose=verbose
                     )
                 elif spectrum_type == 'constant-flux':
                     simulated_wave = simulate_constant_photlam(
@@ -966,7 +979,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         rng=rng
                     )
                 else:
-                    raise ValueError(ctext(f'Unexpected {spectrum_type=} in file {scene}', fg='red'))
+                    raise_ValueError(f'Unexpected {spectrum_type=} in file {scene}')
                 # convert to default wavelength_unit
                 simulated_wave = simulated_wave.to(wv_cunit1)
                 if nphotons_all == 0:
@@ -1051,21 +1064,23 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         simulated_x_ifu = np.repeat(x_center, nphotons)
                         simulated_y_ifu = np.repeat(y_center, nphotons)
                     else:
-                        raise ValueError(ctext(f'Unexpected {geometry_type=}', fg='red'))
+                        raise_ValueError(f'Unexpected {geometry_type=}')
                     # apply seeing
                     if seeing_fwhm_arcsec.value > 0:
                         if seeing_psf == "gaussian":
+                            if verbose:
+                                print(f'Applying Gaussian PSF with {seeing_fwhm_arcsec=}')
                             std_x = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
                             simulated_x_ifu += rng.normal(loc=0, scale=abs(std_x.value), size=nphotons)
                             std_y = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
                             simulated_y_ifu += rng.normal(loc=0, scale=abs(std_y.value), size=nphotons)
                         else:
-                            raise ValueError(ctext(f'Unexpected {seeing_psf=}', fg='red'))
+                            raise_ValueError(f'Unexpected {seeing_psf=}')
                     # add units
                     simulated_x_ifu *= u.pix
                     simulated_y_ifu *= u.pix
                 else:
-                    raise ValueError(ctext(f'Unexpected {geometry_type=} in file {scene}', fg='red'))
+                    raise_ValueError(f'Unexpected {geometry_type=} in file {scene}')
                 if nphotons_all == 0:
                     simulated_x_ifu_all = simulated_x_ifu
                     simulated_y_ifu_all = simulated_y_ifu
@@ -1090,7 +1105,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     print(f'{len(simulated_wave_all)=}')
                     print(f'{len(simulated_x_ifu_all)=}')
                     print(f'{len(simulated_y_ifu_all)=}')
-                    raise ValueError(ctext('Unexpected differences found in the previous numbers', fg='red'))
+                    raise_ValueError('Unexpected differences found in the previous numbers')
             else:
                 if verbose:
                     if nphotons == 0:
