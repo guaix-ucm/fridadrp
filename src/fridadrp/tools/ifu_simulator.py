@@ -484,6 +484,138 @@ def apply_atmosphere_transmission(simulated_wave, wave_transmission, curve_trans
         print(f'- number of photons removed: {len(iremove):>{textwidth_nphotons_number}}  ({percentage}%)')
 
 
+def simulate_image2d_from_fitsfile(
+        infile,
+        diagonal_fov_arcsec,
+        plate_scale_x,
+        plate_scale_y,
+        nphotons,
+        rng,
+        background_to_subtract=None,
+        image_threshold=0.0,
+        plots=False,
+        verbose=False
+):
+    """Simulate photons mimicking a 2D image from FITS file.
+
+    Parameters
+    ----------
+    infile : str
+        Input file containing the FITS image to be simulated.
+    diagonal_fov_arcsec : `~astropy.units.Quantity`
+        Desired field of View (arcsec) corresponding to the diagonal
+        of the FITS image.
+    plate_scale_x : `~astropy.units.Quantity`
+        Plate scale of the IFU in the X direction.
+    plate_scale_y : `~astropy.units.Quantity`
+        Plate scale of the IFU in the Y direction.
+    nphotons : int
+        Number of photons to be simulated.
+    rng : `~numpy.random._generator.Generator`
+        Random number generator.
+    background_to_subtract : str or None
+        If not None, this parameters indicates how to computed
+        the background to be subtracted.
+    plots : bool
+        If True, plot intermediate results.
+    verbose : bool
+        If True, display additional information.
+
+    Returns
+    -------
+    simulated_x_ifu : `~numpy.ndarray`
+        Array of simulated photon X coordinates in the IFU.
+    simulated_y_ify : `~numpy.ndarray`
+        Array of simulated photon Y coordinates in the IFU.
+
+    """
+
+    # read input FITS file
+    if verbose:
+        print(f'Reading {infile=}')
+    with fits.open(infile) as hdul:
+        image2d_ini = hdul[0].data
+    image2d_reference = image2d_ini.astype(float)
+    naxis2, naxis1 = image2d_reference.shape
+    npixels = naxis1 * naxis2
+
+    # subtract background
+    if background_to_subtract is not None:
+        if background_to_subtract == 'mode':
+            nbins = int(np.sqrt(npixels) + 0.5)
+            h, bin_edges = np.histogram(image2d_reference.flatten(), bins=nbins)
+            imax = np.argmax(h)
+            skylevel = (bin_edges[imax] + bin_edges[imax+1]) / 2
+            if verbose:
+                print(f'Subtracting {skylevel=} (image mode)')
+        elif background_to_subtract == 'median':
+            skylevel = np.median(image2d_reference.flatten())
+            if verbose:
+                print(f'Subtracting {skylevel=} (image median)')
+        else:
+            skylevel = None   # avoid PyCharm warning (not aware of raise ValueError)
+            raise_ValueError(f'Invalid {background_to_subtract=}')
+        image2d_reference -= skylevel
+    else:
+        if verbose:
+            print('Skipping background subtraction')
+
+    # impose image threshold
+    if verbose:
+        print(f'Applying {image_threshold=}')
+    image2d_reference[image2d_reference <= image_threshold] = 0
+    if np.min(image2d_reference) < 0.0:
+        raise_ValueError(f'{np.min(image2d_reference)=} must be >= 0.0')
+
+    # flatten image to be simulated
+    image1d = image2d_reference.flatten()
+    # compute normalized cumulative area
+    xpixel = 1 + np.arange(npixels)
+    cumulative_area = np.concatenate((
+        [0],
+        np.cumsum((image1d[:-1] + image1d[1:]) / 2 * (xpixel[1:] - xpixel[:-1]))
+    ))
+    normalized_cumulative_area = cumulative_area / cumulative_area[-1]
+    if plots:
+        fig, ax = plt.subplots()
+        ax.plot(xpixel, normalized_cumulative_area, '.')
+        ax.set_xlabel(f'xpixel')
+        ax.set_ylabel('Normalized cumulative area')
+        ax.set_title(os.path.basename(infile))
+        plt.tight_layout()
+        plt.show()
+    # invert normalized cumulative area using random uniform samples
+    unisamples = rng.uniform(low=0, high=1, size=nphotons)
+    simulated_pixel = np.interp(x=unisamples, xp=normalized_cumulative_area, fp=xpixel)
+    # compute histogram of 1D data
+    bins_pixel = 0.5 + np.arange(npixels + 1)
+    int_simulated_pixel, bin_edges = np.histogram(simulated_pixel, bins=bins_pixel)
+    # reshape 1D into 2D image
+    image2d_simulated = int_simulated_pixel.reshape((naxis2, naxis1))
+    # scale factors to insert simulated image in requested field of view
+    plate_scale = diagonal_fov_arcsec / (np.sqrt(naxis1**2 + naxis2**2) * u.pix)
+    factor_x = abs((plate_scale / plate_scale_x.to(u.arcsec / u.pix)).value)
+    factor_y = abs((plate_scale / plate_scale_y.to(u.arcsec / u.pix)).value)
+    # redistribute photons in each pixel of the simulated image using a
+    # random distribution within the considered pixel
+    jcenter = naxis1 / 2
+    icenter = naxis2 / 2
+    simulated_x_ifu = []
+    simulated_y_ifu = []
+    for i, j in np.ndindex(naxis2, naxis1):
+        nphotons_in_pixel = image2d_simulated[i, j]
+        if nphotons_in_pixel > 0:
+            jmin = j - jcenter - 0.5
+            jmax = j - jcenter + 0.5
+            simulated_x_ifu += (rng.uniform(low=jmin, high=jmax, size=nphotons_in_pixel) * factor_x).tolist()
+            imin = i - icenter - 0.5
+            imax = i - icenter + 0.5
+            simulated_y_ifu += (rng.uniform(low=imin, high=imax, size=nphotons_in_pixel) * factor_y).tolist()
+
+    # return result
+    return np.array(simulated_x_ifu), np.array(simulated_y_ifu)
+
+
 def generate_image2d_method0_ifu(
         wcs3d,
         noversampling_whitelight,
@@ -1129,7 +1261,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     simulated_x_ifu *= u.pix
                     simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
                     simulated_y_ifu *= u.pix
-                elif geometry_type in ['gaussian', 'point-like']:
+                elif geometry_type in ['gaussian', 'point-like', 'from-FITS-image']:
                     if 'ra_deg' in document['geometry']:
                         ra_deg = document['geometry']['ra_deg']
                     else:
@@ -1170,8 +1302,14 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     # plate scale
                     plate_scale_x = wcs3d.wcs.cd[0, 0] * u.deg / u.pix
                     plate_scale_y = wcs3d.wcs.cd[1, 1] * u.deg / u.pix
-                    factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
-                    if geometry_type == 'gaussian':
+                    if verbose:
+                        print(f'{plate_scale_x=}')
+                        print(f'{plate_scale_y=}')
+                    if geometry_type == 'point-like':
+                        simulated_x_ifu = np.repeat(x_center, nphotons)
+                        simulated_y_ifu = np.repeat(y_center, nphotons)
+                    elif geometry_type == 'gaussian':
+                        factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
                         fwhm_ra_arcsec = document['geometry']['fwhm_ra_arcsec'] * u.arcsec
                         fwhm_dec_arcsec = document['geometry']['fwhm_dec_arcsec'] * u.arcsec
                         position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
@@ -1194,9 +1332,25 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         )
                         simulated_x_ifu = simulated_xy_ifu[:, 0]
                         simulated_y_ifu = simulated_xy_ifu[:, 1]
-                    elif geometry_type == 'point-like':
-                        simulated_x_ifu = np.repeat(x_center, nphotons)
-                        simulated_y_ifu = np.repeat(y_center, nphotons)
+                    elif geometry_type == 'from-FITS-image':
+                        # read reference FITS file
+                        infile = document['geometry']['filename']
+                        diagonal_fov_arcsec = document['geometry']['diagonal_fov_arcsec'] * u.arcsec
+                        # generate simulated locations in the IFU
+                        simulated_x_ifu, simulated_y_ifu = simulate_image2d_from_fitsfile(
+                            infile=infile,
+                            diagonal_fov_arcsec=diagonal_fov_arcsec,
+                            plate_scale_x=plate_scale_x,
+                            plate_scale_y=plate_scale_y,
+                            nphotons=nphotons,
+                            rng=rng,
+                            background_to_subtract='mode',
+                            plots=plots,
+                            verbose=verbose
+                        )
+                        # shift image center
+                        simulated_x_ifu += x_center
+                        simulated_y_ifu += y_center
                     else:
                         raise_ValueError(f'Unexpected {geometry_type=}')
                     # apply seeing
