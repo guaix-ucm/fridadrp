@@ -1452,7 +1452,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     bins_x_ifu = (0.5 + np.arange(naxis1_ifu.value + 1)) * u.pix
     bins_y_ifu = (0.5 + np.arange(naxis2_ifu.value + 1)) * u.pix
     bins_wave = wv_crval1 + \
-                (np.arange(naxis2_detector.value + 1) * u.pix - wv_crpix1) * wv_cdelt1 - 0.5 * u.pix * wv_cdelt1
+                ((np.arange(naxis2_detector.value + 1) + 1) * u.pix - wv_crpix1) * wv_cdelt1 - 0.5 * u.pix * wv_cdelt1
     generate_image3d_method0_ifu(
         wcs3d=wcs3d,
         simulated_x_ifu_all=simulated_x_ifu_all,
