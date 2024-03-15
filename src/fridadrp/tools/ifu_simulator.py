@@ -1550,7 +1550,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             nphotons = int(float(scene_block['nphotons']))
             apply_atmosphere_transmission = scene_block['apply_atmosphere_transmission']
             if atmosphere_transmission == "none" and apply_atmosphere_transmission:
-                print(ctext(f'WARNING: {apply_atmosphere_transmission=} when {atmosphere_transmission=}', fg='red'))
+                print(ctext(f'WARNING: {apply_atmosphere_transmission=} when {atmosphere_transmission=}', fg='cyan'))
                 print(f'{atmosphere_transmission=} overrides {apply_atmosphere_transmission=}')
                 print(f'The atmosphere transmission will not be applied!')
                 apply_atmosphere_transmission = False
@@ -1559,7 +1559,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 if seeing_fwhm_arcsec.value < 0:
                     raise_ValueError(f'Unexpected {seeing_fwhm_arcsec=}')
                 elif seeing_fwhm_arcsec == 0:
-                    print(ctext(f'WARNING: {apply_seeing=} when {seeing_fwhm_arcsec=}', fg='red'))
+                    print(ctext(f'WARNING: {apply_seeing=} when {seeing_fwhm_arcsec=}', fg='cyan'))
                     print('Seeing effect will not be applied!')
                     apply_seeing = False
             render = scene_block['render']
@@ -1659,6 +1659,10 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     cond5 = simulated_wave_all >= wmin
     cond6 = simulated_wave_all <= wmax
     iok = np.where(cond1 & cond2 & cond3 & cond4 & cond5 & cond6)[0]
+
+    if len(iok) == 0:
+        print(ctext(f'Final number of simulated photons..: {len(iok):>{textwidth_nphotons_number}}', fg='red'))
+        raise SystemExit
 
     if len(iok) < nphotons_all:
         simulated_x_ifu_all = simulated_x_ifu_all[iok]
