@@ -1185,7 +1185,7 @@ def generate_spectrum(scene_fname, scene_block, faux_dict, wave_unit,
 
 def generate_geometry(scene_fname, scene_block, nphotons,
                       seeing_fwhm_arcsec, seeing_psf,
-                      wcs3d, wave_min,
+                      wcs3d,
                       min_x_ifu, max_x_ifu, min_y_ifu, max_y_ifu,
                       rng,
                       verbose, plots):
@@ -1203,8 +1203,6 @@ def generate_geometry(scene_fname, scene_block, nphotons,
     seeing_psf : TBD
     wcs3d : `~astropy.wcs.wcs.WCS`
         WCS of the data cube.
-    wave_min : `~astropy.units.Quantity`
-        Minimum wavelength to be used in the scene block.
     min_x_ifu : `~astropy.units.Quantity`
         Minimum pixel X coordinate defining the IFU focal plane.
     max_x_ifu : `~astropy.units.Quantity`
@@ -1271,7 +1269,7 @@ def generate_geometry(scene_fname, scene_block, nphotons,
         x_center, y_center, w_center = wcs3d.world_to_pixel_values(
             ra_deg + delta_ra_arcsec.to(u.deg),
             dec_deg + delta_dec_arcsec.to(u.deg),
-            wave_min
+            wcs3d.wcs.crval[2]
         )
         # the previous pixel coordinates are assumed to be 0 at the center
         # of the first pixel in each dimension
@@ -1529,7 +1527,6 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     seeing_fwhm_arcsec=seeing_fwhm_arcsec,
                     seeing_psf=seeing_psf,
                     wcs3d=wcs3d,
-                    wave_min=wave_min,
                     min_x_ifu=min_x_ifu,
                     max_x_ifu=max_x_ifu,
                     min_y_ifu=min_y_ifu,
