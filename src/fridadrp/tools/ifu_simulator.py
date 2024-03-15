@@ -1520,6 +1520,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     )
 
     required_keys_in_scene_block = {
+        'scene_block_name',
         'spectrum',
         'geometry',
         'nphotons',
@@ -1544,9 +1545,13 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 print(f'keys found...: {scene_block_keys}')
                 pp.pprint(scene_block)
                 raise_ValueError(f'Invalid format in file: {scene_fname}')
+            scene_block_name = scene_block['scene_block_name']
             if verbose:
-                print(ctext('\n* Processing:', fg='green'))
+                print(ctext(f'\n* Processing: {scene_block_name}', fg='green'))
                 pp.pprint(scene_block)
+            else:
+                print(ctext(f'* Processing: {scene_block_name}', fg='green'))
+
             nphotons = int(float(scene_block['nphotons']))
             apply_atmosphere_transmission = scene_block['apply_atmosphere_transmission']
             if atmosphere_transmission == "none" and apply_atmosphere_transmission:
