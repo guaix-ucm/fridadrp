@@ -82,6 +82,72 @@ def display_skycalc(faux_skycalc):
     plt.show()
 
 
+def load_atmosphere_transmission_curve(atmosphere_transmission, wmin, wmax, wv_cunit1, faux_dict, verbose):
+    """Load atmosphere transmission curve.
+
+    Parameters
+    ----------
+    atmosphere_transmission : str
+        String indicating whether the atmosphere transmission of
+        the atmosphere is applied or not. Two possible values are:
+        - 'default': use default curve defined in 'faux_dict'
+        - 'none': do not apply atmosphere transmission
+    wmin : `~astroppy.units.Quantity`
+        Minimum wavelength to be considered.
+    wmax : `~astroppy.units.Quantity`
+        Maximum wavelength to be considered.
+    wv_cunit1 : `~astropy.units.core.Unit`
+        Default wavelength unit to be employed in the wavelength scale.
+    faux_dict : Python dictionary
+        File names of auxiliary files:
+        - skycalc: table with SKYCALC Sky Model Calculator predictions
+        - flatpix2pix: pixel-to-pixel flat field
+        - model_ifu2detector: 2D polynomial transformation
+          x_ifu, y_ify, wavelength -> x_detector, y_detector
+    verbose : bool
+        If True, display additional information.
+
+    Returns
+    -------
+    wave_transmission : `~astropy.units.Quantity`
+        Wavelength column of the tabulated transmission curve.
+    curve_transmission : `~astropy.units.Quantity`
+        Transmission values for the wavelengths given in
+        'wave_transmission'.
+
+    """
+
+    if atmosphere_transmission == "default":
+        infile = faux_dict['skycalc']
+        if verbose:
+            print(f'\nLoading atmosphere transmission curve {os.path.basename(infile)}')
+        with fits.open(infile) as hdul:
+            skycalc_header = hdul[1].header
+            skycalc_table = hdul[1].data
+        if skycalc_header['TTYPE1'] != 'lam':
+            raise_ValueError(f"Unexpected TTYPE1: {skycalc_header['TTYPE1']}")
+        cwave_unit = skycalc_header['TUNIT1']
+        wave_transmission = skycalc_table['lam'] * Unit(cwave_unit)
+        curve_transmission = skycalc_table['trans']
+        if wmin < np.min(wave_transmission) or wmax > np.max(wave_transmission):
+            print(f'{wmin=} (simulated photons)')
+            print(f'{wmax=} (simulated photons)')
+            print(f'{np.min(wave_transmission.to(wv_cunit1))=} (transmission curve)')
+            print(f'{np.max(wave_transmission.to(wv_cunit1))=} (transmission curve)')
+            raise_ValueError('Wavelength range covered by the tabulated transmission curve is insufficient')
+    elif atmosphere_transmission == "none":
+        wave_transmission = None
+        curve_transmission = None
+        if verbose:
+            print('Skipping application of the atmosphere transmission')
+    else:
+        wave_transmission = None   # avoid PyCharm warning (not aware of raise ValueError)
+        curve_transmission = None  # avoid PyCharm warning (not aware of raise ValueError)
+        raise_ValueError(f'Unexpected {atmosphere_transmission=}')
+
+    return wave_transmission, curve_transmission
+
+
 def simulate_constant_photlam(wmin, wmax, nphotons, rng):
     """Simulate spectrum with constant flux (in PHOTLAM units).
 
@@ -422,8 +488,8 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
     return simulated_wave
 
 
-def apply_atmosphere_transmission(simulated_wave, wave_transmission, curve_transmission, rng,
-                                  plots=False, verbose=False):
+def fapply_atmosphere_transmission(simulated_wave, wave_transmission, curve_transmission, rng,
+                                   plots=False, verbose=False):
     """Apply atmosphere transmission.
 
     The input wavelength of each photon is converted into -1
@@ -1152,7 +1218,7 @@ def generate_spectrum(scene_fname, scene_block, faux_dict, wave_unit,
             verbose=verbose
         )
         if atmosphere_transmission == "default":
-            apply_atmosphere_transmission(
+            fapply_atmosphere_transmission(
                 simulated_wave=simulated_wave,
                 wave_transmission=wave_transmission,
                 curve_transmission=curve_transmission,
@@ -1168,7 +1234,7 @@ def generate_spectrum(scene_fname, scene_block, faux_dict, wave_unit,
             rng=rng
         )
         if atmosphere_transmission == "default":
-            apply_atmosphere_transmission(
+            fapply_atmosphere_transmission(
                 simulated_wave=simulated_wave,
                 wave_transmission=wave_transmission,
                 curve_transmission=curve_transmission,
@@ -1443,46 +1509,37 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     wmax = wv_crval1 + (naxis1_detector + 0.5 * u.pix - wv_crpix1) * wv_cdelt1
 
     # load atmosphere transmission curve
-    if atmosphere_transmission == "default":
-        infile = faux_dict['skycalc']
-        if verbose:
-            print(f'\nLoading atmosphere transmission curve {os.path.basename(infile)}')
-        with fits.open(infile) as hdul:
-            skycalc_header = hdul[1].header
-            skycalc_table = hdul[1].data
-        if skycalc_header['TTYPE1'] != 'lam':
-            raise_ValueError(f"Unexpected TTYPE1: {skycalc_header['TTYPE1']}")
-        cwave_unit = skycalc_header['TUNIT1']
-        wave_transmission = skycalc_table['lam'] * Unit(cwave_unit)
-        curve_transmission = skycalc_table['trans']
-        if wmin < np.min(wave_transmission) or wmax > np.max(wave_transmission):
-            print(f'{wmin=} (simulated photons)')
-            print(f'{wmax=} (simulated photons)')
-            print(f'{np.min(wave_transmission.to(wv_cunit1))=} (transmission curve)')
-            print(f'{np.max(wave_transmission.to(wv_cunit1))=} (transmission curve)')
-            raise_ValueError('Wavelength range covered by the tabulated transmission curve is insufficient')
-    else:
-        wave_transmission = None
-        curve_transmission = None
-        if verbose:
-            print('Skipping application of the atmosphere transmission')
+    wave_transmission, curve_transmission = load_atmosphere_transmission_curve(
+        atmosphere_transmission=atmosphere_transmission,
+        wmin=wmin,
+        wmax=wmax,
+        wv_cunit1=wv_cunit1,
+        faux_dict=faux_dict,
+        verbose=verbose
+    )
 
-    # render scene
-    required_keys_in_scene = {'spectrum', 'geometry', 'nphotons', 'render'}
+    required_keys_in_scene_block = {
+        'spectrum',
+        'geometry',
+        'nphotons',
+        'apply_atmosphere_transmission',
+        'apply_seeing',
+        'render'
+    }
 
     nphotons_all = 0
     simulated_wave_all = None
     simulated_x_ifu_all = None
     simulated_y_ifu_all = None
 
-    # main loop
+    # main loop (rendering of scene blocks)
     with open(scene_fname, 'rt') as fstream:
         scene_dict = yaml.safe_load_all(fstream)
         for scene_block in scene_dict:
             scene_block_keys = set(scene_block.keys())
-            if scene_block_keys != required_keys_in_scene:
+            if scene_block_keys != required_keys_in_scene_block:
                 print(ctext(f'ERROR while processing: {scene_fname}', fg='red'))
-                print(f'expected keys: {required_keys_in_scene}')
+                print(f'expected keys: {required_keys_in_scene_block}')
                 print(f'keys found...: {scene_block_keys}')
                 pp.pprint(scene_block)
                 raise_ValueError(f'Invalid format in file: {scene_fname}')
@@ -1490,6 +1547,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 print(ctext('\n* Processing:', fg='green'))
                 pp.pprint(scene_block)
             nphotons = int(float(scene_block['nphotons']))
+            apply_atmosphere_transmission = scene_block['apply_atmosphere_transmission']
+            apply_seeing = scene_block['apply_seeing']
             render = scene_block['render']
             if nphotons > 0 and render:
                 # set wavelength unit and range
