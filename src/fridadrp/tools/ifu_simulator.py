@@ -1083,11 +1083,11 @@ def set_wavelength_unit_and_range(scene_fname, scene_block, wmin, wmax, verbose)
         return wave_unit, wave_min, wave_max
 
 
-def generate_spectrum(scene_fname, scene_block, faux_dict, wave_unit,
-                      wave_min, wave_max, nphotons,
-                      atmosphere_transmission, wave_transmission, curve_transmission,
-                      rng, naxis1_detector,
-                      verbose, plots):
+def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_unit,
+                                     wave_min, wave_max, nphotons,
+                                     apply_atmosphere_transmission, wave_transmission, curve_transmission,
+                                     rng, naxis1_detector,
+                                     verbose, plots):
     """Generate photons for the scene block.
 
     Parameters
@@ -1112,6 +1112,13 @@ def generate_spectrum(scene_fname, scene_block, faux_dict, wave_unit,
         Number of photons to be generated in the scene block.
     rng : `~numpy.random._generator.Generator`
         Random number generator.
+    apply_atmosphere_transmission : bool
+        If True, apply atmosphere transmission to simulated photons.
+    wave_transmission : `~astropy.units.Quantity`
+        Wavelength column of the tabulated transmission curve.
+    curve_transmission : `~astropy.units.Quantity`
+        Transmission values for the wavelengths given in
+        'wave_transmission'.
     naxis1_detector : `~astropy.units.Quantity`
         Detector NAXIS1, dispersion direction.
     verbose : bool
@@ -1151,9 +1158,6 @@ def generate_spectrum(scene_fname, scene_block, faux_dict, wave_unit,
             plots=plots,
             plot_title=filename
         )
-        if atmosphere_transmission == "default":
-            if verbose:
-                print('No atmosphere transmission applied to this type of data')
     elif spectrum_type == 'skycalc-radiance':
         faux_skycalc = faux_dict['skycalc']
         with fits.open(faux_skycalc) as hdul:
@@ -1177,8 +1181,6 @@ def generate_spectrum(scene_fname, scene_block, faux_dict, wave_unit,
             plot_title=os.path.basename(faux_skycalc),
             verbose=verbose
         )
-        if atmosphere_transmission == "default":
-            print('No atmosphere transmission applied to this type of data')
     elif spectrum_type == 'tabulated-spectrum':
         filename = scene_block['spectrum']['filename']
         wave_column = scene_block['spectrum']['wave_column'] - 1
@@ -1217,15 +1219,6 @@ def generate_spectrum(scene_fname, scene_block, faux_dict, wave_unit,
             plot_title=os.path.basename(filename),
             verbose=verbose
         )
-        if atmosphere_transmission == "default":
-            fapply_atmosphere_transmission(
-                simulated_wave=simulated_wave,
-                wave_transmission=wave_transmission,
-                curve_transmission=curve_transmission,
-                rng=rng,
-                verbose=verbose,
-                plots=plots
-            )
     elif spectrum_type == 'constant-flux':
         simulated_wave = simulate_constant_photlam(
             wmin=wave_min,
@@ -1233,28 +1226,30 @@ def generate_spectrum(scene_fname, scene_block, faux_dict, wave_unit,
             nphotons=nphotons,
             rng=rng
         )
-        if atmosphere_transmission == "default":
-            fapply_atmosphere_transmission(
-                simulated_wave=simulated_wave,
-                wave_transmission=wave_transmission,
-                curve_transmission=curve_transmission,
-                rng=rng,
-                verbose=verbose,
-                plots=plots
-            )
     else:
         simulated_wave = None  # avoid PyCharm warning (not aware of raise ValueError)
         raise_ValueError(f'Unexpected {spectrum_type=} in file {scene_fname}')
 
+    # apply atmosphere transmission
+    if apply_atmosphere_transmission:
+        fapply_atmosphere_transmission(
+            simulated_wave=simulated_wave,
+            wave_transmission=wave_transmission,
+            curve_transmission=curve_transmission,
+            rng=rng,
+            verbose=verbose,
+            plots=plots
+        )
+
     return simulated_wave
 
 
-def generate_geometry(scene_fname, scene_block, nphotons,
-                      seeing_fwhm_arcsec, seeing_psf,
-                      wcs3d,
-                      min_x_ifu, max_x_ifu, min_y_ifu, max_y_ifu,
-                      rng,
-                      verbose, plots):
+def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
+                                      apply_seeing, seeing_fwhm_arcsec, seeing_psf,
+                                      wcs3d,
+                                      min_x_ifu, max_x_ifu, min_y_ifu, max_y_ifu,
+                                      rng,
+                                      verbose, plots):
     """Distribute photons in the IFU focal plane for the scene block.
 
     Parameters
@@ -1265,6 +1260,8 @@ def generate_geometry(scene_fname, scene_block, nphotons,
         Dictonary storing a scene block.
     nphotons : int
         Number of photons to be generated in the scene block.
+    apply_seeing : bool
+        If True, apply seeing to simulated photons.
     seeing_fwhm_arcsec : TBD
     seeing_psf : TBD
     wcs3d : `~astropy.wcs.wcs.WCS`
@@ -1297,12 +1294,20 @@ def generate_geometry(scene_fname, scene_block, nphotons,
 
     factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
 
+    # plate scale
+    plate_scale_x = wcs3d.wcs.cd[0, 0] * u.deg / u.pix
+    plate_scale_y = wcs3d.wcs.cd[1, 1] * u.deg / u.pix
+    if verbose:
+        print(f'{plate_scale_x=}')
+        print(f'{plate_scale_y=}')
+
+    # define geometry type for scene block
     geometry_type = scene_block['geometry']['type']
+
+    # simulate photons following the selected geometry
     if geometry_type == 'flatfield':
         simulated_x_ifu = rng.uniform(low=min_x_ifu.value, high=max_x_ifu.value, size=nphotons)
-        simulated_x_ifu *= u.pix
         simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
-        simulated_y_ifu *= u.pix
     elif geometry_type in ['gaussian', 'point-like', 'from-FITS-image']:
         if 'ra_deg' in scene_block['geometry']:
             ra_deg = scene_block['geometry']['ra_deg']
@@ -1341,12 +1346,6 @@ def generate_geometry(scene_fname, scene_block, nphotons,
         # of the first pixel in each dimension
         x_center += 1
         y_center += 1
-        # plate scale
-        plate_scale_x = wcs3d.wcs.cd[0, 0] * u.deg / u.pix
-        plate_scale_y = wcs3d.wcs.cd[1, 1] * u.deg / u.pix
-        if verbose:
-            print(f'{plate_scale_x=}')
-            print(f'{plate_scale_y=}')
         if geometry_type == 'point-like':
             simulated_x_ifu = np.repeat(x_center, nphotons)
             simulated_y_ifu = np.repeat(y_center, nphotons)
@@ -1396,24 +1395,26 @@ def generate_geometry(scene_fname, scene_block, nphotons,
             simulated_x_ifu = None  # avoid PyCharm warning (not aware of raise ValueError)
             simulated_y_ifu = None  # avoid PyCharm warning (not aware of raise ValueError)
             raise_ValueError(f'Unexpected {geometry_type=}')
-        # apply seeing
-        if seeing_fwhm_arcsec.value > 0:
-            if seeing_psf == "gaussian":
-                if verbose:
-                    print(f'Applying Gaussian PSF with {seeing_fwhm_arcsec=}')
-                std_x = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
-                simulated_x_ifu += rng.normal(loc=0, scale=abs(std_x.value), size=nphotons)
-                std_y = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
-                simulated_y_ifu += rng.normal(loc=0, scale=abs(std_y.value), size=nphotons)
-            else:
-                raise_ValueError(f'Unexpected {seeing_psf=}')
-        # add units
-        simulated_x_ifu *= u.pix
-        simulated_y_ifu *= u.pix
     else:
         simulated_x_ifu = None  # avoid PyCharm warning (not aware of raise ValueError)
         simulated_y_ifu = None  # avoid PyCharm warning (not aware of raise ValueError)
         raise_ValueError(f'Unexpected {geometry_type=} in file {scene_fname}')
+
+    # apply seeing
+    if apply_seeing:
+        if seeing_psf == "gaussian":
+            if verbose:
+                print(f'Applying Gaussian PSF with {seeing_fwhm_arcsec=}')
+            std_x = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
+            simulated_x_ifu += rng.normal(loc=0, scale=abs(std_x.value), size=nphotons)
+            std_y = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
+            simulated_y_ifu += rng.normal(loc=0, scale=abs(std_y.value), size=nphotons)
+        else:
+            raise_ValueError(f'Unexpected {seeing_psf=}')
+
+    # add units
+    simulated_x_ifu *= u.pix
+    simulated_y_ifu *= u.pix
 
     return simulated_x_ifu, simulated_y_ifu
 
@@ -1548,7 +1549,19 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 pp.pprint(scene_block)
             nphotons = int(float(scene_block['nphotons']))
             apply_atmosphere_transmission = scene_block['apply_atmosphere_transmission']
+            if atmosphere_transmission == "none" and apply_atmosphere_transmission:
+                print(ctext(f'WARNING: {apply_atmosphere_transmission=} when {atmosphere_transmission=}', fg='red'))
+                print(f'{atmosphere_transmission=} overrides {apply_atmosphere_transmission=}')
+                print(f'The atmosphere transmission will not be applied!')
+                apply_atmosphere_transmission = False
             apply_seeing = scene_block['apply_seeing']
+            if apply_seeing:
+                if seeing_fwhm_arcsec.value < 0:
+                    raise_ValueError(f'Unexpected {seeing_fwhm_arcsec=}')
+                elif seeing_fwhm_arcsec == 0:
+                    print(ctext(f'WARNING: {apply_seeing=} when {seeing_fwhm_arcsec=}', fg='red'))
+                    print('Seeing effect will not be applied!')
+                    apply_seeing = False
             render = scene_block['render']
             if nphotons > 0 and render:
                 # set wavelength unit and range
@@ -1560,7 +1573,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     verbose=verbose
                 )
                 # generate spectrum
-                simulated_wave = generate_spectrum(
+                simulated_wave = generate_spectrum_for_scene_blok(
                     scene_fname=scene_fname,
                     scene_block=scene_block,
                     faux_dict=faux_dict,
@@ -1568,7 +1581,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     wave_min=wave_min,
                     wave_max=wave_max,
                     nphotons=nphotons,
-                    atmosphere_transmission=atmosphere_transmission,
+                    apply_atmosphere_transmission=apply_atmosphere_transmission,
                     wave_transmission=wave_transmission,
                     curve_transmission=curve_transmission,
                     rng=rng,
@@ -1579,10 +1592,11 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 # convert to default wavelength_unit
                 simulated_wave = simulated_wave.to(wv_cunit1)
                 # distribute photons in the IFU focal plane
-                simulated_x_ifu, simulated_y_ifu = generate_geometry(
+                simulated_x_ifu, simulated_y_ifu = generate_geometry_for_scene_block(
                     scene_fname=scene_fname,
                     scene_block=scene_block,
                     nphotons=nphotons,
+                    apply_seeing=apply_seeing,
                     seeing_fwhm_arcsec=seeing_fwhm_arcsec,
                     seeing_psf=seeing_psf,
                     wcs3d=wcs3d,
