@@ -217,7 +217,7 @@ def main(args=None):
         verbose=verbose
     )
 
-    # initilize random number generator with provided seed
+    # initialize random number generator with provided seed
     rng = np.random.default_rng(seed)
 
     ifu_simulator(
@@ -226,7 +226,7 @@ def main(args=None):
         naxis2_detector=FRIDA_NAXIS2_HAWAII,
         nslices=FRIDA_NSLICES,
         noversampling_whitelight=noversampling_whitelight,
-        scene=scene,
+        scene_fname=scene,
         seeing_fwhm_arcsec=seeing_fwhm_arcsec,
         seeing_psf=seeing_psf,
         flatpix2pix=flatpix2pix,

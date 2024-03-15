@@ -952,9 +952,67 @@ def save_image2d_rss_detector_method0(
         hdul.writeto(outfile, overwrite='yes')
 
 
+def set_wavelength_unit_and_range(scene_fname, scene_block, wmin, wmax, verbose):
+    """Set the wavelength unit and range
+
+    Parameters
+    ----------
+    scene_fname : str
+        YAML scene file name.
+    scene_block : dict
+        Dictonary storing a scene block.
+    wmin : `~astropy.units.Quantity`
+        Minimum wavelength covered by the detector.
+    wmax : `~astropy.units.Quantity`
+        Maximum wavelength covered by the detector.
+    verbose : bool
+       If True, display additional information.
+
+    Returns
+    -------
+    """
+
+    expected_keys_in_spectrum = {'type', 'wave_unit'}
+
+    spectrum_keys = set(scene_block['spectrum'].keys())
+    if not expected_keys_in_spectrum.issubset(spectrum_keys):
+        print(ctext(f'ERROR while processing: {scene_fname}', fg='red'))
+        print(f'expected keys: {expected_keys_in_spectrum}')
+        print(f'keys found...: {spectrum_keys}')
+        pp.pprint(scene_block)
+        raise_ValueError(f'Invalid format in file: {scene_fname}')
+    wave_unit = scene_block['spectrum']['wave_unit']
+    if wave_unit is None:  # useful for type="constant-flux"
+        wave_min = wmin
+        wave_max = wmax
+    else:
+        if 'wave_min' in scene_block['spectrum']:
+            wave_min = scene_block['spectrum']['wave_min']
+        else:
+            if verbose:
+                print(ctext('Assuming wave_min: null', faint=True))
+            wave_min = None
+        if wave_min is None:
+            wave_min = wmin.to(wave_unit)
+        else:
+            wave_min *= Unit(wave_unit)
+        if 'wave_max' in scene_block['spectrum']:
+            wave_max = scene_block['spectrum']['wave_max']
+        else:
+            if verbose:
+                print(ctext('Assuming wave_max: null', faint=True))
+            wave_max = None
+        if wave_max is None:
+            wave_max = wmax.to(wave_unit)
+        else:
+            wave_max *= Unit(wave_unit)
+
+        return wave_unit, wave_min, wave_max
+
+
 def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                   noversampling_whitelight,
-                  scene,
+                  scene_fname,
                   seeing_fwhm_arcsec, seeing_psf,
                   flatpix2pix,
                   atmosphere_transmission,
@@ -977,7 +1035,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     noversampling_whitelight : int
         Oversampling factor (integer number) to generate the white
         light image.
-    scene : str
+    scene_fname : str
         YAML scene file name.
     seeing_fwhm_arcsec : `~astropy.units.Quantity`
         Seeing FWHM (arcsec).
@@ -1075,66 +1133,42 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     simulated_wave_all = None
     simulated_x_ifu_all = None
     simulated_y_ifu_all = None
+
     # main loop
-    with open(scene, 'rt') as fstream:
+    with open(scene_fname, 'rt') as fstream:
         scene_dict = yaml.safe_load_all(fstream)
-        for document in scene_dict:
-            document_keys = set(document.keys())
-            if document_keys != required_keys_in_scene:
-                print(ctext(f'ERROR while processing: {scene}', fg='red'))
+        for scene_block in scene_dict:
+            scene_block_keys = set(scene_block.keys())
+            if scene_block_keys != required_keys_in_scene:
+                print(ctext(f'ERROR while processing: {scene_fname}', fg='red'))
                 print(f'expected keys: {required_keys_in_scene}')
-                print(f'keys found...: {document_keys}')
-                pp.pprint(document)
-                raise_ValueError(f'Invalid format in file: {scene}')
+                print(f'keys found...: {scene_block_keys}')
+                pp.pprint(scene_block)
+                raise_ValueError(f'Invalid format in file: {scene_fname}')
             if verbose:
                 print(ctext('\n* Processing:', fg='green'))
-                pp.pprint(document)
-            nphotons = int(float(document['nphotons']))
-            render = document['render']
+                pp.pprint(scene_block)
+            nphotons = int(float(scene_block['nphotons']))
+            render = scene_block['render']
             if nphotons > 0 and render:
-                # --------------------------
-                # wavelength range and units
-                # --------------------------
-                spectrum_keys = set(document['spectrum'].keys())
-                if not expected_keys_in_spectrum.issubset(spectrum_keys):
-                    print(ctext(f'ERROR while processing: {scene}', fg='red'))
-                    print(f'expected keys: {expected_keys_in_spectrum}')
-                    print(f'keys found...: {spectrum_keys}')
-                    pp.pprint(document)
-                    raise_ValueError(f'Invalid format in file: {scene}')
-                wave_unit = document['spectrum']['wave_unit']
-                if wave_unit is None:   # useful for type="constant-flux"
-                    wave_min = wmin
-                    wave_max = wmax
-                else:
-                    if 'wave_min' in document['spectrum']:
-                        wave_min = document['spectrum']['wave_min']
-                    else:
-                        if verbose:
-                            print(ctext('Assuming wave_min: null', faint=True))
-                        wave_min = None
-                    if wave_min is None:
-                        wave_min = wmin.to(wave_unit)
-                    else:
-                        wave_min *= Unit(wave_unit)
-                    if 'wave_max' in document['spectrum']:
-                        wave_max = document['spectrum']['wave_max']
-                    else:
-                        if verbose:
-                            print(ctext('Assuming wave_max: null', faint=True))
-                        wave_max = None
-                    if wave_max is None:
-                        wave_max = wmax.to(wave_unit)
-                    else:
-                        wave_max *= Unit(wave_unit)
-                # -------------
+                # -------------------------------------------------------------
+                # wavelength unit and range
+                # -------------------------------------------------------------
+                wave_unit, wave_min, wave_max = set_wavelength_unit_and_range(
+                    scene_fname=scene_fname,
+                    scene_block=scene_block,
+                    wmin=wmin,
+                    wmax=wmax,
+                    verbose=verbose
+                )
+                # -------------------------------------------------------------
                 # spectrum type
-                # -------------
-                spectrum_type = document['spectrum']['type']
+                # -------------------------------------------------------------
+                spectrum_type = scene_block['spectrum']['type']
                 if spectrum_type == 'delta-lines':
-                    filename = document['spectrum']['filename']
-                    wave_column = document['spectrum']['wave_column'] - 1
-                    flux_column = document['spectrum']['flux_column'] - 1
+                    filename = scene_block['spectrum']['filename']
+                    wave_column = scene_block['spectrum']['wave_column'] - 1
+                    flux_column = scene_block['spectrum']['flux_column'] - 1
                     if filename[0] == '@':
                         # retrieve file name from dictionary of auxiliary
                         # file names for the considered instrument
@@ -1155,7 +1189,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         plot_title=filename
                     )
                     if atmosphere_transmission == "default":
-                        print('No atmosphere transmission applied to this type of data')
+                        if verbose:
+                            print('No atmosphere transmission applied to this type of data')
                 elif spectrum_type == 'skycalc-radiance':
                     faux_skycalc = faux_dict['skycalc']
                     with fits.open(faux_skycalc) as hdul:
@@ -1182,18 +1217,18 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     if atmosphere_transmission == "default":
                         print('No atmosphere transmission applied to this type of data')
                 elif spectrum_type == 'tabulated-spectrum':
-                    filename = document['spectrum']['filename']
-                    wave_column = document['spectrum']['wave_column'] - 1
-                    flux_column = document['spectrum']['flux_column'] - 1
-                    flux_type = document['spectrum']['flux_type']
-                    if 'redshift' in document['spectrum']:
-                        redshift = document['spectrum']['redshift']
+                    filename = scene_block['spectrum']['filename']
+                    wave_column = scene_block['spectrum']['wave_column'] - 1
+                    flux_column = scene_block['spectrum']['flux_column'] - 1
+                    flux_type = scene_block['spectrum']['flux_type']
+                    if 'redshift' in scene_block['spectrum']:
+                        redshift = scene_block['spectrum']['redshift']
                     else:
                         if verbose:
                             print(ctext('Assuming redshift: 0', faint=True))
                         redshift = 0.0
-                    if 'convolve_sigma_km_s' in document['spectrum']:
-                        convolve_sigma_km_s = document['spectrum']['convolve_sigma_km_s']
+                    if 'convolve_sigma_km_s' in scene_block['spectrum']:
+                        convolve_sigma_km_s = scene_block['spectrum']['convolve_sigma_km_s']
                     else:
                         if verbose:
                             print(ctext('Assuming convolve_sigma_km_s: 0', faint=True))
@@ -1245,46 +1280,46 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                             plots=plots
                         )
                 else:
-                    raise_ValueError(f'Unexpected {spectrum_type=} in file {scene}')
+                    raise_ValueError(f'Unexpected {spectrum_type=} in file {scene_fname}')
                 # convert to default wavelength_unit
                 simulated_wave = simulated_wave.to(wv_cunit1)
                 if nphotons_all == 0:
                     simulated_wave_all = simulated_wave
                 else:
                     simulated_wave_all = np.concatenate((simulated_wave_all, simulated_wave))
-                # --------
+                # -------------------------------------------------------------
                 # geometry
-                # --------
-                geometry_type = document['geometry']['type']
+                # -------------------------------------------------------------
+                geometry_type = scene_block['geometry']['type']
                 if geometry_type == 'flatfield':
                     simulated_x_ifu = rng.uniform(low=min_x_ifu.value, high=max_x_ifu.value, size=nphotons)
                     simulated_x_ifu *= u.pix
                     simulated_y_ifu = rng.uniform(low=min_y_ifu.value, high=max_y_ifu.value, size=nphotons)
                     simulated_y_ifu *= u.pix
                 elif geometry_type in ['gaussian', 'point-like', 'from-FITS-image']:
-                    if 'ra_deg' in document['geometry']:
-                        ra_deg = document['geometry']['ra_deg']
+                    if 'ra_deg' in scene_block['geometry']:
+                        ra_deg = scene_block['geometry']['ra_deg']
                     else:
                         if verbose:
                             print(ctext('Assuming ra_deg: 0', faint=True))
                         ra_deg = 0.0
                     ra_deg *= u.deg
-                    if 'dec_deg' in document['geometry']:
-                        dec_deg = document['geometry']['dec_deg']
+                    if 'dec_deg' in scene_block['geometry']:
+                        dec_deg = scene_block['geometry']['dec_deg']
                     else:
                         if verbose:
                             print(ctext('Assuming dec_deg: 0', faint=True))
                         dec_deg = 0.0
                     dec_deg *= u.deg
-                    if 'delta_ra_arcsec' in document['geometry']:
-                        delta_ra_arcsec = document['geometry']['delta_ra_arcsec']
+                    if 'delta_ra_arcsec' in scene_block['geometry']:
+                        delta_ra_arcsec = scene_block['geometry']['delta_ra_arcsec']
                     else:
                         if verbose:
                             print(ctext('Assuming delta_ra_deg: 0', faint=True))
                         delta_ra_arcsec = 0.0
                     delta_ra_arcsec *= u.arcsec
-                    if 'delta_dec_arcsec' in document['geometry']:
-                        delta_dec_arcsec = document['geometry']['delta_dec_arcsec']
+                    if 'delta_dec_arcsec' in scene_block['geometry']:
+                        delta_dec_arcsec = scene_block['geometry']['delta_dec_arcsec']
                     else:
                         if verbose:
                             print(ctext('Assuming delta_dec_deg: 0', faint=True))
@@ -1310,9 +1345,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         simulated_y_ifu = np.repeat(y_center, nphotons)
                     elif geometry_type == 'gaussian':
                         factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
-                        fwhm_ra_arcsec = document['geometry']['fwhm_ra_arcsec'] * u.arcsec
-                        fwhm_dec_arcsec = document['geometry']['fwhm_dec_arcsec'] * u.arcsec
-                        position_angle_deg = document['geometry']['position_angle_deg'] * u.deg
+                        fwhm_ra_arcsec = scene_block['geometry']['fwhm_ra_arcsec'] * u.arcsec
+                        fwhm_dec_arcsec = scene_block['geometry']['fwhm_dec_arcsec'] * u.arcsec
+                        position_angle_deg = scene_block['geometry']['position_angle_deg'] * u.deg
                         # covariance matrix for the multivariate normal
                         std_x = fwhm_ra_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
                         std_y = fwhm_dec_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
@@ -1334,8 +1369,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                         simulated_y_ifu = simulated_xy_ifu[:, 1]
                     elif geometry_type == 'from-FITS-image':
                         # read reference FITS file
-                        infile = document['geometry']['filename']
-                        diagonal_fov_arcsec = document['geometry']['diagonal_fov_arcsec'] * u.arcsec
+                        infile = scene_block['geometry']['filename']
+                        diagonal_fov_arcsec = scene_block['geometry']['diagonal_fov_arcsec'] * u.arcsec
                         # generate simulated locations in the IFU
                         simulated_x_ifu, simulated_y_ifu = simulate_image2d_from_fitsfile(
                             infile=infile,
@@ -1368,7 +1403,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     simulated_x_ifu *= u.pix
                     simulated_y_ifu *= u.pix
                 else:
-                    raise_ValueError(f'Unexpected {geometry_type=} in file {scene}')
+                    raise_ValueError(f'Unexpected {geometry_type=} in file {scene_fname}')
                 if nphotons_all == 0:
                     simulated_x_ifu_all = simulated_x_ifu
                     simulated_y_ifu_all = simulated_y_ifu
@@ -1440,7 +1475,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             prefix_intermediate_fits=prefix_intermediate_fits,
             instname=instname,
             subtitle=subtitle,
-            scene=scene,
+            scene=scene_fname,
             plots=plots
         )
 
@@ -1525,8 +1560,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             raise_ValueError(f'Unexpected flatpix2pix shape: naxis1={naxis1_flatpix2pix}, naxis2={naxis2_flatpix2pix}')
         if verbose:
             print(f'Applying flatpix2pix: {os.path.basename(infile)} to detector image')
-            print(f'- minimum flatpix2pix value: {np.min(image2d_flatpix2pix)}')
-            print(f'- maximum flatpix2pix value: {np.max(image2d_flatpix2pix)}')
+            print(f'- minimum flatpix2pix value: {np.min(image2d_flatpix2pix):.6f}')
+            print(f'- maximum flatpix2pix value: {np.max(image2d_flatpix2pix):.6f}')
         image2d_detector_method0 /= image2d_flatpix2pix
     else:
         if verbose:
