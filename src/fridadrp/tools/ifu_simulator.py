@@ -1471,7 +1471,6 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
 
     # render scene
     required_keys_in_scene = {'spectrum', 'geometry', 'nphotons', 'render'}
-    expected_keys_in_spectrum = {'type', 'wave_unit'}
 
     nphotons_all = 0
     simulated_wave_all = None
@@ -1522,10 +1521,6 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 )
                 # convert to default wavelength_unit
                 simulated_wave = simulated_wave.to(wv_cunit1)
-                if nphotons_all == 0:
-                    simulated_wave_all = simulated_wave
-                else:
-                    simulated_wave_all = np.concatenate((simulated_wave_all, simulated_wave))
                 # distribute photons in the IFU focal plane
                 simulated_x_ifu, simulated_y_ifu = generate_geometry(
                     scene_fname=scene_fname,
@@ -1543,10 +1538,13 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     verbose=verbose,
                     plots=plots
                 )
+                # store all simulated photons
                 if nphotons_all == 0:
+                    simulated_wave_all = simulated_wave
                     simulated_x_ifu_all = simulated_x_ifu
                     simulated_y_ifu_all = simulated_y_ifu
                 else:
+                    simulated_wave_all = np.concatenate((simulated_wave_all, simulated_wave))
                     simulated_x_ifu_all = np.concatenate((simulated_x_ifu_all, simulated_x_ifu))
                     simulated_y_ifu_all = np.concatenate((simulated_y_ifu_all, simulated_y_ifu))
                 # ---
