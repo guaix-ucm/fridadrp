@@ -20,6 +20,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import os
 import pprint
+from scipy.signal import convolve2d
+import time
 import yaml
 
 from fridadrp.processing.define_3d_wcs import get_wvparam_from_wcs3d
@@ -1989,6 +1991,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
 
     # update images
     # (accelerate computation using joblib.Parallel)
+    t0 = time.time()
     """
     for islice in range(nslices):
         print(f'{islice=}')
@@ -2011,6 +2014,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             image2d_rss_method0=image2d_rss_method0,
             image2d_detector_method0=image2d_detector_method0
         ) for islice in range(nslices))
+    t1 = time.time()
+    if verbose:
+        print(f'Delta time: {t1 - t0}')
 
     # save RSS image (note that the flatfield effect is not included!)
     save_image2d_rss(
@@ -2072,7 +2078,6 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
 
     if verbose:
         print('Rectifying...')
-    import time
     t0 = time.time()
     """
     # loop in slices
@@ -2104,7 +2109,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             debug=False
         ) for islice in range(nslices))
     t1 = time.time()
-    print(f'Delta time: {t1 - t0}')
+    if verbose:
+        print(f'Delta time: {t1 - t0}')
 
     save_image2d_rss(
         wcs3d=wcs3d,
@@ -2112,3 +2118,40 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         method=1,
         prefix_intermediate_fits=prefix_intermediate_fits
     )
+
+    # ------------------------------------
+    # compute image3d IFU from RSS method1
+    # ------------------------------------
+    if verbose:
+        print(ctext('\n* Computing image3d IFU from image2d RSS method 1', fg='green'))
+
+    # kernel in the spectral direction
+    # (bidimensional to be applied to a bidimensional image)
+    kernel = np.array([[0.25, 0.50, 0.25]])
+
+    # convolve RSS image
+    convolved_data = convolve2d(image2d_rss_method1, kernel, boundary='fill', fillvalue=0, mode='same')
+
+    # ToDo: the second dimension in the following array should be 2*nslices
+    # (check what to do for another IFU, like TARSIS)
+    image3d_ifu_method1 = np.zeros((naxis1_detector.value, naxis2_ifu.value, naxis1_ifu.value))
+    print(f'(debug): {image3d_ifu_method1.shape=}')
+
+    for islice in range(nslices):
+        i1 = islice * 2
+        j1 = islice * naxis1_ifu.value
+        j2 = j1 + naxis1_ifu.value
+        image3d_ifu_method1[:, i1, :] = convolved_data[j1:j2, :].T
+        image3d_ifu_method1[:, i1+1, :] = convolved_data[j1:j2, :].T
+
+    image3d_ifu_method1 /= 2
+    print(f'(debug): {np.sum(image2d_rss_method1)=}, {np.sum(convolved_data)=}, {np.sum(image3d_ifu_method1)}')
+
+    # save FITS file
+    if len(prefix_intermediate_fits) > 0:
+        hdu = fits.PrimaryHDU(image3d_ifu_method1.astype(np.float32))
+        hdu.header.extend(wcs3d.to_header(), update=True)
+        hdul = fits.HDUList([hdu])
+        outfile = f'{prefix_intermediate_fits}_ifu_3D_method1.fits'
+        print(f'Saving file: {outfile}')
+        hdul.writeto(f'{outfile}', overwrite='yes')
