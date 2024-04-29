@@ -2135,7 +2135,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     # ToDo: the second dimension in the following array should be 2*nslices
     # (check what to do for another IFU, like TARSIS)
     image3d_ifu_method1 = np.zeros((naxis1_detector.value, naxis2_ifu.value, naxis1_ifu.value))
-    print(f'(debug): {image3d_ifu_method1.shape=}')
+    if verbose:
+        print(f'(debug): {image3d_ifu_method1.shape=}')
 
     for islice in range(nslices):
         i1 = islice * 2
@@ -2145,7 +2146,10 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         image3d_ifu_method1[:, i1+1, :] = convolved_data[j1:j2, :].T
 
     image3d_ifu_method1 /= 2
-    print(f'(debug): {np.sum(image2d_rss_method1)=}, {np.sum(convolved_data)=}, {np.sum(image3d_ifu_method1)}')
+    if verbose:
+        print(f'(debug): {np.sum(image2d_rss_method1)=}')
+        print(f'(debug):      {np.sum(convolved_data)=}')
+        print(f'(debug): {np.sum(image3d_ifu_method1)=}')
 
     # save FITS file
     if len(prefix_intermediate_fits) > 0:

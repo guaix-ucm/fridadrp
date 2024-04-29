@@ -132,7 +132,7 @@ def main(args=None):
     parser = argparse.ArgumentParser(
         description=f"description: simulator of FRIDA IFU images ({version})"
     )
-    parser.add_argument("scene", help="YAML scene file name", type=str)
+    parser.add_argument("--scene", help="YAML scene file name", type=str)
     parser.add_argument("--grating", help="Grating name", type=str, choices=FRIDA_VALID_GRATINGS, default="medium-K")
     parser.add_argument("--scale", help="Scale", type=str, choices=FRIDA_VALID_SPATIAL_SCALES, default="fine")
     parser.add_argument("--ra_teles_deg", help="Telescope central RA (deg)", type=float, default=0.0)
@@ -151,22 +151,29 @@ def main(args=None):
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=1234)
     parser.add_argument("--prefix_intermediate_FITS", help="Prefix for intermediate FITS files", type=str, default="")
     parser.add_argument("-v", "--verbose", help="increase program verbosity", action="store_true")
-    parser.add_argument("--plots", help="plot intermediate results", action="store_true")
+    parser.add_argument("--plots", help="Plot intermediate results", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
+    parser.add_argument("--version", help="Display version", action="store_true")
 
     args = parser.parse_args(args=args)
-
-    print(f"Welcome to fridadrp-ifu_simulator\nversion {version}\n")
 
     if len(sys.argv) == 1:
         parser.print_usage()
         raise SystemExit()
 
+    if args.version:
+        print(version)
+        raise SystemExit()
+
     if args.echo:
         print('\033[1m\033[31m% ' + ' '.join(sys.argv) + '\033[0m\n')
 
+    print(f"Welcome to fridadrp-ifu_simulator\nversion {version}\n")
+
     # simplify argument names
     scene = args.scene
+    if scene is None:
+        raise ValueError(f'Scene file name has not been specified!')
     grating = args.grating
     scale = args.scale
     seeing_fwhm_arcsec = args.seeing_fwhm_arcsec * u.arcsec
