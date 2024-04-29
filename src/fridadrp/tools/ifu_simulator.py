@@ -1300,16 +1300,27 @@ def set_wavelength_unit_and_range(scene_fname, scene_block, wmin, wmax, verbose)
 
     """
 
-    expected_keys_in_spectrum = {'type', 'wave_unit'}
+    expected_keys_in_spectrum = {'type'}
 
     spectrum_keys = set(scene_block['spectrum'].keys())
     if not expected_keys_in_spectrum.issubset(spectrum_keys):
         print(ctext(f'ERROR while processing: {scene_fname}', fg='red'))
-        print(f'expected keys: {expected_keys_in_spectrum}')
-        print(f'keys found...: {spectrum_keys}')
+        print(ctext('expected keys..: ', fg='blue') + f'{expected_keys_in_spectrum}')
+        print(ctext('keys found.....: ', fg='blue') + f'{spectrum_keys}')
+        list_unexpected_keys = list(spectrum_keys.difference(expected_keys_in_spectrum))
+        if len(list_unexpected_keys) > 0:
+            print(ctext('unexpected keys: ', fg='red') + f'{list_unexpected_keys}')
+        list_missing_keys = list(expected_keys_in_spectrum.difference(spectrum_keys))
+        if len(list_missing_keys) > 0:
+            print(ctext('missing keys:..: ', fg='red') + f'{list_missing_keys}')
         pp.pprint(scene_block)
         raise_ValueError(f'Invalid format in file: {scene_fname}')
-    wave_unit = scene_block['spectrum']['wave_unit']
+    if 'wave_unit' in scene_block['spectrum']:
+        wave_unit = scene_block['spectrum']['wave_unit']
+    else:
+        wave_unit = wmin.unit
+        if verbose:
+            print(ctext(f'Assuming wave_unit: {wave_unit}', faint=True))
     if wave_unit is None:  # useful for type="constant-flux"
         wave_min = wmin
         wave_max = wmax
@@ -1796,8 +1807,14 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             scene_block_keys = set(scene_block.keys())
             if scene_block_keys != required_keys_in_scene_block:
                 print(ctext(f'ERROR while processing: {scene_fname}', fg='red'))
-                print(f'expected keys: {required_keys_in_scene_block}')
-                print(f'keys found...: {scene_block_keys}')
+                print(ctext('expected keys..: ', fg='blue') + f'{required_keys_in_scene_block}')
+                print(ctext('keys found.....: ', fg='blue') + f'{scene_block_keys}')
+                list_unexpected_keys = list(scene_block_keys.difference(required_keys_in_scene_block))
+                if len(list_unexpected_keys) > 0:
+                    print(ctext('unexpected keys: ', fg='red') + f'{list_unexpected_keys}')
+                list_missing_keys = list(required_keys_in_scene_block.difference(scene_block_keys))
+                if len(list_missing_keys) > 0:
+                    print(ctext('missing keys...: ', fg='red') + f'{list_missing_keys}')
                 pp.pprint(scene_block)
                 raise_ValueError(f'Invalid format in file: {scene_fname}')
             scene_block_name = scene_block['scene_block_name']
