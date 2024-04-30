@@ -97,9 +97,9 @@ def load_atmosphere_transmission_curve(atmosphere_transmission, wmin, wmax, wv_c
         the atmosphere is applied or not. Two possible values are:
         - 'default': use default curve defined in 'faux_dict'
         - 'none': do not apply atmosphere transmission
-    wmin : `~astroppy.units.Quantity`
+    wmin : `~astropy.units.Quantity`
         Minimum wavelength to be considered.
-    wmax : `~astroppy.units.Quantity`
+    wmax : `~astropy.units.Quantity`
         Maximum wavelength to be considered.
     wv_cunit1 : `~astropy.units.core.Unit`
         Default wavelength unit to be employed in the wavelength scale.
@@ -158,9 +158,9 @@ def simulate_constant_photlam(wmin, wmax, nphotons, rng):
 
     Parameters
     ----------
-    wmin : `~astroppy.units.Quantity`
+    wmin : `~astropy.units.Quantity`
         Minimum wavelength to be considered.
-    wmax : `~astroppy.units.Quantity`
+    wmax : `~astropy.units.Quantity`
         Maximum wavelength to be considered.
     nphotons : int
         Number of photons to be simulated.
@@ -196,9 +196,9 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
         Number of photons to be simulated
     rng : `~numpy.random._generator.Generator`
         Random number generator.
-    wmin : `~astroppy.units.Quantity`
+    wmin : `~astropy.units.Quantity`
         Minimum wavelength to be considered.
-    wmax : `~astroppy.units.Quantity`
+    wmax : `~astropy.units.Quantity`
         Maximum wavelength to be considered.
     plots : bool
         If True, plot input and output results.
@@ -337,9 +337,9 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
         Number of photons to be simulated
     rng : `~numpy.random._generator.Generator`
         Random number generator.
-    wmin : `~astroppy.units.Quantity`
+    wmin : `~astropy.units.Quantity`
         Minimum wavelength to be considered.
-    wmax : `~astroppy.units.Quantity`
+    wmax : `~astropy.units.Quantity`
         Maximum wavelength to be considered.
     convolve_sigma_km_s : `~astropy.units.Quantity`
         Gaussian broadening (sigma) in km/s to be applied.
@@ -585,7 +585,7 @@ def simulate_image2d_from_fitsfile(
     rng : `~numpy.random._generator.Generator`
         Random number generator.
     background_to_subtract : str or None
-        If not None, this parameters indicates how to computed
+        If not None, this parameters indicates how to compute
         the background to be subtracted.
     plots : bool
         If True, plot intermediate results.
