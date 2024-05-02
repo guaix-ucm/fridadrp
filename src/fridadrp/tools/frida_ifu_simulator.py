@@ -15,7 +15,7 @@ import numpy as np
 import pooch
 import sys
 
-from .ifu_simulator import ifu_simulator
+from fridadrp.ifu_simulator.ifu_simulator import ifu_simulator
 
 from fridadrp._version import version
 from fridadrp.processing.define_3d_wcs import define_3d_wcs

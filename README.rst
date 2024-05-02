@@ -6,17 +6,19 @@ FRIDA DRP
 
 This is FRIDA DRP, the data reduction pipeline for FRIDA.
 
-`FRIDA (inFrared Imager and Dissector for Adaptative optics)
-<https://www.gtc.iac.es/instruments/frida/frida.php>`_ is a
-second-generation instrument for the 10m `Gran Telescopio de Canarias
-<https://www.gtc.iac.es/>`_ and the first proposed for working with
-its Adaptive Optics system.
+`FRIDA
+<https://www.gtc.iac.es/instruments/frida/frida.php>`_
+(inFrared Imager and Dissector for Adaptative optics) is a
+second-generation instrument for the 10m `GTC
+<https://www.gtc.iac.es/>`_ (Gran Telescopio Canarias)
+and the first proposed for working with its Adaptive Optics system.
 
 The software is under development. It is possible that changes may
 be made that render the code backward incompatible. For the time
 being, it is recommended to install the development version.
 This code makes use of the `numina <https://github.com/guaix-ucm/numina>`_
-package, which contains common functionality for different GTC instruments.
+package, which contains common functionality for different GTC
+instrument pipelines.
 
 Installing and running the development version
 ==============================================

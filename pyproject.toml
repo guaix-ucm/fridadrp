@@ -56,7 +56,7 @@ Repository = "https://github.com/guaix-ucm/fridadrp.git"
 FRIDA = "fridadrp.loader:drp_load"
 
 [project.scripts]
-fridadrp-ifu_simulator = "fridadrp.ifu_simulator.frida_ifu_simulator:main"
+fridadrp-ifu_simulator = "fridadrp.tools.frida_ifu_simulator:main"
 
 # pyproject.toml
 [tool.setuptools_scm]
