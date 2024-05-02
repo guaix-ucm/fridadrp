@@ -1,0 +1,63 @@
+#
+# Copyright 2024 Universidad Complutense de Madrid
+#
+# This file is part of FRIDA DRP
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+# License-Filename: LICENSE.txt
+#
+
+from astropy.io import fits
+import numpy as np
+
+
+def generate_image3d_method0_ifu(
+        wcs3d,
+        simulated_x_ifu_all,
+        simulated_y_ifu_all,
+        simulated_wave_all,
+        bins_x_ifu,
+        bins_y_ifu,
+        bins_wave,
+        prefix_intermediate_fits
+):
+    """Compute 3D image3 IFU, method 0
+
+    Parameters
+    ----------
+    wcs3d : `~astropy.wcs.wcs.WCS`
+        WCS of the data cube.
+    simulated_x_ifu_all : `~astropy.units.Quantity`
+        Simulated X coordinates of the photons in the IFU.
+    simulated_y_ifu_all : `~astropy.units.Quantity`
+        Simulated Y coordinates of the photons in the IFU.
+    simulated_wave_all : `~astropy.units.Quantity`
+        Simulated wavelengths of the photons in the IFU.
+    bins_x_ifu : `~numpy.ndarray`
+        Bin edges in the naxis1_ifu direction
+        (along the slice).
+    bins_y_ifu : `~numpy.ndarray`
+        Bin edges in the naxis2_ifu direction
+        (perpendicular to the slice).
+    bins_wave : `~numpy.ndarray`
+        Bin edges in the wavelength direction.
+    prefix_intermediate_fits : str
+        Prefix for output intermediate FITS files. If the length of
+        this string is 0, no output is generated.
+
+    """
+
+    # generate image
+    image3d_method0_ifu, edges = np.histogramdd(
+        sample=(simulated_wave_all.value, simulated_y_ifu_all.value, simulated_x_ifu_all.value),
+        bins=(bins_wave.value, bins_y_ifu.value, bins_x_ifu.value)
+    )
+
+    # save FITS file
+    if len(prefix_intermediate_fits) > 0:
+        hdu = fits.PrimaryHDU(image3d_method0_ifu.astype(np.float32))
+        hdu.header.extend(wcs3d.to_header(), update=True)
+        hdul = fits.HDUList([hdu])
+        outfile = f'{prefix_intermediate_fits}_ifu_3D_method0.fits'
+        print(f'Saving file: {outfile}')
+        hdul.writeto(f'{outfile}', overwrite='yes')
