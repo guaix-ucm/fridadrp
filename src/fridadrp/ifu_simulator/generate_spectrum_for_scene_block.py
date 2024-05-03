@@ -75,6 +75,10 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
 
     spectrum_type = scene_block['spectrum']['type']
     if spectrum_type == 'delta-lines':
+        mandatory_keys = ['filename', 'wave_column', 'flux_column']
+        for key in mandatory_keys:
+            if key not in scene_block['spectrum']:
+                raise_ValueError(f"Expected key '{key}' not found!")
         filename = scene_block['spectrum']['filename']
         wave_column = scene_block['spectrum']['wave_column'] - 1
         flux_column = scene_block['spectrum']['flux_column'] - 1
@@ -123,6 +127,10 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
             verbose=verbose
         )
     elif spectrum_type == 'tabulated-spectrum':
+        mandatory_keys = ['filename', 'wave_column', 'flux_column', 'flux_type']
+        for key in mandatory_keys:
+            if key not in scene_block['spectrum']:
+                raise_ValueError(f"Expected key '{key}' not found!")
         filename = scene_block['spectrum']['filename']
         wave_column = scene_block['spectrum']['wave_column'] - 1
         flux_column = scene_block['spectrum']['flux_column'] - 1

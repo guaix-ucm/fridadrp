@@ -122,6 +122,10 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
             simulated_x_ifu = np.repeat(x_center, nphotons)
             simulated_y_ifu = np.repeat(y_center, nphotons)
         elif geometry_type == 'gaussian':
+            mandatory_keys = ['fwhm_ra_arcsec', 'fwhm_dec_arcsec', 'position_angle_deg']
+            for key in mandatory_keys:
+                if key not in scene_block['geometry']:
+                    raise_ValueError(f"Expected key '{key}' not found!")
             fwhm_ra_arcsec = scene_block['geometry']['fwhm_ra_arcsec'] * u.arcsec
             fwhm_dec_arcsec = scene_block['geometry']['fwhm_dec_arcsec'] * u.arcsec
             position_angle_deg = scene_block['geometry']['position_angle_deg'] * u.deg
@@ -145,6 +149,10 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
             simulated_x_ifu = simulated_xy_ifu[:, 0]
             simulated_y_ifu = simulated_xy_ifu[:, 1]
         elif geometry_type == 'from-FITS-image':
+            mandatory_keys = ['filename', 'diagonal_fov_arcsec']
+            for key in mandatory_keys:
+                if key not in scene_block['geometry']:
+                    raise_ValueError(f"Expected key '{key}' not found!")
             # read reference FITS file
             infile = scene_block['geometry']['filename']
             diagonal_fov_arcsec = scene_block['geometry']['diagonal_fov_arcsec'] * u.arcsec
