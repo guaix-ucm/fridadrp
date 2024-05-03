@@ -65,29 +65,30 @@ def set_wavelength_unit_and_range(scene_fname, scene_block, wmin, wmax, verbose)
         wave_unit = wmin.unit
         if verbose:
             print(ctext(f'Assuming wave_unit: {wave_unit}', faint=True))
-    if wave_unit is None:  # useful for type="constant-flux"
-        wave_min = wmin
-        wave_max = wmax
+    if 'wave_min' in scene_block['spectrum']:
+        wave_min = float(scene_block['spectrum']['wave_min'])
     else:
-        if 'wave_min' in scene_block['spectrum']:
-            wave_min = scene_block['spectrum']['wave_min']
-        else:
-            if verbose:
-                print(ctext('Assuming wave_min: null', faint=True))
-            wave_min = None
-        if wave_min is None:
-            wave_min = wmin.to(wave_unit)
-        else:
-            wave_min *= Unit(wave_unit)
-        if 'wave_max' in scene_block['spectrum']:
-            wave_max = scene_block['spectrum']['wave_max']
-        else:
-            if verbose:
-                print(ctext('Assuming wave_max: null', faint=True))
-            wave_max = None
-        if wave_max is None:
-            wave_max = wmax.to(wave_unit)
-        else:
-            wave_max *= Unit(wave_unit)
+        if verbose:
+            print(ctext('Assuming wave_min: null', faint=True))
+        wave_min = None
+    if wave_min is None:
+        wave_min = wmin.to(wave_unit)
+    else:
+        wave_min *= Unit(wave_unit)
+    if 'wave_max' in scene_block['spectrum']:
+        wave_max = float(scene_block['spectrum']['wave_max'])
+    else:
+        if verbose:
+            print(ctext('Assuming wave_max: null', faint=True))
+        wave_max = None
+    if wave_max is None:
+        wave_max = wmax.to(wave_unit)
+    else:
+        wave_max = wave_max * Unit(wave_unit)
 
-        return wave_unit, wave_min, wave_max
+    if verbose:
+        print(ctext(f'{wave_min=}', faint=True))
+        print(ctext(f'{wave_max=}', faint=True))
+        print(ctext(f'{wave_unit=}', faint=True))
+
+    return wave_unit, wave_min, wave_max

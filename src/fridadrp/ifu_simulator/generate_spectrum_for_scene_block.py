@@ -101,7 +101,9 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
         faux_skycalc = faux_dict['skycalc']
         with fits.open(faux_skycalc) as hdul:
             skycalc_table = hdul[1].data
-        wave = skycalc_table['lam'] * Unit(wave_unit)
+        if wave_unit != Unit('nm'):
+            print(ctext(f'Ignoring wave_unit: {wave_unit} (assuming {u.nm})', faint=True))
+        wave = skycalc_table['lam'] * u.nm
         if not np.all(np.diff(wave.value) > 0):
             raise_ValueError(f'Wavelength array {wave=} is not sorted!')
         flux = skycalc_table['flux']
@@ -126,13 +128,13 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
         flux_column = scene_block['spectrum']['flux_column'] - 1
         flux_type = scene_block['spectrum']['flux_type']
         if 'redshift' in scene_block['spectrum']:
-            redshift = scene_block['spectrum']['redshift']
+            redshift = float(scene_block['spectrum']['redshift'])
         else:
             if verbose:
                 print(ctext('Assuming redshift: 0', faint=True))
             redshift = 0.0
         if 'convolve_sigma_km_s' in scene_block['spectrum']:
-            convolve_sigma_km_s = scene_block['spectrum']['convolve_sigma_km_s']
+            convolve_sigma_km_s = float(scene_block['spectrum']['convolve_sigma_km_s'])
         else:
             if verbose:
                 print(ctext('Assuming convolve_sigma_km_s: 0', faint=True))
