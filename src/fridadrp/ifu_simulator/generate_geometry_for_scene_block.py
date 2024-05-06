@@ -122,13 +122,23 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
             simulated_x_ifu = np.repeat(x_center, nphotons)
             simulated_y_ifu = np.repeat(y_center, nphotons)
         elif geometry_type == 'gaussian':
-            mandatory_keys = ['fwhm_ra_arcsec', 'fwhm_dec_arcsec', 'position_angle_deg']
+            mandatory_keys = ['fwhm_ra_arcsec']
             for key in mandatory_keys:
                 if key not in scene_block['geometry']:
                     raise_ValueError(f"Expected key '{key}' not found!")
             fwhm_ra_arcsec = scene_block['geometry']['fwhm_ra_arcsec'] * u.arcsec
-            fwhm_dec_arcsec = scene_block['geometry']['fwhm_dec_arcsec'] * u.arcsec
-            position_angle_deg = scene_block['geometry']['position_angle_deg'] * u.deg
+            if 'fwhm_dec_arcsec' in scene_block['geometry']:
+                fwhm_dec_arcsec = scene_block['geometry']['fwhm_dec_arcsec'] * u.arcsec
+            else:
+                fwhm_dec_arcsec = fwhm_ra_arcsec
+                if verbose:
+                    print(ctext(f'Assuming {fwhm_dec_arcsec=}', faint=True))
+            if 'position_angle_deg' in scene_block['geometry']:
+                position_angle_deg = scene_block['geometry']['position_angle_deg'] * u.deg
+            else:
+                position_angle_deg = 0.0 * u.deg
+                if verbose:
+                    print(ctext(f'Assuming {position_angle_deg=}', faint=True))
             # covariance matrix for the multivariate normal
             std_x = fwhm_ra_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
             std_y = fwhm_dec_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
