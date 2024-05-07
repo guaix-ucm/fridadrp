@@ -159,13 +159,14 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
             simulated_x_ifu = simulated_xy_ifu[:, 0]
             simulated_y_ifu = simulated_xy_ifu[:, 1]
         elif geometry_type == 'from-FITS-image':
-            mandatory_keys = ['filename', 'diagonal_fov_arcsec']
+            mandatory_keys = ['filename', 'diagonal_fov_arcsec', 'background_to_subtract']
             for key in mandatory_keys:
                 if key not in scene_block['geometry']:
                     raise_ValueError(f"Expected key '{key}' not found!")
             # read reference FITS file
             infile = scene_block['geometry']['filename']
             diagonal_fov_arcsec = scene_block['geometry']['diagonal_fov_arcsec'] * u.arcsec
+            background_to_subtract = scene_block['geometry']['background_to_subtract']
             # generate simulated locations in the IFU
             simulated_x_ifu, simulated_y_ifu = simulate_image2d_from_fitsfile(
                 infile=infile,
@@ -174,7 +175,7 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
                 plate_scale_y=plate_scale_y,
                 nphotons=nphotons,
                 rng=rng,
-                background_to_subtract='mode',
+                background_to_subtract=background_to_subtract,
                 plots=plots,
                 verbose=verbose
             )

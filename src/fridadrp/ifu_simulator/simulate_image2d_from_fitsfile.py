@@ -74,25 +74,30 @@ def simulate_image2d_from_fitsfile(
     npixels = naxis1 * naxis2
 
     # subtract background
-    if background_to_subtract is not None:
-        if background_to_subtract == 'mode':
-            nbins = int(np.sqrt(npixels) + 0.5)
-            h, bin_edges = np.histogram(image2d_reference.flatten(), bins=nbins)
-            imax = np.argmax(h)
-            skylevel = (bin_edges[imax] + bin_edges[imax+1]) / 2
-            if verbose:
-                print(f'Subtracting {skylevel=} (image mode)')
-        elif background_to_subtract == 'median':
-            skylevel = np.median(image2d_reference.flatten())
-            if verbose:
-                print(f'Subtracting {skylevel=} (image median)')
-        else:
-            skylevel = None   # avoid PyCharm warning (not aware of raise ValueError)
-            raise_ValueError(f'Invalid {background_to_subtract=}')
-        image2d_reference -= skylevel
-    else:
+    if background_to_subtract == 'mode':
+        nbins = int(np.sqrt(npixels) + 0.5)
+        h, bin_edges = np.histogram(image2d_reference.flatten(), bins=nbins)
+        imax = np.argmax(h)
+        skylevel = (bin_edges[imax] + bin_edges[imax+1]) / 2
+        if verbose:
+            print(f'Subtracting {skylevel=} (image mode)')
+    elif background_to_subtract == 'median':
+        skylevel = np.median(image2d_reference.flatten())
+        if verbose:
+            print(f'Subtracting {skylevel=} (image median)')
+    elif background_to_subtract == 'none':
+        skylevel = 0.0
         if verbose:
             print('Skipping background subtraction')
+    else:
+        try:
+            skylevel = float(background_to_subtract)
+        except ValueError:
+            skylevel = None   # avoid PyCharm warning (not aware of raise ValueError)
+            raise_ValueError(f'Invalid {background_to_subtract=}')
+        if verbose:
+            print(f"Subtracting {skylevel=} (user's value)")
+    image2d_reference -= skylevel
 
     # impose image threshold
     if verbose:
