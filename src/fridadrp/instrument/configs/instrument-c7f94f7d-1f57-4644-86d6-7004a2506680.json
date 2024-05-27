@@ -1,10 +1,11 @@
 {
- "description": "v1",
+ "description": "Original FRIDA configuration",
  "uuid": "c7f94f7d-1f57-4644-86d6-7004a2506680",
- "date_start": "2018-01-01T12:00:00.0",
- "date_end": "2020-02-01T12:00:00.0",
+ "date_start": "2024-01-01T12:00:00.0",
+ "date_end": null,
  "type": "instrument",
  "name": "FRIDA",
- "components": {
-  }
+ "components": [
+   {"id": "detector", "uuid": "bd6950a0-1c30-11ef-8b73-5689b1900102"}
+ ]
 }
