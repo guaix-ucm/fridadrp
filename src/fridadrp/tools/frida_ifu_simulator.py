@@ -148,7 +148,7 @@ def main(args=None):
     parser.add_argument("--rnoise", help="Readout noise standard deviation (ADU)", type=float, default=0)
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
                         choices=["default", "none"])
-    parser.add_argument("--seed", help="Seed for random number generator", type=int, default=1234)
+    parser.add_argument("--seed", help="Seed for random number generator", type=int, default=None)
     parser.add_argument("--prefix_intermediate_FITS", help="Prefix for intermediate FITS files", type=str,
                         default="test")
     parser.add_argument("-v", "--verbose", help="increase program verbosity", action="store_true")
