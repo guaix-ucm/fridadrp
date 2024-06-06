@@ -10,8 +10,8 @@ modes:
     description: >
       Full description of the Test mode
   - key: test1
-    name: WaveTest
-    summary: Wavelength calibration test
+    name: Test1
+    summary: Subtraction of two raw images
     description: >
       Full description of the test1 mode
 pipelines:
@@ -19,4 +19,4 @@ pipelines:
     version: 1
     recipes:
       success: numina.core.utils.AlwaysSuccessRecipe
-      test1: fridadrp.recipes.auxiliary.WaveTestRecipe
+      test1: fridadrp.recipes.auxiliary.Test1Recipe
