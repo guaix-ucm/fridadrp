@@ -434,7 +434,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
 
     save_image2d_detector_method0(
         image2d_detector_method0=image2d_detector_method0,
-        prefix_intermediate_fits=prefix_intermediate_fits
+        prefix_intermediate_fits=prefix_intermediate_fits,
+        instname=instname
     )
 
     # ---------------------------------------------------
