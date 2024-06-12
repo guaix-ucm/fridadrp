@@ -24,7 +24,7 @@ Installing and running the development version
 ==============================================
 
 Please follow the instructions available in the `online documentation
-<https://guaix.fis.ucm.es/~ncl/fridadrp-tutorials/>`_.
+<https://guaix-ucm.github.io/fridadrp-tutorials/>`_.
 
 Licensing
 =========
