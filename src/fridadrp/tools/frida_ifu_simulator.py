@@ -133,8 +133,8 @@ def main(args=None):
         description=f"description: simulator of FRIDA IFU images ({version})"
     )
     parser.add_argument("--scene", help="YAML scene file name", type=str)
-    parser.add_argument("--grating", help="Grating name", type=str, choices=FRIDA_VALID_GRATINGS, default="medium-K")
-    parser.add_argument("--scale", help="Scale", type=str, choices=FRIDA_VALID_SPATIAL_SCALES, default="fine")
+    parser.add_argument("--grating", help="Grating name", type=str, choices=FRIDA_VALID_GRATINGS)
+    parser.add_argument("--scale", help="Scale", type=str, choices=FRIDA_VALID_SPATIAL_SCALES)
     parser.add_argument("--ra_teles_deg", help="Telescope central RA (deg)", type=float, default=0.0)
     parser.add_argument("--dec_teles_deg", help="Telescope central DEC (deg)", type=float, default=0.0)
     parser.add_argument("--delta_ra_teles_arcsec", help="Offset in RA (arcsec)", type=float, default=0.0)
@@ -176,7 +176,11 @@ def main(args=None):
     if scene is None:
         raise ValueError(f'Scene file name has not been specified!')
     grating = args.grating
+    if grating is None:
+        raise ValueError(f'You must specify a grating name using --grating <grating name>:\n{FRIDA_VALID_GRATINGS}')
     scale = args.scale
+    if scale is None:
+        raise ValueError(f'You must specify the camera scale using --scale <scale name>:\n{FRIDA_VALID_SPATIAL_SCALES}')
     seeing_fwhm_arcsec = args.seeing_fwhm_arcsec * u.arcsec
     if seeing_fwhm_arcsec.value < 0:
         raise ValueError(f'Unexpected {seeing_fwhm_arcsec=}. This number must be >= 0.')
