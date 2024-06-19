@@ -28,6 +28,12 @@ def generate_image2d_method0_ifu(
 ):
     """Compute image2d IFU (white image), method0
 
+    The image is calculated by performing a two-dimensional histogram
+    over the X, Y coordinates of the simulated photons in the IFU,
+    regardless of the wavelength assigned to each photon.
+
+    The result is saved as a FITS file.
+
     Parameters
     ----------
     wcs3d : `~astropy.wcs.wcs.WCS`

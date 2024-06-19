@@ -23,6 +23,12 @@ def generate_image3d_method0_ifu(
 ):
     """Compute 3D image3 IFU, method 0
 
+    The image is calculated by performing a three-dimensional histogram
+    over the X, Y coordinates in the IFU and the wavelength of the
+    simulated photons.
+
+    The result is saved as a FITS file.
+
     Parameters
     ----------
     wcs3d : `~astropy.wcs.wcs.WCS`

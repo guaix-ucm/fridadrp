@@ -308,7 +308,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     # ---------------------------------------------------------------
     if verbose:
         print(ctext('\n* Computing image2d IFU (method 0) with and without oversampling', fg='green'))
-    for noversampling in [noversampling_whitelight, 1]:
+    for noversampling in {noversampling_whitelight, 1}:
         generate_image2d_method0_ifu(
             wcs3d=wcs3d,
             noversampling_whitelight=noversampling,
