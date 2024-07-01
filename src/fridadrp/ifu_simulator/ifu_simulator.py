@@ -48,6 +48,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                   rnoise,
                   faux_dict, rng,
                   prefix_intermediate_fits,
+                  stop_after_ifu_3D_method0=False,
                   verbose=False, instname=None, subtitle=None, plots=False):
     """IFU simulator.
 
@@ -94,6 +95,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     prefix_intermediate_fits : str
         Prefix for output intermediate FITS files. If the length of
         this string is 0, no output is generated.
+    stop_after_ifu_3D_method0 : bool
+        If True, stop execution after generating ifu_3D_method0 image.
     verbose : bool
         If True, display additional information.
     instname : str or None
@@ -340,6 +343,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         bins_wave=bins_wave,
         prefix_intermediate_fits=prefix_intermediate_fits
     )
+
+    if stop_after_ifu_3D_method0:
+        raise SystemExit(f'Program stopped because {stop_after_ifu_3D_method0=}')
 
     # --------------------------------------------
     # compute image2d RSS and in detector, method0

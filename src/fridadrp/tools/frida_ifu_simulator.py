@@ -151,11 +151,12 @@ def main(args=None):
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=None)
     parser.add_argument("--prefix_intermediate_FITS", help="Prefix for intermediate FITS files", type=str,
                         default="test")
+    parser.add_argument("--stop_after_ifu_3D_method0", help="Stop after computing ifu_3D_method0 image",
+                        action="store_true")
     parser.add_argument("-v", "--verbose", help="increase program verbosity", action="store_true")
     parser.add_argument("--plots", help="Plot intermediate results", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
     parser.add_argument("--version", help="Display version", action="store_true")
-
     args = parser.parse_args(args=args)
 
     if len(sys.argv) == 1:
@@ -196,6 +197,7 @@ def main(args=None):
     flatpix2pix = args.flatpix2pix
     prefix_intermediate_fits = args.prefix_intermediate_FITS
     seed = args.seed
+    stop_after_ifu_3D_method0 = args.stop_after_ifu_3D_method0
     verbose = args.verbose
     plots = args.plots
 
@@ -247,11 +249,14 @@ def main(args=None):
         faux_dict=faux_dict,
         rng=rng,
         prefix_intermediate_fits=prefix_intermediate_fits,
+        stop_after_ifu_3D_method0=stop_after_ifu_3D_method0,
         verbose=verbose,
         instname='FRIDA',
         subtitle=f'scale: {scale}, grating: {grating}',
         plots=plots
     )
+
+    print('Program stopped')
 
 
 if __name__ == "__main__":
