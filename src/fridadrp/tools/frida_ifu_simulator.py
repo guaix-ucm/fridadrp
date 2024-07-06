@@ -142,6 +142,7 @@ def main(args=None):
     parser.add_argument("--seeing_fwhm_arcsec", help="Seeing FWHM (arcsec)", type=float, default=0.0)
     parser.add_argument("--seeing_psf", help="Seeing PSF", type=str, default="gaussian",
                         choices=["gaussian"])
+    parser.add_argument("--instrument_pa_deg", help="Instrument Position Angle (deg)", type=float, default=0.0)
     parser.add_argument("--noversampling_whitelight", help="Oversampling white light image", type=int, default=10)
     parser.add_argument("--atmosphere_transmission", help="Atmosphere transmission", type=str, default="default",
                         choices=["default", "none"])
@@ -220,6 +221,9 @@ def main(args=None):
     if verbose:
         print(f'\n{wv_lincal}')
 
+    # instrument Position Angle
+    instrument_pa = args.instrument_pa_deg * u.deg
+
     # define WCS object to store the spatial 2D WCS
     # and the linear wavelength calibration
     wcs3d = define_3d_wcs(
@@ -228,6 +232,7 @@ def main(args=None):
         skycoord_center=skycoord_center,
         spatial_scale=FRIDA_SPATIAL_SCALE[scale],
         wv_lincal=wv_lincal,
+        instrument_pa=instrument_pa,
         verbose=verbose
     )
 

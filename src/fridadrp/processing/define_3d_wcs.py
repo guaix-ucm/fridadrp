@@ -14,9 +14,10 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 import astropy.units as u
 from astropy.wcs import WCS
+import numpy as np
 
 
-def define_3d_wcs(naxis1_ifu, naxis2_ifu, skycoord_center, spatial_scale, wv_lincal, verbose):
+def define_3d_wcs(naxis1_ifu, naxis2_ifu, skycoord_center, spatial_scale, wv_lincal, instrument_pa, verbose):
     """Define a 3D WCS.
 
     Parameters
@@ -31,6 +32,8 @@ def define_3d_wcs(naxis1_ifu, naxis2_ifu, skycoord_center, spatial_scale, wv_lin
         Spatial scale per pixel.
     wv_lincal : `~fridadrp.processing.linear_wavelength_calibration_frida.LinearWaveCalFRIDA`
         Linear wavelength calibration object.
+    instrument_pa : `~astropy.units.Quantity`
+        Instrument Position Angle.
     verbose : bool
         If True, display additional information.
 
@@ -69,8 +72,10 @@ def define_3d_wcs(naxis1_ifu, naxis2_ifu, skycoord_center, spatial_scale, wv_lin
     header['CRPIX2'] = (naxis2_ifu.value + 1) / 2
     header['CRPIX3'] = wv_lincal.crpix1_wavecal.value
     spatial_scale_deg_pix = spatial_scale.to(u.deg / u.pix).value
-    header['CD1_1'] = -spatial_scale_deg_pix
-    header['CD2_2'] = spatial_scale_deg_pix
+    header['CD1_1'] = (-spatial_scale_deg_pix) * np.cos(instrument_pa).value
+    header['CD1_2'] = spatial_scale_deg_pix * np.sin(instrument_pa).value
+    header['CD2_1'] = (-spatial_scale_deg_pix) * (-np.sin(instrument_pa).value)
+    header['CD2_2'] = spatial_scale_deg_pix * np.cos(instrument_pa).value
     header['CD3_3'] = wv_lincal.cdelt1_wavecal.to(default_wv_unit / u.pix).value
     header['CUNIT1'] = 'deg'
     header['CUNIT2'] = 'deg'
