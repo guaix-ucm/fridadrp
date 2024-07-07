@@ -8,6 +8,7 @@
 #
 
 import astropy.units as u
+from astropy.wcs.utils import proj_plane_pixel_scales, non_celestial_pixel_scales
 import numpy as np
 
 from numina.tools.ctext import ctext
@@ -72,9 +73,12 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
     factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
 
     # plate scale
-    plate_scale_x = wcs3d.wcs.cd[0, 0] * u.deg / u.pix
-    plate_scale_y = wcs3d.wcs.cd[1, 1] * u.deg / u.pix
+    plate_scale_x, plate_scale_y, plate_scale_wave = proj_plane_pixel_scales(wcs3d)
+    plate_scale_x *= u.deg / u.pix
+    plate_scale_y *= u.deg / u.pix
+
     if verbose:
+        print(f'{wcs3d.wcs.cd=}')
         print(f'{plate_scale_x=}')
         print(f'{plate_scale_y=}')
 
@@ -213,7 +217,6 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
         if seeing_psf == "gaussian":
             if verbose:
                 print(f'Applying Gaussian PSF with {seeing_fwhm_arcsec=}')
-            # ToDo: apply instrument position angle
             std_x = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
             simulated_x_ifu += rng.normal(loc=0, scale=abs(std_x.value), size=nphotons)
             std_y = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
