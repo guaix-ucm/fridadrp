@@ -43,6 +43,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                   noversampling_whitelight,
                   scene_fname,
                   seeing_fwhm_arcsec, seeing_psf,
+                  instrument_pa,
                   flatpix2pix,
                   atmosphere_transmission,
                   rnoise,
@@ -68,9 +69,11 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     scene_fname : str
         YAML scene file name.
     seeing_fwhm_arcsec : `~astropy.units.Quantity`
-        Seeing FWHM (arcsec).
+        Seeing FWHM.
     seeing_psf : str
         Seeing PSF.
+    instrument_pa : `~astropy.units.Quantity`
+        Instrument position angle.
     flatpix2pix : str
         String indicating whether a pixel-to-pixel flatfield is
         applied or not. Two possible values:
@@ -233,6 +236,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     apply_seeing=apply_seeing,
                     seeing_fwhm_arcsec=seeing_fwhm_arcsec,
                     seeing_psf=seeing_psf,
+                    instrument_pa=instrument_pa,
                     wcs3d=wcs3d,
                     min_x_ifu=min_x_ifu,
                     max_x_ifu=max_x_ifu,

@@ -248,6 +248,7 @@ def main(args=None):
         scene_fname=scene,
         seeing_fwhm_arcsec=seeing_fwhm_arcsec,
         seeing_psf=seeing_psf,
+        instrument_pa=instrument_pa,
         flatpix2pix=flatpix2pix,
         atmosphere_transmission=atmosphere_transmission,
         rnoise=rnoise,

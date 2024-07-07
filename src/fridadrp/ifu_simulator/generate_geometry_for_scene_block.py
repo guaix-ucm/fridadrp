@@ -18,6 +18,7 @@ from .simulate_image2d_from_fitsfile import simulate_image2d_from_fitsfile
 
 def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
                                       apply_seeing, seeing_fwhm_arcsec, seeing_psf,
+                                      instrument_pa,
                                       wcs3d,
                                       min_x_ifu, max_x_ifu, min_y_ifu, max_y_ifu,
                                       rng,
@@ -34,8 +35,12 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
         Number of photons to be generated in the scene block.
     apply_seeing : bool
         If True, apply seeing to simulated photons.
-    seeing_fwhm_arcsec : TBD
-    seeing_psf : TBD
+    seeing_fwhm_arcsec : `~astropy.units.Quantity`
+        Seeing FWHM.
+    seeing_psf : str
+        Seeing PSF.
+    instrument_pa : `~astropy.units.Quantity`
+        Instrument position angle.
     wcs3d : `~astropy.wcs.wcs.WCS`
         WCS of the data cube.
     min_x_ifu : `~astropy.units.Quantity`
@@ -156,8 +161,13 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
                 cov=rotated_covariance,
                 size=nphotons
             )
-            simulated_x_ifu = simulated_xy_ifu[:, 0]
-            simulated_y_ifu = simulated_xy_ifu[:, 1]
+            # compensate for instrument position angle
+            simulated_x_ifu = \
+                simulated_xy_ifu[:, 0] * np.cos(instrument_pa).value + \
+                simulated_xy_ifu[:, 1] * np.sin(instrument_pa).value
+            simulated_y_ifu = \
+                -simulated_xy_ifu[:, 0] * np.sin(instrument_pa).value + \
+                simulated_xy_ifu[:, 1] * np.cos(instrument_pa).value
         elif geometry_type == 'from-FITS-image':
             mandatory_keys = ['filename', 'diagonal_fov_arcsec', 'background_to_subtract']
             for key in mandatory_keys:
@@ -168,7 +178,7 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
             diagonal_fov_arcsec = scene_block['geometry']['diagonal_fov_arcsec'] * u.arcsec
             background_to_subtract = scene_block['geometry']['background_to_subtract']
             # generate simulated locations in the IFU
-            simulated_x_ifu, simulated_y_ifu = simulate_image2d_from_fitsfile(
+            simulated_x_ifu_0, simulated_y_ifu_0 = simulate_image2d_from_fitsfile(
                 infile=infile,
                 diagonal_fov_arcsec=diagonal_fov_arcsec,
                 plate_scale_x=plate_scale_x,
@@ -179,6 +189,13 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
                 plots=plots,
                 verbose=verbose
             )
+            # compensate for instrument rotation angle
+            simulated_x_ifu = \
+                simulated_x_ifu_0 * np.cos(instrument_pa).value + \
+                simulated_y_ifu_0 * np.sin(instrument_pa).value
+            simulated_y_ifu = \
+                -simulated_x_ifu_0 * np.sin(instrument_pa).value + \
+                simulated_y_ifu_0 * np.cos(instrument_pa).value
             # shift image center
             simulated_x_ifu += x_center
             simulated_y_ifu += y_center
@@ -196,6 +213,7 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
         if seeing_psf == "gaussian":
             if verbose:
                 print(f'Applying Gaussian PSF with {seeing_fwhm_arcsec=}')
+            # ToDo: apply instrument position angle
             std_x = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_x.to(u.arcsec / u.pix)
             simulated_x_ifu += rng.normal(loc=0, scale=abs(std_x.value), size=nphotons)
             std_y = seeing_fwhm_arcsec * factor_fwhm_to_sigma / plate_scale_y.to(u.arcsec / u.pix)
