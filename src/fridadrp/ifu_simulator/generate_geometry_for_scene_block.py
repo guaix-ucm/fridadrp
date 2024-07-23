@@ -8,22 +8,27 @@
 #
 
 import astropy.units as u
-from astropy.wcs.utils import proj_plane_pixel_scales, non_celestial_pixel_scales
+from astropy.wcs.utils import proj_plane_pixel_scales
 import numpy as np
 
 from numina.tools.ctext import ctext
 
+from .differential_atmospheric_refraction import compute_differential_atmospheric_refraction
 from .raise_valueerror import raise_ValueError
 from .simulate_image2d_from_fitsfile import simulate_image2d_from_fitsfile
 
 
-def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
-                                      apply_seeing, seeing_fwhm_arcsec, seeing_psf,
-                                      instrument_pa,
-                                      wcs3d,
-                                      min_x_ifu, max_x_ifu, min_y_ifu, max_y_ifu,
-                                      rng,
-                                      verbose, plots):
+def generate_geometry_for_scene_block(
+        scene_fname, scene_block, nphotons,
+        apply_seeing, seeing_fwhm_arcsec, seeing_psf,
+        apply_differential_refraction, airmass, parallactic_angle,
+        reference_wave_differential_refraction, simulated_wave,
+        instrument_pa,
+        wcs3d,
+        min_x_ifu, max_x_ifu, min_y_ifu, max_y_ifu,
+        rng,
+        verbose, plots
+):
     """Distribute photons in the IFU focal plane for the scene block.
 
     Parameters
@@ -40,6 +45,21 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
         Seeing FWHM.
     seeing_psf : str
         Seeing PSF.
+    apply_differential_refraction : bool
+        If True, apply differential refraction correction.
+    airmass : float
+        Airmass.
+    parallactic_angle : `~astropy.units.Quantity`
+        Parallactic angle. This number must be within the range
+        [-90,+90] deg.
+    reference_wave_differential_refraction : `~astropy.units.Quantity`
+        Reference wavelength to compute the differential refraction
+        correction. This wavelength corresponds to a correction of
+        zero.
+    simulated_wave : `~astropy.units.Quantity`
+        Array containing `nphotons` simulated photons with the
+        spectrum requested in the scene block. These values are
+        required to compute the differential refraction correction.
     instrument_pa : `~astropy.units.Quantity`
         Instrument position angle.
     wcs3d : `~astropy.wcs.wcs.WCS`
@@ -69,6 +89,9 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
         in the focal plane of the IFU.
 
     """
+
+    if len(simulated_wave) != nphotons:
+        raise ValueError(f'Unexpected {len(simulated_wave)=} != {nphotons=}')
 
     factor_fwhm_to_sigma = 1 / (2 * np.sqrt(2 * np.log(2)))
 
@@ -118,10 +141,9 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
                 print(ctext('Assuming delta_dec_deg: 0', faint=True))
             delta_dec_arcsec = 0.0
         delta_dec_arcsec *= u.arcsec
-        x_center, y_center, w_center = wcs3d.world_to_pixel_values(
+        x_center, y_center = wcs3d.celestial.world_to_pixel_values(
             ra_deg + delta_ra_arcsec.to(u.deg),
-            dec_deg + delta_dec_arcsec.to(u.deg),
-            wcs3d.wcs.crval[2]
+            dec_deg + delta_dec_arcsec.to(u.deg)
         )
         # the previous pixel coordinates are assumed to be 0 at the center
         # of the first pixel in each dimension
@@ -223,6 +245,36 @@ def generate_geometry_for_scene_block(scene_fname, scene_block, nphotons,
             simulated_y_ifu += rng.normal(loc=0, scale=abs(std_y.value), size=nphotons)
         else:
             raise_ValueError(f'Unexpected {seeing_psf=}')
+
+    # apply differential refraction
+    if apply_differential_refraction:
+        if verbose:
+            print('Applying differential refraction correction')
+        differential_refraction = compute_differential_atmospheric_refraction(
+            airmass=airmass,
+            reference_wave_differential_refraction=reference_wave_differential_refraction,
+            simulated_wave=simulated_wave,
+            verbose=verbose
+        )
+        # compute RA and DEC of each simulated photon
+        simulated_ra, simulated_dec = wcs3d.celestial.pixel_to_world_values(
+            simulated_x_ifu - 1.0,
+            simulated_y_ifu - 1.0
+        )
+        simulated_ra *= u.deg
+        simulated_dec *= u.deg
+        # apply differential refraction correction (first declination
+        # and then right ascension; see Eq. (39) and (40), pp. 71-72,
+        # in Textbook on Spherical Astronomy, Smart, 1977).
+        simulated_dec += differential_refraction.to(u.deg) * np.cos(parallactic_angle)
+        simulated_ra += differential_refraction.to(u.deg) * np.sin(parallactic_angle) / np.cos(simulated_dec)
+        # recompute X, Y coordinates in the IFU focal plane
+        simulated_x_ifu, simulated_y_ifu = wcs3d.celestial.world_to_pixel_values(
+            simulated_ra,
+            simulated_dec
+        )
+        simulated_x_ifu += 1
+        simulated_y_ifu += 1
 
     # add units
     simulated_x_ifu *= u.pix

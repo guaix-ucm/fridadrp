@@ -44,6 +44,8 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                   scene_fname,
                   seeing_fwhm_arcsec, seeing_psf,
                   instrument_pa,
+                  airmass,
+                  parallactic_angle,
                   flatpix2pix,
                   atmosphere_transmission,
                   rnoise,
@@ -74,6 +76,11 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         Seeing PSF.
     instrument_pa : `~astropy.units.Quantity`
         Instrument position angle.
+    airmass : float
+        Airmass.
+    parallactic_angle : `~astropy.units.Quantity`
+        Parallactic angle. This number must be within the range
+        [-90,+90] deg.
     flatpix2pix : str
         String indicating whether a pixel-to-pixel flatfield is
         applied or not. Two possible values:
@@ -134,6 +141,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     wv_cunit1, wv_crpix1, wv_crval1, wv_cdelt1 = get_wvparam_from_wcs3d(wcs3d)
     wmin = wv_crval1 + (0.5 * u.pix - wv_crpix1) * wv_cdelt1
     wmax = wv_crval1 + (naxis1_detector + 0.5 * u.pix - wv_crpix1) * wv_cdelt1
+    reference_wave_differential_refraction = (wmin + wmax) / 2
 
     # load atmosphere transmission curve
     wave_transmission, curve_transmission = load_atmosphere_transmission_curve(
@@ -152,6 +160,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         'nphotons',
         'apply_atmosphere_transmission',
         'apply_seeing',
+        'apply_differential_refraction',
         'render'
     }
 
@@ -199,6 +208,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     print(ctext(f'WARNING: {apply_seeing=} when {seeing_fwhm_arcsec=}', fg='cyan'))
                     print('Seeing effect will not be applied!')
                     apply_seeing = False
+            apply_differential_refraction = scene_block['apply_differential_refraction']
             render = scene_block['render']
             if nphotons > 0 and render:
                 # set wavelength unit and range
@@ -236,6 +246,11 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     apply_seeing=apply_seeing,
                     seeing_fwhm_arcsec=seeing_fwhm_arcsec,
                     seeing_psf=seeing_psf,
+                    apply_differential_refraction=apply_differential_refraction,
+                    airmass=airmass,
+                    parallactic_angle=parallactic_angle,
+                    reference_wave_differential_refraction=reference_wave_differential_refraction,
+                    simulated_wave=simulated_wave,
                     instrument_pa=instrument_pa,
                     wcs3d=wcs3d,
                     min_x_ifu=min_x_ifu,

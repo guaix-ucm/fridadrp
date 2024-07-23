@@ -68,7 +68,7 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
     Returns
     -------
     simulated_wave : '~numpy.ndarray'
-        Array containint `nphotons` simulated photons with the
+        Array containing `nphotons` simulated photons with the
         spectrum requested in the scene block.
 
     """

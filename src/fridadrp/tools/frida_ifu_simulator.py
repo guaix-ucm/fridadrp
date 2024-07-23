@@ -143,6 +143,8 @@ def main(args=None):
     parser.add_argument("--seeing_psf", help="Seeing PSF", type=str, default="gaussian",
                         choices=["gaussian"])
     parser.add_argument("--instrument_pa_deg", help="Instrument Position Angle (deg)", type=float, default=0.0)
+    parser.add_argument("--airmass", help="Airmass", type=float, default=1.0)
+    parser.add_argument("--parallactic_angle_deg", help="Parallactic angle (deg)", type=float, default=0.0)
     parser.add_argument("--noversampling_whitelight", help="Oversampling white light image", type=int, default=10)
     parser.add_argument("--atmosphere_transmission", help="Atmosphere transmission", type=str, default="default",
                         choices=["default", "none"])
@@ -187,6 +189,12 @@ def main(args=None):
     if seeing_fwhm_arcsec.value < 0:
         raise ValueError(f'Unexpected {seeing_fwhm_arcsec=}. This number must be >= 0.')
     seeing_psf = args.seeing_psf
+    airmass = args.airmass
+    if airmass < 1.0:
+        raise ValueError(f'Unexpected {airmass=}. This number must be greater than or equal to 1.0')
+    parallactic_angle = args.parallactic_angle_deg * u.deg
+    if abs(parallactic_angle.value) > 90:
+        raise ValueError(f'Unexpected {parallactic_angle.value}. This number must be within the range [-90, +90]')
     noversampling_whitelight = args.noversampling_whitelight
     if noversampling_whitelight < 1:
         raise ValueError(f'Unexpected {noversampling_whitelight=} (must be > 1)')
@@ -249,6 +257,8 @@ def main(args=None):
         seeing_fwhm_arcsec=seeing_fwhm_arcsec,
         seeing_psf=seeing_psf,
         instrument_pa=instrument_pa,
+        airmass=airmass,
+        parallactic_angle=parallactic_angle,
         flatpix2pix=flatpix2pix,
         atmosphere_transmission=atmosphere_transmission,
         rnoise=rnoise,
