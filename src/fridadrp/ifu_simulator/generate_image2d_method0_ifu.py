@@ -17,6 +17,7 @@ import numpy as np
 
 def generate_image2d_method0_ifu(
         wcs3d,
+        header_keys,
         noversampling_whitelight,
         simulated_x_ifu_all,
         simulated_y_ifu_all,
@@ -38,6 +39,9 @@ def generate_image2d_method0_ifu(
     ----------
     wcs3d : `~astropy.wcs.wcs.WCS`
         WCS of the data cube.
+    header_keys : `~astropy.io.fits.header.Header`
+        FITS header with additional keywords to be merged together with
+        the WCS information.
     noversampling_whitelight : int
         Oversampling factor (integer number) to generate the method0
         white image.
@@ -94,7 +98,13 @@ def generate_image2d_method0_ifu(
     # save FITS file
     if len(prefix_intermediate_fits) > 0:
         hdu = fits.PrimaryHDU(image2d_method0_ifu.astype(np.float32))
+        pos0 = len(hdu.header) - 1
         hdu.header.extend(wcs2d.to_header(), update=True)
+        hdu.header.update(header_keys)
+        hdu.header.insert(
+            pos0, ('COMMENT', "FITS (Flexible Image Transport System) format is defined in 'Astronomy"))
+        hdu.header.insert(
+            pos0 + 1, ('COMMENT', "and Astrophysics', volume 376, page 359; bibcode: 2001A&A...376..359H"))
         hdul = fits.HDUList([hdu])
         outfile = f'{prefix_intermediate_fits}_ifu_white2D_method0_os{noversampling_whitelight:d}.fits'
         print(f'Saving file: {outfile}')

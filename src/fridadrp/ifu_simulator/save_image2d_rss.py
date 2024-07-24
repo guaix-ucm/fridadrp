@@ -17,6 +17,7 @@ from fridadrp.processing.define_3d_wcs import get_wvparam_from_wcs3d
 
 def save_image2d_rss(
         wcs3d,
+        header_keys,
         image2d_rss,
         method,
         prefix_intermediate_fits
@@ -27,6 +28,9 @@ def save_image2d_rss(
     ----------
     wcs3d : `~astropy.wcs.wcs.WCS`
         WCS of the data cube.
+    header_keys : `~astropy.io.fits.header.Header`
+        FITS header with additional keywords to be merged together with
+        the WCS information.
     image2d_rss : `~numpy.ndarray`
         2D array containing the RSS image.
     method : int
@@ -55,7 +59,13 @@ def save_image2d_rss(
         wcs2d.wcs.ctype = ["WAVE", ""]   # ToDo: fix this
         wcs2d.wcs.cunit = [wv_cunit1, u.pix]
         hdu = fits.PrimaryHDU(image2d_rss.astype(np.float32))
+        pos0 = len(hdu.header) - 1
         hdu.header.extend(wcs2d.to_header(), update=True)
+        hdu.header.update(header_keys)
+        hdu.header.insert(
+            pos0, ('COMMENT', "FITS (Flexible Image Transport System) format is defined in 'Astronomy"))
+        hdu.header.insert(
+            pos0 + 1, ('COMMENT', "and Astrophysics', volume 376, page 359; bibcode: 2001A&A...376..359H"))
         hdul = fits.HDUList([hdu])
         outfile = f'{prefix_intermediate_fits}_rss_2D_method{method}.fits'
         print(f'Saving file: {outfile}')

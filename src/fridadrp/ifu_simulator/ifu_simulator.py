@@ -39,7 +39,8 @@ from .update_image2d_rss_method1 import update_image2d_rss_method1
 pp = pprint.PrettyPrinter(indent=1, sort_dicts=False)
 
 
-def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
+def ifu_simulator(wcs3d, header_keys,
+                  naxis1_detector, naxis2_detector, nslices,
                   noversampling_whitelight,
                   scene_fname,
                   seeing_fwhm_arcsec, seeing_psf,
@@ -59,6 +60,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     ----------
     wcs3d : `~astropy.wcs.wcs.WCS`
         WCS of the data cube.
+    header_keys : `~astropy.io.fits.header.Header`
+        FITS header with additional keywords to be merged together with
+        the WCS information.
     naxis1_detector : `~astropy.units.Quantity`
         Detector NAXIS1, dispersion direction.
     naxis2_detector : `~astropy.units.Quantity`
@@ -330,6 +334,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     for noversampling in {noversampling_whitelight, 1}:
         generate_image2d_method0_ifu(
             wcs3d=wcs3d,
+            header_keys=header_keys,
             noversampling_whitelight=noversampling,
             simulated_x_ifu_all=simulated_x_ifu_all,
             simulated_y_ifu_all=simulated_y_ifu_all,
@@ -351,6 +356,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                 ((np.arange(naxis2_detector.value + 1) + 1) * u.pix - wv_crpix1) * wv_cdelt1 - 0.5 * u.pix * wv_cdelt1
     generate_image3d_method0_ifu(
         wcs3d=wcs3d,
+        header_keys=header_keys,
         simulated_x_ifu_all=simulated_x_ifu_all,
         simulated_y_ifu_all=simulated_y_ifu_all,
         simulated_wave_all=simulated_wave_all,
@@ -414,6 +420,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     # save RSS image (note that the flatfield effect is not included!)
     save_image2d_rss(
         wcs3d=wcs3d,
+        header_keys=header_keys,
         image2d_rss=image2d_rss_method0,
         method=0,
         prefix_intermediate_fits=prefix_intermediate_fits
@@ -455,9 +462,9 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
             print('Skipping adding Gaussian readout noise')
 
     save_image2d_detector_method0(
+        header_keys,
         image2d_detector_method0=image2d_detector_method0,
         prefix_intermediate_fits=prefix_intermediate_fits,
-        instname=instname
     )
 
     # ---------------------------------------------------
@@ -507,6 +514,7 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
 
     save_image2d_rss(
         wcs3d=wcs3d,
+        header_keys=header_keys,
         image2d_rss=image2d_rss_method1,
         method=1,
         prefix_intermediate_fits=prefix_intermediate_fits
@@ -547,7 +555,13 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
     # save FITS file
     if len(prefix_intermediate_fits) > 0:
         hdu = fits.PrimaryHDU(image3d_ifu_method1.astype(np.float32))
+        pos0 = len(hdu.header) - 1
         hdu.header.extend(wcs3d.to_header(), update=True)
+        hdu.header.update(header_keys)
+        hdu.header.insert(
+            pos0, ('COMMENT', "FITS (Flexible Image Transport System) format is defined in 'Astronomy"))
+        hdu.header.insert(
+            pos0 + 1, ('COMMENT', "and Astrophysics', volume 376, page 359; bibcode: 2001A&A...376..359H"))
         hdul = fits.HDUList([hdu])
         outfile = f'{prefix_intermediate_fits}_ifu_3D_method1.fits'
         print(f'Saving file: {outfile}')

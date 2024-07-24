@@ -9,9 +9,12 @@
 
 import argparse
 from astropy.coordinates import SkyCoord
+from astropy.io import fits
 import astropy.units as u
+from datetime import datetime
 import json
 import numpy as np
+import platform
 import pooch
 import sys
 
@@ -175,6 +178,31 @@ def main(args=None):
 
     print(f"Welcome to fridadrp-ifu_simulator\nversion {version}\n")
 
+    # keywords that should be included in the FITS header
+    header_keys = fits.Header()
+    header_keys['OBSERVAT'] = ('ORM', 'Name of the observatory (IRAF style)')
+    header_keys['TELESCOP'] = ('GTC','Telescope name')
+    header_keys['ORIGIN'] = ('fridadrp-ifu_simulator', 'FITS file originator')
+    header_keys['LATITUDE'] = ('+28:45:43.2', 'Telescope latitude (degrees), +28:45:43.2')
+    header_keys['LONGITUD'] = ('+17:52:39.5', 'Telescope longitude (degrees), +17:52:39.5')
+    header_keys['HEIGHT'] = (2348, 'Telescope height above sea level (m)')
+    header_keys['AIRMASS'] = (args.airmass, 'Airmass')
+    header_keys['IPA'] =  (args.instrument_pa_deg, 'Instrument position angle (degrees)')
+    header_keys['PARANGLE'] = (args.parallactic_angle_deg, 'Parallactic angle (degrees)')
+    header_keys['INSTRUME'] = ('FRIDA', 'Instrument name')
+    header_keys['OBSMODE'] = ('IFS', 'Observation mode' )
+    header_keys['SCALE'] = (f'{args.scale.upper()}', 'Camera scale')
+    header_keys['GRATING'] = (f'{args.grating.upper()}', 'Grating')
+    header_keys['HISTORY'] = '-' * 25
+    header_keys['HISTORY'] = f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    header_keys['HISTORY'] = '-' * 25
+    header_keys['HISTORY'] = f'Node: {platform.uname().node}'
+    header_keys['HISTORY'] = f'Python: {sys.executable}'
+    header_keys['HISTORY'] = f'$ fridadrp-ifu_simulator'
+    header_keys['HISTORY'] = f'(version: {version})'
+    for arg, value in vars(args).items():
+        header_keys['HISTORY'] = f'--{arg} {value}'
+
     # simplify argument names
     scene = args.scene
     if scene is None:
@@ -225,6 +253,22 @@ def main(args=None):
         dec=dec_teles_deg * u.deg + (delta_dec_teles_arcsec * u.arcsec).to(u.deg),
         frame='icrs'
     )
+    header_keys['RA'] = (
+        skycoord_center.ra.to_string(unit=u.hour, sep=':', precision=3, pad=True),
+        'Telescope right ascension (HH:MM:SS)'
+    )
+    header_keys['DEC'] = (
+        skycoord_center.dec.to_string(unit=u.deg, sep=':', precision=3, pad=True),
+        'Telescope declination (DD:MM:SS)'
+    )
+    header_keys['RADEG'] = (
+        skycoord_center.ra.to(u.deg).value,
+        'Telescope right ascension (degrees)'
+    )
+    header_keys['DECDEG'] = (
+        skycoord_center.dec.to(u.deg).value,
+        'Telescope declination (degrees)'
+    )
 
     # linear wavelength calibration
     wv_lincal = LinearWaveCalFRIDA(grating=grating)
@@ -251,6 +295,7 @@ def main(args=None):
 
     ifu_simulator(
         wcs3d=wcs3d,
+        header_keys=header_keys,
         naxis1_detector=FRIDA_NAXIS1_HAWAII,
         naxis2_detector=FRIDA_NAXIS2_HAWAII,
         nslices=FRIDA_NSLICES,
