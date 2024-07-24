@@ -23,7 +23,7 @@ def generate_geometry_for_scene_block(
         scene_fname, scene_block, nphotons,
         apply_seeing, seeing_fwhm_arcsec, seeing_psf,
         airmass, parallactic_angle,
-        reference_wave_differential_refraction, simulated_wave,
+        reference_wave_vacuum_differential_refraction, simulated_wave,
         instrument_pa,
         wcs3d,
         min_x_ifu, max_x_ifu, min_y_ifu, max_y_ifu,
@@ -51,7 +51,7 @@ def generate_geometry_for_scene_block(
     parallactic_angle : `~astropy.units.Quantity`
         Parallactic angle. This number must be within the range
         [-90,+90] deg.
-    reference_wave_differential_refraction : `~astropy.units.Quantity`
+    reference_wave_vacuum_differential_refraction : `~astropy.units.Quantity`
         Reference wavelength to compute the differential refraction
         correction. This wavelength corresponds to a correction of
         zero.
@@ -251,8 +251,8 @@ def generate_geometry_for_scene_block(
             print('Applying differential refraction correction as a function of wavelength')
         differential_refraction = compute_differential_atmospheric_refraction(
             airmass=airmass,
-            reference_wave_differential_refraction=reference_wave_differential_refraction,
-            simulated_wave=simulated_wave,
+            reference_wave_vacuum=reference_wave_vacuum_differential_refraction,
+            wave_vacuum=simulated_wave,
             verbose=verbose
         )
         # compute RA and DEC of each simulated photon
@@ -284,8 +284,8 @@ def generate_geometry_for_scene_block(
             sample_wavelengths = np.linspace(wmin_simulated, wmax_simulated, nsample_wavelengths)
             differential_refraction_center_ifu = compute_differential_atmospheric_refraction(
                 airmass=airmass,
-                reference_wave_differential_refraction=reference_wave_differential_refraction,
-                simulated_wave=sample_wavelengths
+                reference_wave_vacuum=reference_wave_vacuum_differential_refraction,
+                wave_vacuum=sample_wavelengths
             )
             x_center_ifu, y_center_ifu = wcs3d.celestial.wcs.crpix
             ra_center_ifu, dec_center_ifu = wcs3d.celestial.pixel_to_world_values(
@@ -323,7 +323,7 @@ def generate_geometry_for_scene_block(
                     ax.set_ylabel(r'$\Delta$simulated_y_ifu (pixel)')
                 ax.set_xlabel(f'Wavelength ({simulated_wave.unit})')
                 ax.axhline(0, linestyle='--', color='gray')
-                ax.axvline(reference_wave_differential_refraction.value, linestyle=':', color='C1')
+                ax.axvline(reference_wave_vacuum_differential_refraction.value, linestyle=':', color='C1')
                 ax.set_title(f'airmass: {airmass}, parallactic angle: {parallactic_angle}')
                 ax.legend()
             plt.tight_layout()

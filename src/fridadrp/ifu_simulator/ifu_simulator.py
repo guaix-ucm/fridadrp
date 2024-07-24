@@ -145,7 +145,7 @@ def ifu_simulator(wcs3d, header_keys,
     wv_cunit1, wv_crpix1, wv_crval1, wv_cdelt1 = get_wvparam_from_wcs3d(wcs3d)
     wmin = wv_crval1 + (0.5 * u.pix - wv_crpix1) * wv_cdelt1
     wmax = wv_crval1 + (naxis1_detector + 0.5 * u.pix - wv_crpix1) * wv_cdelt1
-    reference_wave_differential_refraction = (wmin + wmax) / 2
+    reference_wave_vacuum_differential_refraction = (wmin + wmax) / 2
 
     # load atmosphere transmission curve
     wave_transmission, curve_transmission = load_atmosphere_transmission_curve(
@@ -250,7 +250,7 @@ def ifu_simulator(wcs3d, header_keys,
                     seeing_psf=seeing_psf,
                     airmass=airmass,
                     parallactic_angle=parallactic_angle,
-                    reference_wave_differential_refraction=reference_wave_differential_refraction,
+                    reference_wave_vacuum_differential_refraction=reference_wave_vacuum_differential_refraction,
                     simulated_wave=simulated_wave,
                     instrument_pa=instrument_pa,
                     wcs3d=wcs3d,
