@@ -160,7 +160,6 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
         'nphotons',
         'apply_atmosphere_transmission',
         'apply_seeing',
-        'apply_differential_refraction',
         'render'
     }
 
@@ -208,7 +207,6 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     print(ctext(f'WARNING: {apply_seeing=} when {seeing_fwhm_arcsec=}', fg='cyan'))
                     print('Seeing effect will not be applied!')
                     apply_seeing = False
-            apply_differential_refraction = scene_block['apply_differential_refraction']
             render = scene_block['render']
             if nphotons > 0 and render:
                 # set wavelength unit and range
@@ -246,7 +244,6 @@ def ifu_simulator(wcs3d, naxis1_detector, naxis2_detector, nslices,
                     apply_seeing=apply_seeing,
                     seeing_fwhm_arcsec=seeing_fwhm_arcsec,
                     seeing_psf=seeing_psf,
-                    apply_differential_refraction=apply_differential_refraction,
                     airmass=airmass,
                     parallactic_angle=parallactic_angle,
                     reference_wave_differential_refraction=reference_wave_differential_refraction,

@@ -9,6 +9,7 @@
 
 import astropy.units as u
 from astropy.wcs.utils import proj_plane_pixel_scales
+import matplotlib.pyplot as plt
 import numpy as np
 
 from numina.tools.ctext import ctext
@@ -21,7 +22,7 @@ from .simulate_image2d_from_fitsfile import simulate_image2d_from_fitsfile
 def generate_geometry_for_scene_block(
         scene_fname, scene_block, nphotons,
         apply_seeing, seeing_fwhm_arcsec, seeing_psf,
-        apply_differential_refraction, airmass, parallactic_angle,
+        airmass, parallactic_angle,
         reference_wave_differential_refraction, simulated_wave,
         instrument_pa,
         wcs3d,
@@ -45,8 +46,6 @@ def generate_geometry_for_scene_block(
         Seeing FWHM.
     seeing_psf : str
         Seeing PSF.
-    apply_differential_refraction : bool
-        If True, apply differential refraction correction.
     airmass : float
         Airmass.
     parallactic_angle : `~astropy.units.Quantity`
@@ -81,10 +80,10 @@ def generate_geometry_for_scene_block(
 
     Returns
     -------
-    simulated_x_ifu : `~astropy.units.Quantity`
+    simulated_x_ifu_corrected : `~astropy.units.Quantity`
         Array containing the X coordinate of the 'nphotons' photons
         in the focal plane of the IFU.
-    simulated_y_ifu : `~astropy.units.Quantity`
+    simulated_y_ifu_corrected : `~astropy.units.Quantity`
         Array containing the X coordinate of the 'nphotons' photons
         in the focal plane of the IFU.
 
@@ -246,10 +245,10 @@ def generate_geometry_for_scene_block(
         else:
             raise_ValueError(f'Unexpected {seeing_psf=}')
 
-    # apply differential refraction
-    if apply_differential_refraction:
+    # apply differential refraction (as a function of wavelength)
+    if (geometry_type != 'flatfield') and (airmass > 1.0):
         if verbose:
-            print('Applying differential refraction correction')
+            print('Applying differential refraction correction as a function of wavelength')
         differential_refraction = compute_differential_atmospheric_refraction(
             airmass=airmass,
             reference_wave_differential_refraction=reference_wave_differential_refraction,
@@ -269,15 +268,72 @@ def generate_geometry_for_scene_block(
         simulated_dec += differential_refraction.to(u.deg) * np.cos(parallactic_angle)
         simulated_ra += differential_refraction.to(u.deg) * np.sin(parallactic_angle) / np.cos(simulated_dec)
         # recompute X, Y coordinates in the IFU focal plane
-        simulated_x_ifu, simulated_y_ifu = wcs3d.celestial.world_to_pixel_values(
+        simulated_x_ifu_corrected, simulated_y_ifu_corrected = wcs3d.celestial.world_to_pixel_values(
             simulated_ra,
             simulated_dec
         )
-        simulated_x_ifu += 1
-        simulated_y_ifu += 1
+        simulated_x_ifu_corrected += 1
+        simulated_y_ifu_corrected += 1
+        if plots:
+            iok = np.argwhere(simulated_wave > 0 * u.m)
+            # differential refraction (as a function of wavelength)
+            # computed at the center of the IFU
+            wmin_simulated = np.min(simulated_wave[iok])
+            wmax_simulated = np.max(simulated_wave[iok])
+            nsample_wavelengths = 20
+            sample_wavelengths = np.linspace(wmin_simulated, wmax_simulated, nsample_wavelengths)
+            differential_refraction_center_ifu = compute_differential_atmospheric_refraction(
+                airmass=airmass,
+                reference_wave_differential_refraction=reference_wave_differential_refraction,
+                simulated_wave=sample_wavelengths
+            )
+            x_center_ifu, y_center_ifu = wcs3d.celestial.wcs.crpix
+            ra_center_ifu, dec_center_ifu = wcs3d.celestial.pixel_to_world_values(
+                x_center_ifu - 1.0,
+                y_center_ifu - 1.0
+            )
+            ra_center_ifu *= u.deg
+            dec_center_ifu *= u.deg
+            ra_center_ifu = np.repeat(ra_center_ifu, nsample_wavelengths)
+            dec_center_ifu = np.repeat(dec_center_ifu, nsample_wavelengths)
+            dec_center_ifu += differential_refraction_center_ifu.to(u.deg) * np.cos(parallactic_angle)
+            ra_center_ifu += differential_refraction_center_ifu.to(u.deg) * np.sin(parallactic_angle) / np.cos(dec_center_ifu)
+            x_center_ifu_corrected, y_center_ifu_corrected = wcs3d.celestial.world_to_pixel_values(
+                ra_center_ifu,
+                dec_center_ifu
+            )
+            x_center_ifu_corrected += 1
+            y_center_ifu_corrected += 1
+            delta_x_center_ifu = x_center_ifu_corrected - x_center_ifu
+            delta_y_center_ifu = y_center_ifu_corrected - y_center_ifu
+            # differential refraction (as a function of wavelength)
+            # computed for each useful simulated photon
+            delta_simulated_x_ifu = simulated_x_ifu_corrected - simulated_x_ifu
+            delta_simulated_y_ifu = simulated_y_ifu_corrected - simulated_y_ifu
+            fig, axarr = plt.subplots(nrows=2, ncols=1, figsize=(6.4, 6.4))
+            for iplot in range(2):
+                ax = axarr[iplot]
+                if iplot == 0:
+                    ax.plot(simulated_wave[iok], delta_simulated_x_ifu[iok], ',', label='simulated photons')
+                    ax.plot(sample_wavelengths, delta_x_center_ifu, 'r+', label='IFU center')
+                    ax.set_ylabel(r'$\Delta$simulated_x_ifu (pixel)')
+                else:
+                    ax.plot(simulated_wave[iok], delta_simulated_y_ifu[iok], ',', label='simulated photons')
+                    ax.plot(sample_wavelengths, delta_y_center_ifu, 'r+', label='IFU center')
+                    ax.set_ylabel(r'$\Delta$simulated_y_ifu (pixel)')
+                ax.set_xlabel(f'Wavelength ({simulated_wave.unit})')
+                ax.axhline(0, linestyle='--', color='gray')
+                ax.axvline(reference_wave_differential_refraction.value, linestyle=':', color='C1')
+                ax.set_title(f'airmass: {airmass}, parallactic angle: {parallactic_angle}')
+                ax.legend()
+            plt.tight_layout()
+            plt.show()
+    else:
+        simulated_x_ifu_corrected = simulated_x_ifu
+        simulated_y_ifu_corrected = simulated_y_ifu
 
     # add units
-    simulated_x_ifu *= u.pix
-    simulated_y_ifu *= u.pix
+    simulated_x_ifu_corrected *= u.pix
+    simulated_y_ifu_corrected *= u.pix
 
-    return simulated_x_ifu, simulated_y_ifu
+    return simulated_x_ifu_corrected, simulated_y_ifu_corrected
