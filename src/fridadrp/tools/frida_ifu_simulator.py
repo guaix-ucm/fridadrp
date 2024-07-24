@@ -195,6 +195,8 @@ def main(args=None):
     parallactic_angle = args.parallactic_angle_deg * u.deg
     if abs(parallactic_angle.value) > 90:
         raise ValueError(f'Unexpected {parallactic_angle.value}. This number must be within the range [-90, +90]')
+    if (parallactic_angle.value != 0) and (airmass == 1):
+        raise ValueError(f'{parallactic_angle=} has no meaning when {airmass=}')
     noversampling_whitelight = args.noversampling_whitelight
     if noversampling_whitelight < 1:
         raise ValueError(f'Unexpected {noversampling_whitelight=} (must be > 1)')
