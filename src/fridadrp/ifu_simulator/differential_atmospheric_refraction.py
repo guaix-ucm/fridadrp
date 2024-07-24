@@ -79,9 +79,17 @@ def compute_differential_atmospheric_refraction(
         airmass,
         reference_wave_differential_refraction,
         simulated_wave,
+        temperature=7*u.Celsius,
+        pressure_mm=600,
+        pressure_water_mm=8,
         verbose=False
 ):
     """Compute differential atmospheric refraction
+
+    Here we employ the same parameters as Filippenko (1982):
+    "At an altitude of ~2 km and a latitude of ~ +/-30, average
+    conditions are (Allen 1973) P ~ 600 mm Hg, T = 7 Celsius, and
+    Pwater ~ 8 mm Hg."
 
     Parameters
     ----------
@@ -95,6 +103,15 @@ def compute_differential_atmospheric_refraction(
         Array containing `nphotons` simulated photons with the
         spectrum requested in the scene block. These values are
         required to compute the differential refraction correction.
+        Note that some values in this array could have been set
+        to -1 (e.g., removed photons when applying the atmosphere
+        transmission).
+    temperature : `~astropy.units.Quantity`
+        Temperature.
+    pressure_mm : float
+        Atmospheric pressure (mm Hg).
+    pressure_water_mm : float
+        Water vapor pressure (mm Hg).
     verbose : bool
         If True, display additional information.
 
@@ -117,33 +134,42 @@ def compute_differential_atmospheric_refraction(
     # employed by Filippenko (1982)
     n_air_reference = air_refractive_index(
         wave_vacuum=reference_wave_differential_refraction,
-        temperature=7*u.Celsius,
-        pressure_mm=600,
-        pressure_water_mm=8
+        temperature=temperature,
+        pressure_mm=pressure_mm,
+        pressure_water_mm=pressure_water_mm
     )
     if verbose:
+        print(ctext(f'Assuming {temperature=}, {pressure_mm=}, {pressure_water_mm=}', faint=True))
         print(ctext(f'{reference_wave_differential_refraction=}', faint=True))
         print(ctext(f'{n_air_reference=}', faint=True))
 
     # air refractive index for all the simulated wavelengths
     n_air = air_refractive_index(
         wave_vacuum=simulated_wave,
-        temperature=7*u.Celsius,
-        pressure_mm=600,
-        pressure_water_mm=8
+        temperature=temperature,
+        pressure_mm=pressure_mm,
+        pressure_water_mm=pressure_water_mm
     )
 
     # refraction (plane-parallel atmosphere)
-    refraction_reference = (n_air_reference - 1) * np.tan(zenith_distance)
-    refraction = (n_air - 1) * np.tan(zenith_distance)
     factor_arcsec_per_radian = 206264.80624709636
+    refraction_reference = (n_air_reference - 1) * np.tan(zenith_distance)
+    if verbose:
+        print(ctext('Refraction at reference wavelength (arcsec): ' +
+                    f'{refraction_reference * factor_arcsec_per_radian:+.4f}', faint=True))
+    refraction = (n_air - 1) * np.tan(zenith_distance)
     differential_refraction = (refraction - refraction_reference) * factor_arcsec_per_radian * u.arcsec
     if verbose:
-        imin = np.argmin(differential_refraction)
-        imax = np.argmax(differential_refraction)
-        print(ctext(f'Minimum differential refraction: {differential_refraction[imin]:+.4f} ' +
-                    f'at wavelength: {simulated_wave[imin]}', faint=True))
-        print(ctext(f'Maximum differential refraction: {differential_refraction[imax]:+.4f} ' +
-                    f'at wavelength: {simulated_wave[imax]}', faint=True))
+        # avoid negative wavelengths: those are flagged values corresponding
+        # to removed photons (e.g., due to the atmosphere transmission)
+        iok = np.argwhere(simulated_wave > 0 * u.m)
+        differential_refraction_ok = differential_refraction[iok]
+        simulated_wave_ok = simulated_wave[iok]
+        imin = np.argmin(differential_refraction_ok)
+        imax = np.argmax(differential_refraction_ok)
+        print(ctext(f'Minimum differential refraction: {differential_refraction_ok[imin][0]:+.4f} ' +
+                    f'at wavelength: {simulated_wave_ok[imin][0]}', faint=True))
+        print(ctext(f'Maximum differential refraction: {differential_refraction_ok[imax][0]:+.4f} ' +
+                    f'at wavelength: {simulated_wave_ok[imax][0]}', faint=True))
 
     return differential_refraction
