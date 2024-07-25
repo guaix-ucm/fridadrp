@@ -7,6 +7,7 @@
 # License-Filename: LICENSE.txt
 #
 
+from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.wcs.utils import proj_plane_pixel_scales
 import matplotlib.pyplot as plt
@@ -140,9 +141,8 @@ def generate_geometry_for_scene_block(
                 print(ctext('Assuming delta_dec_deg: 0', faint=True))
             delta_dec_arcsec = 0.0
         delta_dec_arcsec *= u.arcsec
-        x_center, y_center = wcs3d.celestial.world_to_pixel_values(
-            ra_deg + delta_ra_arcsec.to(u.deg),
-            dec_deg + delta_dec_arcsec.to(u.deg)
+        x_center, y_center = wcs3d.celestial.world_to_pixel(
+            SkyCoord(ra=ra_deg + delta_ra_arcsec.to(u.deg), dec=dec_deg + delta_dec_arcsec.to(u.deg))
         )
         # the previous pixel coordinates are assumed to be 0 at the center
         # of the first pixel in each dimension
@@ -256,21 +256,20 @@ def generate_geometry_for_scene_block(
             verbose=verbose
         )
         # compute RA and DEC of each simulated photon
-        simulated_ra, simulated_dec = wcs3d.celestial.pixel_to_world_values(
+        simulated_coor = wcs3d.celestial.pixel_to_world(
             simulated_x_ifu - 1.0,
             simulated_y_ifu - 1.0
         )
-        simulated_ra *= u.deg
-        simulated_dec *= u.deg
+        simulated_ra = simulated_coor.ra
+        simulated_dec = simulated_coor.dec
         # apply differential refraction correction (first declination
         # and then right ascension; see Eq. (39) and (40), pp. 71-72,
         # in Textbook on Spherical Astronomy, Smart, 1977).
         simulated_dec += differential_refraction.to(u.deg) * np.cos(parallactic_angle)
         simulated_ra += differential_refraction.to(u.deg) * np.sin(parallactic_angle) / np.cos(simulated_dec)
         # recompute X, Y coordinates in the IFU focal plane
-        simulated_x_ifu_corrected, simulated_y_ifu_corrected = wcs3d.celestial.world_to_pixel_values(
-            simulated_ra,
-            simulated_dec
+        simulated_x_ifu_corrected, simulated_y_ifu_corrected = wcs3d.celestial.world_to_pixel(
+            SkyCoord(ra=simulated_ra, dec=simulated_dec)
         )
         simulated_x_ifu_corrected += 1
         simulated_y_ifu_corrected += 1
@@ -288,19 +287,18 @@ def generate_geometry_for_scene_block(
                 wave_vacuum=sample_wavelengths
             )
             x_center_ifu, y_center_ifu = wcs3d.celestial.wcs.crpix
-            ra_center_ifu, dec_center_ifu = wcs3d.celestial.pixel_to_world_values(
+            simulated_coor = wcs3d.celestial.pixel_to_world(
                 x_center_ifu - 1.0,
                 y_center_ifu - 1.0
             )
-            ra_center_ifu *= u.deg
-            dec_center_ifu *= u.deg
+            ra_center_ifu = simulated_coor.ra
+            dec_center_ifu = simulated_coor.dec
             ra_center_ifu = np.repeat(ra_center_ifu, nsample_wavelengths)
             dec_center_ifu = np.repeat(dec_center_ifu, nsample_wavelengths)
             dec_center_ifu += differential_refraction_center_ifu.to(u.deg) * np.cos(parallactic_angle)
             ra_center_ifu += differential_refraction_center_ifu.to(u.deg) * np.sin(parallactic_angle) / np.cos(dec_center_ifu)
-            x_center_ifu_corrected, y_center_ifu_corrected = wcs3d.celestial.world_to_pixel_values(
-                ra_center_ifu,
-                dec_center_ifu
+            x_center_ifu_corrected, y_center_ifu_corrected = wcs3d.celestial.world_to_pixel(
+                SkyCoord(ra=ra_center_ifu, dec=dec_center_ifu)
             )
             x_center_ifu_corrected += 1
             y_center_ifu_corrected += 1
