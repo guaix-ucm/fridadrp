@@ -33,6 +33,7 @@ dependencies = [
     "numina >= 0.32",
     "numpy >= 1.20",
     "pooch",
+    "shapely",
     "scipy",
     "tqdm",
 ]
