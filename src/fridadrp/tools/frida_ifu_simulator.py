@@ -173,10 +173,19 @@ def main(args=None):
         print(version)
         raise SystemExit()
 
+    if args.verbose:
+        for arg, value in vars(args).items():
+            print(f'--{arg} {value}')
+
     if args.echo:
         print('\033[1m\033[31m% ' + ' '.join(sys.argv) + '\033[0m\n')
 
     print(f"Welcome to fridadrp-ifu_simulator\nversion {version}\n")
+
+    if args.scale is None:
+        raise ValueError(f'You must specify --scale from\n{FRIDA_VALID_SPATIAL_SCALES}')
+    if args.grating is None:
+        raise ValueError(f'You must specify --grating from\n{FRIDA_VALID_GRATINGS}')
 
     # keywords that should be included in the FITS header
     header_keys = fits.Header()
