@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from numina.tools.ctext import ctext
+from numina.tools.r6_compute_adr_wavelength import compute_adr_wavelength
 
-from .differential_atmospheric_refraction import compute_differential_atmospheric_refraction
 from .raise_valueerror import raise_ValueError
 from .simulate_image2d_from_fitsfile import simulate_image2d_from_fitsfile
 
@@ -249,11 +249,11 @@ def generate_geometry_for_scene_block(
     if (geometry_type != 'flatfield') and (airmass > 1.0):
         if verbose:
             print('Applying differential refraction correction as a function of wavelength')
-        differential_refraction = compute_differential_atmospheric_refraction(
+        differential_refraction = compute_adr_wavelength(
             airmass=airmass,
             reference_wave_vacuum=reference_wave_vacuum_differential_refraction,
             wave_vacuum=simulated_wave,
-            verbose=verbose
+            debug=verbose
         )
         # compute RA and DEC of each simulated photon
         simulated_coor = wcs3d.celestial.pixel_to_world(
@@ -281,7 +281,7 @@ def generate_geometry_for_scene_block(
             wmax_simulated = np.max(simulated_wave[iok])
             nsample_wavelengths = 20
             sample_wavelengths = np.linspace(wmin_simulated, wmax_simulated, nsample_wavelengths)
-            differential_refraction_center_ifu = compute_differential_atmospheric_refraction(
+            differential_refraction_center_ifu = compute_adr_wavelength(
                 airmass=airmass,
                 reference_wave_vacuum=reference_wave_vacuum_differential_refraction,
                 wave_vacuum=sample_wavelengths
