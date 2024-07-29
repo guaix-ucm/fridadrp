@@ -31,7 +31,7 @@ dependencies = [
     "joblib",
     "matplotlib",
     "numina >= 0.32",
-    "numpy >= 1.20",
+    "numpy >= 1.20,<2",
     "pooch",
     "shapely",
     "scipy",
