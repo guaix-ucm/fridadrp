@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from numina.tools.ctext import ctext
-from numina.tools.r6_compute_adr_wavelength import compute_adr_wavelength
+from numina.tools.compute_adr_wavelength import compute_adr_wavelength
 
 from .raise_valueerror import raise_ValueError
 from .simulate_image2d_from_fitsfile import simulate_image2d_from_fitsfile
