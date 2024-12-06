@@ -144,7 +144,7 @@ def ifu_simulator(wcs3d, header_keys,
     # wavelength limits
     wv_cunit1, wv_crpix1, wv_crval1, wv_cdelt1 = get_wvparam_from_wcs3d(wcs3d)
     wmin = wv_crval1 + (0.5 * u.pix - wv_crpix1) * wv_cdelt1
-    wmax = wv_crval1 + (naxis1_detector + 0.5 * u.pix - wv_crpix1) * wv_cdelt1
+    wmax = wmin + naxis1_detector * wv_cdelt1
     reference_wave_vacuum_differential_refraction = (wmin + wmax) / 2
 
     # load atmosphere transmission curve
@@ -352,8 +352,9 @@ def ifu_simulator(wcs3d, header_keys,
         print(ctext('\n* Computing image3d IFU (method 0)', fg='green'))
     bins_x_ifu = (0.5 + np.arange(naxis1_ifu.value + 1)) * u.pix
     bins_y_ifu = (0.5 + np.arange(naxis2_ifu.value + 1)) * u.pix
-    bins_wave = wv_crval1 + \
-                ((np.arange(naxis2_detector.value + 1) + 1) * u.pix - wv_crpix1) * wv_cdelt1 - 0.5 * u.pix * wv_cdelt1
+    bins_wave = wv_crval1 \
+                + ((np.arange(naxis2_detector.value + 1) + 1) * u.pix - wv_crpix1) * wv_cdelt1 \
+                - 0.5 * u.pix * wv_cdelt1
     generate_image3d_method0_ifu(
         wcs3d=wcs3d,
         header_keys=header_keys,

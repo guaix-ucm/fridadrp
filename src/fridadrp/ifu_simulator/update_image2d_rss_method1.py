@@ -79,7 +79,7 @@ def update_image2d_rss_method1(
 
     # minimum and maximum wavelengths to be considered
     wmin = wv_crval1 + (0.5 * u.pix - wv_crpix1) * wv_cdelt1
-    wmax = wv_crval1 + (naxis1_detector + 0.5 * u.pix - wv_crpix1) * wv_cdelt1
+    wmax = wmin + naxis1_detector * wv_cdelt1
 
     # use model to predict location in detector
     # important: reverse here X <-> Y
