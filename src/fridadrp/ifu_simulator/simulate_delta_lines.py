@@ -14,7 +14,8 @@ import numpy as np
 from .raise_valueerror import raise_ValueError
 
 
-def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=None, plots=False, plot_title=None):
+def simulate_delta_lines(line_wave, line_flux, nphotons, wavelength_sampling,
+                         rng, wmin=None, wmax=None, plots=False, plot_title=None):
     """Simulate spectrum defined from isolated wavelengths.
 
     Parameters
@@ -26,6 +27,12 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
         Array-like object containing the individual flux of each line.
     nphotons : int
         Number of photons to be simulated
+    wavelength_sampling : str
+        Method to sample the wavelength values. Two options are valid:
+        - 'random': the wavelengt of each photon is randomly determined
+          using the spectrum shape as the density probability function.
+        - 'fixed': the wavelength of each photon is exactly determined
+          using the spectrum shape as the density probability function.
     rng : `~numpy.random._generator.Generator`
         Random number generator.
     wmin : `~astropy.units.Quantity`
@@ -114,8 +121,16 @@ def simulate_delta_lines(line_wave, line_flux, nphotons, rng, wmin=None, wmax=No
         plt.tight_layout()
         plt.show()
 
-    # samples following a uniform distribution
-    unisamples = rng.uniform(low=0, high=1, size=nphotons)
+    if wavelength_sampling == 'random':
+        # samples following a uniform distribution
+        unisamples = rng.uniform(low=0, high=1, size=nphotons)
+    elif wavelength_sampling == 'fixed':
+        # constant sampling of distribution function
+        unisamples = np.linspace(0, 1, num=nphotons+1)  # generate extra photon
+        unisamples = unisamples[:-1]  # remove last photon
+    else:
+        unisamples = None  # avoid PyCharm warning
+        raise_ValueError(f'Unexpected {wavelength_sampling=}')
 
     # closest array indices in sorted array
     closest_indices = np.searchsorted(cumsum, unisamples, side='right')

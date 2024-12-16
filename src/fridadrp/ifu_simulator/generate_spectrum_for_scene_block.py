@@ -23,7 +23,7 @@ from .raise_valueerror import raise_ValueError
 
 
 def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_unit,
-                                     wave_min, wave_max, nphotons,
+                                     wave_min, wave_max, nphotons, wavelength_sampling,
                                      apply_atmosphere_transmission, wave_transmission, curve_transmission,
                                      rng, naxis1_detector,
                                      verbose, plots):
@@ -49,6 +49,12 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
         Maximum wavelength to be used in the scene block.
     nphotons : int
         Number of photons to be generated in the scene block.
+    wavelength_sampling : str
+        Method to sample the wavelength values. Two options are valid:
+        - 'random': the wavelengt of each photon is randomly determined
+          using the spectrum shape as the density probability function.
+        - 'fixed': the wavelength of each photon is exactly determined
+          using the spectrum shape as the density probability function.
     rng : `~numpy.random._generator.Generator`
         Random number generator.
     apply_atmosphere_transmission : bool
@@ -95,6 +101,7 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
             line_wave=line_wave,
             line_flux=line_flux,
             nphotons=nphotons,
+            wavelength_sampling=wavelength_sampling,
             rng=rng,
             wmin=wave_min,
             wmax=wave_max,
@@ -117,6 +124,7 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
             flux=flux,
             flux_type=flux_type,
             nphotons=nphotons,
+            wavelength_sampling=wavelength_sampling,
             rng=rng,
             wmin=wave_min,
             wmax=wave_max,
@@ -159,6 +167,7 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
             flux=flux,
             flux_type=flux_type,
             nphotons=nphotons,
+            wavelength_sampling=wavelength_sampling,
             rng=rng,
             wmin=wave_min,
             wmax=wave_max,
@@ -173,6 +182,7 @@ def generate_spectrum_for_scene_blok(scene_fname, scene_block, faux_dict, wave_u
             wmin=wave_min,
             wmax=wave_max,
             nphotons=nphotons,
+            wavelength_sampling=wavelength_sampling,
             rng=rng
         )
     else:

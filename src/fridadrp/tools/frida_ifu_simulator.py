@@ -154,6 +154,9 @@ def main(args=None):
     parser.add_argument("--rnoise", help="Readout noise standard deviation (ADU)", type=float, default=0)
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
                         choices=["default", "none"])
+    parser.add_argument("--spectral_blurring_pixel",
+                        help="Spectral blurring when converting original 3D to RSS (in pixel units)",
+                        type=float, default=1.0)
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=None)
     parser.add_argument("--prefix_intermediate_FITS", help="Prefix for intermediate FITS files", type=str,
                         default="test")
@@ -243,6 +246,9 @@ def main(args=None):
         raise ValueError(f'Invalid readout noise value: {rnoise}')
     rnoise *= u.adu
     flatpix2pix = args.flatpix2pix
+    spectral_blurring_pixel = args.spectral_blurring_pixel * u.pix
+    if spectral_blurring_pixel.value < 0:
+        raise ValueError(f'Invalid {spectral_blurring_pixel=}')
     prefix_intermediate_fits = args.prefix_intermediate_FITS
     seed = args.seed
     stop_after_ifu_3D_method0 = args.stop_after_ifu_3D_method0
@@ -318,6 +324,7 @@ def main(args=None):
         flatpix2pix=flatpix2pix,
         atmosphere_transmission=atmosphere_transmission,
         rnoise=rnoise,
+        spectral_blurring_pixel=spectral_blurring_pixel,
         faux_dict=faux_dict,
         rng=rng,
         prefix_intermediate_fits=prefix_intermediate_fits,

@@ -15,7 +15,9 @@ import numpy as np
 from .raise_valueerror import raise_ValueError
 
 
-def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve_sigma_km_s,
+def simulate_spectrum(wave, flux, flux_type,
+                      nphotons, wavelength_sampling,
+                      rng, wmin, wmax, convolve_sigma_km_s,
                       nbins_histo, plots, plot_title, verbose):
     """Simulate spectrum defined by tabulated wave and flux data.
 
@@ -32,6 +34,12 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
         - photlam: proportional to photon s^-1 cm^-2 A^-1
     nphotons : int
         Number of photons to be simulated
+    wavelength_sampling : str
+        Method to sample the wavelength values. Two options are valid:
+        - 'random': the wavelengt of each photon is randomly determined
+          using the spectrum shape as the density probability function.
+        - 'fixed': the wavelength of each photon is exactly determined
+          using the spectrum shape as the density probability function.
     rng : `~numpy.random._generator.Generator`
         Random number generator.
     wmin : `~astropy.units.Quantity`
@@ -154,8 +162,17 @@ def simulate_spectrum(wave, flux, flux_type, nphotons, rng, wmin, wmax, convolve
         plt.tight_layout()
         plt.show()
 
-    # samples following a uniform distribution
-    unisamples = rng.uniform(low=0, high=1, size=nphotons)
+    if wavelength_sampling == 'random':
+        # samples following a uniform distribution
+        unisamples = rng.uniform(low=0, high=1, size=nphotons)
+    elif wavelength_sampling == 'fixed':
+        # constant sampling of distribution function
+        unisamples = np.linspace(0, 1, num=nphotons+1)  # generate extra photon
+        unisamples = unisamples[:-1]  # remove last photon
+    else:
+        unisamples = None  # avoid PyCharm warning
+        raise_ValueError(f'Unexpected {wavelength_sampling=}')
+
     simulated_wave = np.interp(x=unisamples, xp=normalized_cumulative_area, fp=wave.value)
 
     # apply Gaussian broadening

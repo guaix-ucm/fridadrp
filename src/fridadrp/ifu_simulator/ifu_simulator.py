@@ -50,6 +50,7 @@ def ifu_simulator(wcs3d, header_keys,
                   flatpix2pix,
                   atmosphere_transmission,
                   rnoise,
+                  spectral_blurring_pixel,
                   faux_dict, rng,
                   prefix_intermediate_fits,
                   stop_after_ifu_3D_method0=False,
@@ -98,6 +99,9 @@ def ifu_simulator(wcs3d, header_keys,
     rnoise : `~astropy.units.Quantity`
         Readout noise standard deviation (in ADU). Assumed to be
         Gaussian.
+    spectral_blurring_pixel : `~astropy.units.Quantity`
+        Spectral blurring (in pixels) to be introduced when generating
+        the initial RSS image from the original 3D data cube.
     faux_dict : Python dictionary
         File names of auxiliary files:
         - skycalc: table with SKYCALC Sky Model Calculator predictions
@@ -162,6 +166,7 @@ def ifu_simulator(wcs3d, header_keys,
         'spectrum',
         'geometry',
         'nphotons',
+        'wavelength_sampling',
         'apply_atmosphere_transmission',
         'apply_seeing',
         'render'
@@ -197,6 +202,9 @@ def ifu_simulator(wcs3d, header_keys,
                 print(ctext(f'* Processing: {scene_block_name}', fg='green'))
 
             nphotons = int(float(scene_block['nphotons']))
+            wavelength_sampling = scene_block['wavelength_sampling']
+            if wavelength_sampling not in ['random', 'fixed']:
+                raise_ValueError(f'Unexpected {wavelength_sampling=}')
             apply_atmosphere_transmission = scene_block['apply_atmosphere_transmission']
             if atmosphere_transmission == "none" and apply_atmosphere_transmission:
                 print(ctext(f'WARNING: {apply_atmosphere_transmission=} when {atmosphere_transmission=}', fg='cyan'))
@@ -230,6 +238,7 @@ def ifu_simulator(wcs3d, header_keys,
                     wave_min=wave_min,
                     wave_max=wave_max,
                     nphotons=nphotons,
+                    wavelength_sampling=wavelength_sampling,
                     apply_atmosphere_transmission=apply_atmosphere_transmission,
                     wave_transmission=wave_transmission,
                     curve_transmission=curve_transmission,
@@ -383,7 +392,13 @@ def ifu_simulator(wcs3d, header_keys,
 
     # additional degradation in the spectral direction
     # (in units of detector pixels)
-    extra_degradation_spectral_direction = rng.normal(loc=0.0, scale=1, size=nphotons_all) * u.pix
+    if spectral_blurring_pixel.unit != u.pix:
+        raise_ValueError(f'Unexpected unit for {spectral_blurring_pixel.unit=}')
+    extra_degradation_spectral_direction = rng.normal(
+        loc=0.0,
+        scale=spectral_blurring_pixel.value,
+        size=nphotons_all
+    ) * u.pix
 
     # initialize images
     image2d_rss_method0 = np.zeros((naxis1_ifu.value * nslices, naxis1_detector.value))
