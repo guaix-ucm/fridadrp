@@ -155,7 +155,8 @@ def main(args=None):
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
                         choices=["default", "none"])
     parser.add_argument("--spectral_blurring_pixel",
-                        help="Spectral blurring when converting original 3D to RSS (in pixel units)",
+                        help="Spectral blurring when converting the original 3D data cube to the original 2D RSS " + \
+                             "(in pixel units)",
                         type=float, default=1.0)
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=None)
     parser.add_argument("--prefix_intermediate_FITS", help="Prefix for intermediate FITS files", type=str,
