@@ -166,10 +166,10 @@ def ifu_simulator(wcs3d, header_keys,
         'spectrum',
         'geometry',
         'nphotons',
-        'wavelength_sampling',
-        'apply_atmosphere_transmission',
-        'apply_seeing',
-        'render'
+        'wavelength_sampling',             # default: random
+        'apply_atmosphere_transmission',   # default: True
+        'apply_seeing',                    # default: True
+        'render'                           # default: True
     }
 
     nphotons_all = 0
@@ -181,7 +181,28 @@ def ifu_simulator(wcs3d, header_keys,
     with open(scene_fname, 'rt') as fstream:
         scene_dict = yaml.safe_load_all(fstream)
         for scene_block in scene_dict:
+            if 'scene_block_name' not in scene_block.keys():
+                if verbose:
+                    print(' ')
+                print(ctext(f'ERROR while processing {scene_fname}', fg='red'))
+                raise_ValueError('key scene_block_name not found!')
+            scene_block_name = scene_block['scene_block_name']
+            print(ctext(f'\n* Processing: {scene_block_name}', fg='green'))
+            # insert default values for keys not provided
+            if 'wavelength_sampling' not in scene_block.keys():
+                scene_block['wavelength_sampling'] = 'random'
+                print(ctext(f"WARNING: asumming {scene_block['wavelength_sampling']=}", fg='cyan'))
+            if 'render' not in scene_block.keys():
+                scene_block['render'] = True
+                print(ctext(f"WARNING: asumming {scene_block['render']=}", fg='cyan'))
+            if 'apply_atmosphere_transmission' not in scene_block.keys():
+                scene_block['apply_atmosphere_transmission'] = True
+                print(ctext(f"WARNING: asumming {scene_block['apply_atmosphere_transmission']=}", fg='cyan'))
+            if 'apply_seeing' not in scene_block.keys():
+                scene_block['apply_seeing'] = True
+                print(ctext(f"WARNING: asumming {scene_block['apply_seeing']=}", fg='cyan'))
             scene_block_keys = set(scene_block.keys())
+            # insert default values
             if scene_block_keys != required_keys_in_scene_block:
                 print(ctext(f'ERROR while processing: {scene_fname}', fg='red'))
                 print(ctext('expected keys..: ', fg='blue') + f'{required_keys_in_scene_block}')
@@ -194,12 +215,8 @@ def ifu_simulator(wcs3d, header_keys,
                     print(ctext('missing keys...: ', fg='red') + f'{list_missing_keys}')
                 pp.pprint(scene_block)
                 raise_ValueError(f'Invalid format in file: {scene_fname}')
-            scene_block_name = scene_block['scene_block_name']
             if verbose:
-                print(ctext(f'\n* Processing: {scene_block_name}', fg='green'))
                 pp.pprint(scene_block)
-            else:
-                print(ctext(f'* Processing: {scene_block_name}', fg='green'))
 
             nphotons = int(float(scene_block['nphotons']))
             wavelength_sampling = scene_block['wavelength_sampling']
