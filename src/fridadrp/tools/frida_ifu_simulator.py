@@ -159,6 +159,7 @@ def main(args=None):
                              "(in pixel units)",
                         type=float, default=1.0)
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=None)
+    parser.add_argument("--noparallel", help="Do not use parallel processing", action="store_true")
     parser.add_argument("--prefix_intermediate_FITS", help="Prefix for intermediate FITS files", type=str,
                         default="test")
     parser.add_argument("--stop_after_ifu_3D_method0", help="Stop after computing ifu_3D_method0 image",
@@ -252,6 +253,7 @@ def main(args=None):
         raise ValueError(f'Invalid {spectral_blurring_pixel=}')
     prefix_intermediate_fits = args.prefix_intermediate_FITS
     seed = args.seed
+    noparallel_computation = args.noparallel
     stop_after_ifu_3D_method0 = args.stop_after_ifu_3D_method0
     verbose = args.verbose
     plots = args.plots
@@ -328,6 +330,7 @@ def main(args=None):
         spectral_blurring_pixel=spectral_blurring_pixel,
         faux_dict=faux_dict,
         rng=rng,
+        noparallel_computation=noparallel_computation,
         prefix_intermediate_fits=prefix_intermediate_fits,
         stop_after_ifu_3D_method0=stop_after_ifu_3D_method0,
         verbose=verbose,

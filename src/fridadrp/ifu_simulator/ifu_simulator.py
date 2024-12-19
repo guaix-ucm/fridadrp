@@ -51,7 +51,9 @@ def ifu_simulator(wcs3d, header_keys,
                   atmosphere_transmission,
                   rnoise,
                   spectral_blurring_pixel,
-                  faux_dict, rng,
+                  faux_dict,
+                  rng,
+                  noparallel_computation,
                   prefix_intermediate_fits,
                   stop_after_ifu_3D_method0=False,
                   verbose=False, instname=None, subtitle=None, plots=False):
@@ -110,6 +112,8 @@ def ifu_simulator(wcs3d, header_keys,
           x_ifu, y_ify, wavelength -> x_detector, y_detector
     rng : `~numpy.random._generator.Generator`
         Random number generator.
+    noparallel_computation : bool
+        It True, skip use of parallel processing.
     prefix_intermediate_fits : str
         Prefix for output intermediate FITS files. If the length of
         this string is 0, no output is generated.
@@ -424,28 +428,45 @@ def ifu_simulator(wcs3d, header_keys,
     # update images
     # (accelerate computation using joblib.Parallel)
     t0 = time.time()
-    """
-    for islice in range(nslices):
-        print(f'{islice=}')
-        update_image2d_rss_detector_method0(...)
-    """
-    Parallel(n_jobs=-1, prefer="threads")(
-        delayed(update_image2d_rss_detector_method0)(
-            islice=islice,
-            simulated_x_ifu_all=simulated_x_ifu_all,
-            simulated_y_ifu_all=simulated_y_ifu_all,
-            simulated_wave_all=simulated_wave_all,
-            naxis1_ifu=naxis1_ifu,
-            bins_x_ifu=bins_x_ifu,
-            bins_wave=bins_wave,
-            bins_x_detector=bins_x_detector,
-            bins_y_detector=bins_y_detector,
-            wv_cdelt1=wv_cdelt1,
-            extra_degradation_spectral_direction=extra_degradation_spectral_direction,
-            dict_ifu2detector=dict_ifu2detector,
-            image2d_rss_method0=image2d_rss_method0,
-            image2d_detector_method0=image2d_detector_method0
-        ) for islice in range(nslices))
+    if noparallel_computation:
+        # explicit loop in slices
+        for islice in range(nslices):
+            if verbose:
+                print(f'{islice=}')
+            update_image2d_rss_detector_method0(
+                islice=islice,
+                simulated_x_ifu_all=simulated_x_ifu_all,
+                simulated_y_ifu_all=simulated_y_ifu_all,
+                simulated_wave_all=simulated_wave_all,
+                naxis1_ifu=naxis1_ifu,
+                bins_x_ifu=bins_x_ifu,
+                bins_wave=bins_wave,
+                bins_x_detector=bins_x_detector,
+                bins_y_detector=bins_y_detector,
+                wv_cdelt1=wv_cdelt1,
+                extra_degradation_spectral_direction=extra_degradation_spectral_direction,
+                dict_ifu2detector=dict_ifu2detector,
+                image2d_rss_method0=image2d_rss_method0,
+                image2d_detector_method0=image2d_detector_method0
+            )
+    else:
+        Parallel(n_jobs=-1, prefer="threads")(
+            delayed(update_image2d_rss_detector_method0)(
+                islice=islice,
+                simulated_x_ifu_all=simulated_x_ifu_all,
+                simulated_y_ifu_all=simulated_y_ifu_all,
+                simulated_wave_all=simulated_wave_all,
+                naxis1_ifu=naxis1_ifu,
+                bins_x_ifu=bins_x_ifu,
+                bins_wave=bins_wave,
+                bins_x_detector=bins_x_detector,
+                bins_y_detector=bins_y_detector,
+                wv_cdelt1=wv_cdelt1,
+                extra_degradation_spectral_direction=extra_degradation_spectral_direction,
+                dict_ifu2detector=dict_ifu2detector,
+                image2d_rss_method0=image2d_rss_method0,
+                image2d_detector_method0=image2d_detector_method0
+            ) for islice in range(nslices))
     t1 = time.time()
     if verbose:
         print(f'Delta time: {t1 - t0}')
@@ -512,35 +533,38 @@ def ifu_simulator(wcs3d, header_keys,
     if verbose:
         print('Rectifying...')
     t0 = time.time()
-    """
-    # loop in slices
-    for islice in range(nslices):
-        update_image2d_rss_method1(
-            islice=islice,
-            image2d_detector_method0=image2d_detector_method0,
-            dict_ifu2detector=dict_ifu2detector,
-            naxis1_detector=naxis1_detector,
-            naxis1_ifu=naxis1_ifu,
-            wv_crpix1=wv_crpix1,
-            wv_crval1=wv_crval1,
-            wv_cdelt1=wv_cdelt1,
-            image2d_rss_method1=image2d_rss_method1,
-            debug=False
-        )
-    """
-    Parallel(n_jobs=-1, prefer="threads")(
-        delayed(update_image2d_rss_method1)(
-            islice=islice,
-            image2d_detector_method0=image2d_detector_method0,
-            dict_ifu2detector=dict_ifu2detector,
-            naxis1_detector=naxis1_detector,
-            naxis1_ifu=naxis1_ifu,
-            wv_crpix1=wv_crpix1,
-            wv_crval1=wv_crval1,
-            wv_cdelt1=wv_cdelt1,
-            image2d_rss_method1=image2d_rss_method1,
-            debug=False
-        ) for islice in range(nslices))
+    if noparallel_computation:
+        # explicit loop in slices
+        for islice in range(nslices):
+            if verbose:
+                print(f'{islice=}')
+            update_image2d_rss_method1(
+                islice=islice,
+                image2d_detector_method0=image2d_detector_method0,
+                dict_ifu2detector=dict_ifu2detector,
+                naxis1_detector=naxis1_detector,
+                naxis1_ifu=naxis1_ifu,
+                wv_crpix1=wv_crpix1,
+                wv_crval1=wv_crval1,
+                wv_cdelt1=wv_cdelt1,
+                image2d_rss_method1=image2d_rss_method1,
+                debug=False
+            )
+    else:
+        Parallel(n_jobs=-1, prefer="threads")(
+            delayed(update_image2d_rss_method1)(
+                islice=islice,
+                image2d_detector_method0=image2d_detector_method0,
+                dict_ifu2detector=dict_ifu2detector,
+                naxis1_detector=naxis1_detector,
+                naxis1_ifu=naxis1_ifu,
+                wv_crpix1=wv_crpix1,
+                wv_crval1=wv_crval1,
+                wv_cdelt1=wv_cdelt1,
+                image2d_rss_method1=image2d_rss_method1,
+                debug=False
+            ) for islice in range(nslices))
+
     t1 = time.time()
     if verbose:
         print(f'Delta time: {t1 - t0}')
