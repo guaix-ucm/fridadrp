@@ -20,7 +20,8 @@ def save_image2d_rss(
         header_keys,
         image2d_rss,
         method,
-        prefix_intermediate_fits
+        prefix_intermediate_fits,
+        bitpix
 ):
     """Save the RSS image.
 
@@ -38,6 +39,8 @@ def save_image2d_rss(
     prefix_intermediate_fits : str
         Prefix for output intermediate FITS files. If the length of
         this string is 0, no output is generated.
+    bitpix : int
+        BITPIX value for the FITS file.
     """
 
     if len(prefix_intermediate_fits) > 0:
@@ -58,7 +61,13 @@ def save_image2d_rss(
         wcs2d.wcs.cdelt = [wv_cdelt1.value, 1]
         wcs2d.wcs.ctype = ["WAVE", ""]   # ToDo: fix this
         wcs2d.wcs.cunit = [wv_cunit1, u.pix]
-        hdu = fits.PrimaryHDU(image2d_rss.astype(np.float32))
+        if bitpix == 16:
+            # round to integer and save as BITPIX=16 (unsigned short)
+            hdu = fits.PrimaryHDU(np.round(image2d_rss).astype(np.uint16))
+        elif bitpix == -32:
+            hdu = fits.PrimaryHDU(image2d_rss.astype(np.float32))
+        else:
+            raise ValueError(f'Unsupported BITPIX value: {bitpix}')
         pos0 = len(hdu.header) - 1
         hdu.header.extend(wcs2d.to_header(), update=True)
         hdu.header.update(header_keys)

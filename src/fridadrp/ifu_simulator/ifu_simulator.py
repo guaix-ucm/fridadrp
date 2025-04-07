@@ -477,7 +477,8 @@ def ifu_simulator(wcs3d, header_keys,
         header_keys=header_keys,
         image2d_rss=image2d_rss_method0,
         method=0,
-        prefix_intermediate_fits=prefix_intermediate_fits
+        prefix_intermediate_fits=prefix_intermediate_fits,
+        bitpix=16
     )
 
     # apply flatpix2pix to detector image
@@ -519,6 +520,7 @@ def ifu_simulator(wcs3d, header_keys,
         header_keys,
         image2d_detector_method0=image2d_detector_method0,
         prefix_intermediate_fits=prefix_intermediate_fits,
+        bitpix=16,
     )
 
     # ---------------------------------------------------
@@ -574,7 +576,8 @@ def ifu_simulator(wcs3d, header_keys,
         header_keys=header_keys,
         image2d_rss=image2d_rss_method1,
         method=1,
-        prefix_intermediate_fits=prefix_intermediate_fits
+        prefix_intermediate_fits=prefix_intermediate_fits,
+        bitpix=-32,
     )
 
     # ------------------------------------

@@ -14,7 +14,8 @@ import numpy as np
 def save_image2d_detector_method0(
         header_keys,
         image2d_detector_method0,
-        prefix_intermediate_fits
+        prefix_intermediate_fits,
+        bitpix
 ):
     """Save the two 2D images: RSS and detector.
 
@@ -28,13 +29,19 @@ def save_image2d_detector_method0(
     prefix_intermediate_fits : str
         Prefix for output intermediate FITS files. If the length of
         this string is 0, no output is generated.
+    bitpix : int, optional
+        BITPIX value for the FITS file.
     """
 
     if len(prefix_intermediate_fits) > 0:
         # --------------------------------------
         # spectroscopic 2D image in the detector
         # --------------------------------------
-        hdu = fits.PrimaryHDU(image2d_detector_method0.astype(np.float32))
+        if bitpix == 16:
+            # round to integer and save as BITPIX=16 (unsigned short)
+            hdu = fits.PrimaryHDU(np.round(image2d_detector_method0).astype(np.uint16))
+        else:
+            raise ValueError(f'Unsupported BITPIX value: {bitpix}')
         pos0 = len(hdu.header) - 1
         hdu.header.update(header_keys)
         hdu.header.insert(

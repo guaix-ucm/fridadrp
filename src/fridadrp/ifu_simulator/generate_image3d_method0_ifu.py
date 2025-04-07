@@ -65,7 +65,7 @@ def generate_image3d_method0_ifu(
 
     # save FITS file
     if len(prefix_intermediate_fits) > 0:
-        hdu = fits.PrimaryHDU(image3d_method0_ifu.astype(np.float32))
+        hdu = fits.PrimaryHDU(image3d_method0_ifu.astype(np.uint16))
         pos0 = len(hdu.header) - 1
         hdu.header.extend(wcs3d.to_header(), update=True)
         hdu.header.update(header_keys)
