@@ -49,6 +49,7 @@ def ifu_simulator(wcs3d, header_keys,
                   parallactic_angle,
                   flatpix2pix,
                   atmosphere_transmission,
+                  bias,
                   rnoise,
                   spectral_blurring_pixel,
                   faux_dict,
@@ -98,6 +99,8 @@ def ifu_simulator(wcs3d, header_keys,
         the atmosphere is applied or not. Two possible values are:
         - 'default': use default curve defined in 'faux_dict'
         - 'none': do not apply atmosphere transmission
+    bias : `~astropy.units.Quantity`
+        Bias level (in ADU).
     rnoise : `~astropy.units.Quantity`
         Readout noise standard deviation (in ADU). Assumed to be
         Gaussian.
@@ -505,6 +508,15 @@ def ifu_simulator(wcs3d, header_keys,
         if verbose:
             print('Skipping applying flatpix2pix')
 
+    # apply bias to detector image
+    if bias.value > 0:
+        image2d_detector_method0 += bias.value
+        if verbose:
+            print(f'Applying {bias=} to detector image')
+    else:
+        if verbose:
+            print('Skipping adding bias')
+    
     # apply Gaussian readout noise to detector image
     if rnoise.value > 0:
         if verbose:

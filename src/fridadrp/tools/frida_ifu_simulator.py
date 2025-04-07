@@ -151,6 +151,7 @@ def main(args=None):
     parser.add_argument("--noversampling_whitelight", help="Oversampling white light image", type=int, default=10)
     parser.add_argument("--atmosphere_transmission", help="Atmosphere transmission", type=str, default="default",
                         choices=["default", "none"])
+    parser.add_argument("--bias", help="Bias level (ADU)", type=int, default=1000)
     parser.add_argument("--rnoise", help="Readout noise standard deviation (ADU)", type=float, default=0)
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
                         choices=["default", "none"])
@@ -243,6 +244,10 @@ def main(args=None):
     if noversampling_whitelight < 1:
         raise ValueError(f'Unexpected {noversampling_whitelight=} (must be > 1)')
     atmosphere_transmission = args.atmosphere_transmission
+    bias = args.bias
+    if bias < 0:
+        raise ValueError(f'Invalid bias value: {bias}. It must be >= 0')
+    bias *= u.adu
     rnoise = args.rnoise
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
@@ -326,6 +331,7 @@ def main(args=None):
         parallactic_angle=parallactic_angle,
         flatpix2pix=flatpix2pix,
         atmosphere_transmission=atmosphere_transmission,
+        bias=bias,
         rnoise=rnoise,
         spectral_blurring_pixel=spectral_blurring_pixel,
         faux_dict=faux_dict,
