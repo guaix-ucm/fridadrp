@@ -151,7 +151,7 @@ def main(args=None):
     parser.add_argument("--noversampling_whitelight", help="Oversampling white light image", type=int, default=10)
     parser.add_argument("--atmosphere_transmission", help="Atmosphere transmission", type=str, default="default",
                         choices=["default", "none"])
-    parser.add_argument("--bias", help="Bias level (ADU)", type=int, default=1000)
+    parser.add_argument("--bias", help="Bias level (ADU)", type=int, default=0)
     parser.add_argument("--rnoise", help="Readout noise standard deviation (ADU)", type=float, default=0)
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
                         choices=["default", "none"])
@@ -222,45 +222,67 @@ def main(args=None):
     scene = args.scene
     if scene is None:
         raise ValueError(f'Scene file name has not been specified!')
+    
     grating = args.grating
     if grating is None:
         raise ValueError(f'You must specify a grating name using --grating <grating name>:\n{FRIDA_VALID_GRATINGS}')
+    
     scale = args.scale
     if scale is None:
         raise ValueError(f'You must specify the camera scale using --scale <scale name>:\n{FRIDA_VALID_SPATIAL_SCALES}')
+    
     seeing_fwhm_arcsec = args.seeing_fwhm_arcsec * u.arcsec
     if seeing_fwhm_arcsec.value < 0:
         raise ValueError(f'Unexpected {seeing_fwhm_arcsec=}. This number must be >= 0.')
+    
     seeing_psf = args.seeing_psf
+    
     airmass = args.airmass
     if airmass < 1.0:
         raise ValueError(f'Unexpected {airmass=}. This number must be greater than or equal to 1.0')
+    
     parallactic_angle = args.parallactic_angle_deg * u.deg
     if abs(parallactic_angle.value) > 90:
         raise ValueError(f'Unexpected {parallactic_angle.value}. This number must be within the range [-90, +90]')
     if (parallactic_angle.value != 0) and (airmass == 1):
         raise ValueError(f'{parallactic_angle=} has no meaning when {airmass=}')
+    
     noversampling_whitelight = args.noversampling_whitelight
     if noversampling_whitelight < 1:
         raise ValueError(f'Unexpected {noversampling_whitelight=} (must be > 1)')
+    
     atmosphere_transmission = args.atmosphere_transmission
+    
     bias = args.bias
     if bias < 0:
         raise ValueError(f'Invalid bias value: {bias}. It must be >= 0')
     bias *= u.adu
+    
     rnoise = args.rnoise
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
     rnoise *= u.adu
+    
+    # avoid negative values in the output
+    if bias.value < 10*rnoise.value:
+        raise ValueError(f'Invalid {bias=} value. It must be >= 10*{rnoise=} to avoid negative values')
+    
     flatpix2pix = args.flatpix2pix
+    
     spectral_blurring_pixel = args.spectral_blurring_pixel * u.pix
     if spectral_blurring_pixel.value < 0:
         raise ValueError(f'Invalid {spectral_blurring_pixel=}')
+    
     prefix_intermediate_fits = args.prefix_intermediate_FITS
+    
     seed = args.seed
+    
     noparallel_computation = args.noparallel
+    
     stop_after_ifu_3D_method0 = args.stop_after_ifu_3D_method0
+    
     verbose = args.verbose
+    
     plots = args.plots
 
     # define auxiliary files
