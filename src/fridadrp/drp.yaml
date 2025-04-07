@@ -14,9 +14,15 @@ modes:
     summary: Subtraction of two raw images
     description: >
       Full description of the test1 mode
+  - key: test2
+    name: Test2
+    summary: Addition of sky and target frames and subtraction of result 
+    description: >
+      Full description of the test2 mode
 pipelines:
   default:
     version: 1
     recipes:
       success: numina.core.utils.AlwaysSuccessRecipe
       test1: fridadrp.recipes.auxiliary.Test1Recipe
+      test2: fridadrp.recipes.auxiliary.Test2Recipe
