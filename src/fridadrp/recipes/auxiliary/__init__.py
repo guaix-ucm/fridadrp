@@ -215,7 +215,17 @@ class Test2Recipe(BaseRecipe):
         # Compute 3D IFU image
         # --------------------
         # TODO: 3D IFU image
-        reduced_3d = None
+        image3d_ifu_method1 = compute_image3d_ifu_from_rss_method1(
+            image2d_rss_method1=image2d_rss_method1,
+            naxis1_detector=FRIDA_NAXIS1_HAWAII,
+            naxis2_ifu=FRIDA_NAXIS2_IFU,
+            naxis1_ifu=FRIDA_NAXIS1_IFU,
+            nslices=FRIDA_NSLICES,
+            verbose=False
+        )
+        header = list_of[0][0].header
+        hdu_rss = fits.PrimaryHDU(image3d_ifu_method1, header)
+        reduced_3d = hdu_rss
 
         return self.create_result(
             reduced_image=reduced_image,
