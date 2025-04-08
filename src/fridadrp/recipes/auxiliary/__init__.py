@@ -214,7 +214,6 @@ class Test2Recipe(BaseRecipe):
         # --------------------
         # Compute 3D IFU image
         # --------------------
-        # TODO: 3D IFU image
         image3d_ifu_method1 = compute_image3d_ifu_from_rss_method1(
             image2d_rss_method1=image2d_rss_method1,
             naxis1_detector=FRIDA_NAXIS1_HAWAII,
