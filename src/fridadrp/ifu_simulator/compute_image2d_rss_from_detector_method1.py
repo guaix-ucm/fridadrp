@@ -16,7 +16,7 @@ from numina.tools.ctext import ctext
 from .update_image2d_rss_method1 import update_image2d_rss_method1
 
 
-def compute_image2d_rss_method1(
+def compute_image2d_rss_from_detector_method1(
         image2d_detector_method0,
         naxis1_detector,
         naxis1_ifu,

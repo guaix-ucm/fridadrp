@@ -23,7 +23,8 @@ from fridadrp.processing.define_3d_wcs import get_wvparam_from_wcs3d
 from numina.tools.ctext import ctext
 
 from .display_skycalc import display_skycalc
-from .compute_image2d_rss_method1 import compute_image2d_rss_method1
+from .compute_image2d_rss_from_detector_method1 import compute_image2d_rss_from_detector_method1
+from .compute_image3d_ifu_from_rss_method1 import compute_image3d_ifu_from_rss_method1
 from .generate_image2d_method0_ifu import generate_image2d_method0_ifu
 from .generate_geometry_for_scene_block import generate_geometry_for_scene_block
 from .generate_image3d_method0_ifu import generate_image3d_method0_ifu
@@ -539,7 +540,7 @@ def ifu_simulator(wcs3d, header_keys,
     # ---------------------------------------------------
     # compute image2d RSS from image in detector, method1
     # ---------------------------------------------------
-    image2d_rss_method1 = compute_image2d_rss_method1(
+    image2d_rss_method1 = compute_image2d_rss_from_detector_method1(
         image2d_detector_method0=image2d_detector_method0,
         naxis1_detector=naxis1_detector,
         naxis1_ifu=naxis1_ifu,
@@ -551,53 +552,8 @@ def ifu_simulator(wcs3d, header_keys,
         noparallel_computation=noparallel_computation,
         verbose=verbose
     )
-    """
-    if verbose:
-        print(ctext('\n* Computing image2d RSS (method 1)', fg='green'))
 
-    # initialize image
-    image2d_rss_method1 = np.zeros((naxis1_ifu.value * nslices, naxis1_detector.value))
-
-    if verbose:
-        print('Rectifying...')
-    t0 = time.time()
-    if noparallel_computation:
-        # explicit loop in slices
-        for islice in range(nslices):
-            if verbose:
-                print(f'{islice=}')
-            update_image2d_rss_method1(
-                islice=islice,
-                image2d_detector_method0=image2d_detector_method0,
-                dict_ifu2detector=dict_ifu2detector,
-                naxis1_detector=naxis1_detector,
-                naxis1_ifu=naxis1_ifu,
-                wv_crpix1=wv_crpix1,
-                wv_crval1=wv_crval1,
-                wv_cdelt1=wv_cdelt1,
-                image2d_rss_method1=image2d_rss_method1,
-                debug=False
-            )
-    else:
-        Parallel(n_jobs=-1, prefer="threads")(
-            delayed(update_image2d_rss_method1)(
-                islice=islice,
-                image2d_detector_method0=image2d_detector_method0,
-                dict_ifu2detector=dict_ifu2detector,
-                naxis1_detector=naxis1_detector,
-                naxis1_ifu=naxis1_ifu,
-                wv_crpix1=wv_crpix1,
-                wv_crval1=wv_crval1,
-                wv_cdelt1=wv_cdelt1,
-                image2d_rss_method1=image2d_rss_method1,
-                debug=False
-            ) for islice in range(nslices))
-
-    t1 = time.time()
-    if verbose:
-        print(f'Delta time: {t1 - t0}')
-    """
-
+    # save FITS file
     save_image2d_rss(
         wcs3d=wcs3d,
         header_keys=header_keys,
@@ -610,34 +566,14 @@ def ifu_simulator(wcs3d, header_keys,
     # ------------------------------------
     # compute image3d IFU from RSS method1
     # ------------------------------------
-    if verbose:
-        print(ctext('\n* Computing image3d IFU from image2d RSS method 1', fg='green'))
-
-    # kernel in the spectral direction
-    # (bidimensional to be applied to a bidimensional image)
-    kernel = np.array([[0.25, 0.50, 0.25]])
-
-    # convolve RSS image
-    convolved_data = convolve2d(image2d_rss_method1, kernel, boundary='fill', fillvalue=0, mode='same')
-
-    # ToDo: the second dimension in the following array should be 2*nslices
-    # (check what to do for another IFU, like TARSIS)
-    image3d_ifu_method1 = np.zeros((naxis1_detector.value, naxis2_ifu.value, naxis1_ifu.value))
-    if verbose:
-        print(f'(debug): {image3d_ifu_method1.shape=}')
-
-    for islice in range(nslices):
-        i1 = islice * 2
-        j1 = islice * naxis1_ifu.value
-        j2 = j1 + naxis1_ifu.value
-        image3d_ifu_method1[:, i1, :] = convolved_data[j1:j2, :].T
-        image3d_ifu_method1[:, i1+1, :] = convolved_data[j1:j2, :].T
-
-    image3d_ifu_method1 /= 2
-    if verbose:
-        print(f'(debug): {np.sum(image2d_rss_method1)=}')
-        print(f'(debug):      {np.sum(convolved_data)=}')
-        print(f'(debug): {np.sum(image3d_ifu_method1)=}')
+    image3d_ifu_method1 = compute_image3d_ifu_from_rss_method1(
+        image2d_rss_method1=image2d_rss_method1,
+        naxis1_detector=naxis1_detector,
+        naxis2_ifu=naxis2_ifu,
+        naxis1_ifu=naxis1_ifu,
+        nslices=nslices,
+        verbose=verbose
+    )
 
     # save FITS file
     if len(prefix_intermediate_fits) > 0:
