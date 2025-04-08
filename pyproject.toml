@@ -14,11 +14,11 @@ authors = [
     {name = "Sergio Pascual", email = "sergiopr@fis.ucm.es"}
 ]
 classifiers = [
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Science/Research",
@@ -30,8 +30,8 @@ dependencies = [
     "astropy",
     "joblib",
     "matplotlib",
-    "numina >= 0.32",
-    "numpy >= 1.20,<2",
+    "numina >= 0.35",
+    "numpy >= 1.22",
     "pooch",
     "shapely",
     "scipy",
