@@ -36,7 +36,7 @@ class LinearWaveCalFRIDA(LinearWaveCal):
             raise ValueError(f'Unexpected grating name: {grating}')
 
         crpix1 = 1.0 * u.pix
-        if grating == 'medium-K':
+        if grating == 'MEDIUM-K':
             crval1 = 1.9344 * u.micrometer
             cdelt1 = 0.000285 * u.micrometer / u.pix
             naxis1 = FRIDA_NAXIS1_HAWAII

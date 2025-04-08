@@ -7,18 +7,31 @@
 # License-Filename: LICENSE.txt
 #
 
+from astropy.coordinates import SkyCoord
 import astropy.io.fits as fits
+import astropy.units as u
+import json
 import numpy as np
 
 from numina.core import Result
 from numina.core import Parameter
 from numina.core.requirements import ObservationResultRequirement
 from numina.core.recipes import BaseRecipe
+from numina.instrument.simulation.ifu.compute_image2d_rss_from_detector_method1 import compute_image2d_rss_from_detector_method1
+from numina.instrument.simulation.ifu.compute_image3d_ifu_from_rss_method1 import compute_image3d_ifu_from_rss_method1
+from numina.instrument.simulation.ifu.define_3d_wcs import define_3d_wcs, get_wvparam_from_wcs3d
 from numina.util.context import manage_fits
+
+from fridadrp.instrument.define_auxiliary_files import define_auxiliary_files
+from fridadrp.processing.linear_wavelength_calibration_frida import LinearWaveCalFRIDA
+from fridadrp.products import FridaFrame, FridaRSSFrame, Frida3DFrame
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_NAXIS2_HAWAII
-from fridadrp.products import FridaFrame
+from fridadrp.core import FRIDA_NAXIS1_IFU
+from fridadrp.core import FRIDA_NAXIS2_IFU
+from fridadrp.core import FRIDA_SPATIAL_SCALE
+from fridadrp.core import FRIDA_NSLICES
 
 
 class Test1Recipe(BaseRecipe):
@@ -77,7 +90,10 @@ class Test2Recipe(BaseRecipe):
         optional=True,
     )
 
+    # Recipe results
     reduced_image = Result(FridaFrame)
+    reduced_rss = Result(FridaRSSFrame)
+    reduced_3d = Result(Frida3DFrame)
 
     def run(self, rinput):
         frames = rinput.obresult.frames
@@ -112,8 +128,10 @@ class Test2Recipe(BaseRecipe):
         full_pattern = pattern * nsequences
         print(f'Full pattern: {full_pattern}')
 
-        # Perform combination of Target and Sky frames, and compute subtraction
-        # between them
+        # ------------
+        # Target - Sky
+        # ------------
+        # Perform combination of Target and Sky frames, and compute subtraction between them
         ntarget = full_pattern.count('T')
         nsky = full_pattern.count('S')
         print(f'Number of target frames: {ntarget}')
@@ -143,11 +161,64 @@ class Test2Recipe(BaseRecipe):
         else:
             raise ValueError(f'Unexpected {method=}')
         
-        # TODO: generate 2D RSS and 3D IFU frames
-        
-        # prepare output result
+        # Prepare output result
         header = list_of[0][0].header
-        hdu = fits.PrimaryHDU(result, header)
-        reduced_image = hdu
+        hdu_subtraction = fits.PrimaryHDU(result, header)
+        reduced_image = hdu_subtraction
 
-        return self.create_result(reduced_image=reduced_image)
+        # --------------
+        # Compute 2D RSS
+        # --------------
+        # Get information from header and define 2D WCS and linear wavelength calibration
+        grating = header['GRATING'].upper()
+        scale = header['SCALE']
+        instrument_pa = float(header['IPA']) * u.deg
+        radeg = float(header['RADEG']) * u.deg
+        decdeg = float(header['DECDEG']) * u.deg
+        skycoord_center = SkyCoord(
+            ra=radeg,
+            dec=decdeg,
+            frame='icrs'
+        )
+        faux_dict = define_auxiliary_files(grating=grating, verbose=True)
+        dict_ifu2detector = json.loads(open(faux_dict['model_ifu2detector'], mode='rt').read())
+        wv_lincal = LinearWaveCalFRIDA(grating=grating)
+        print(f'wv_lincal: {wv_lincal}')
+        wcs3d = define_3d_wcs(
+            naxis1_ifu=FRIDA_NAXIS1_IFU,
+            naxis2_ifu=FRIDA_NAXIS2_IFU,
+            skycoord_center=skycoord_center,
+            spatial_scale=FRIDA_SPATIAL_SCALE[scale],
+            wv_lincal=wv_lincal,
+            instrument_pa=instrument_pa,
+            verbose=False
+        )
+        
+        # Generate 2D RSS
+        image2d_rss_method1 = compute_image2d_rss_from_detector_method1(
+            image2d_detector_method0=result,
+            naxis1_detector=FRIDA_NAXIS1_HAWAII,
+            naxis1_ifu=FRIDA_NAXIS1_IFU,
+            nslices=FRIDA_NSLICES,
+            dict_ifu2detector=dict_ifu2detector,
+            wcs3d=wcs3d,
+            noparallel_computation=True,
+            verbose=False
+        )
+
+        # Prepare output result
+        header = list_of[0][0].header
+        hdu_rss = fits.PrimaryHDU(image2d_rss_method1, header)
+        reduced_rss = hdu_rss
+
+        # --------------------
+        # Compute 3D IFU image
+        # --------------------
+        # TODO: 3D IFU image
+        reduced_3d = None
+
+        return self.create_result(
+            reduced_image=reduced_image,
+            reduced_rss=reduced_rss,
+            reduced_3d=reduced_3d,
+        )

@@ -12,16 +12,15 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 import astropy.units as u
 from datetime import datetime
-import json
 import numpy as np
 import platform
-import pooch
 import sys
 
 from numina.instrument.simulation.ifu.ifu_simulator import ifu_simulator
 from numina.instrument.simulation.ifu.define_3d_wcs import define_3d_wcs
 
 from fridadrp._version import version
+from fridadrp.instrument.define_auxiliary_files import define_auxiliary_files
 from fridadrp.processing.linear_wavelength_calibration_frida import LinearWaveCalFRIDA
 
 # Parameters
@@ -33,100 +32,6 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_VALID_GRATINGS
 from fridadrp.core import FRIDA_VALID_SPATIAL_SCALES
 from fridadrp.core import FRIDA_SPATIAL_SCALE
-
-
-def define_auxiliary_files(grating, verbose):
-    """"Define auxiliary files for requested configuration
-
-    Parameters
-    ----------
-    grating : str
-        Grating name.
-    verbose : bool
-        If True, display/plot additional information.
-
-    Returns
-    -------
-    outdict : dictionary
-        Dictionary with the file name of the auxiliary files.
-        The dictionary keys are the following:
-        - skycalc: table with SKYCALC Sky Model Calculator predictions
-        - flatpix2pix: pixel-to-pixel flat field
-        - model_ifu2detector: 2D polynomial transformation from
-          (x_ifu, y_ify, wavelength) to (x_detector, y_detector)
-
-    """
-
-    # retrieve configuration file
-    base_url = 'http://nartex.fis.ucm.es/~ncl/fridadrp_simulator_data'
-    # note: compute md5 hash from terminal using:
-    # linux $ md5sum <filename>
-    # macOS $ md5 <filename>
-    fconf = pooch.retrieve(
-        f'{base_url}/configuration_FRIDA_IFU_simulator.json',
-        known_hash='md5:414bc015dc3d68c1a19b8a5a298afbf2',
-        path=pooch.os_cache(project="fridadrp"),
-        progressbar=True
-    )
-    dconf = json.loads(open(fconf, mode='rt').read())
-    if verbose:
-        print(f"Configuration file uuid: {dconf['uuid']}")
-
-    # generate registry for all the auxiliary files to be used by Pooch
-    d = dconf['auxfiles']
-    registry_md5 = {}
-    registry_label = {}
-    # SKYCALC Sky Model Calculator prediction table
-    label = 'skycalc'
-    filename = d[label]['filename']
-    registry_label[filename] = label
-    registry_md5[filename] = f"md5:{d[label]['md5']}"
-    # EMIR arc lines
-    label = 'EMIR-arc-delta-lines'
-    filename = d[label]['filename']
-    registry_label[filename] = label
-    registry_md5[filename] = f"md5:{d[label]['md5']}"
-    # pixel-to-pixel flat field
-    label = 'flatpix2pix'
-    filename = d[label][grating]['filename']
-    md5 = d[label][grating]['md5']
-    if (filename is not None) and (md5 is not None):
-        registry_label[filename] = label
-        registry_md5[filename] = f'md5:{md5}'
-    else:
-        raise SystemExit(f'Error: grating {grating} has not yet been defined!')
-    # 2D polynomial transformation from IFU (x_ifu, y_ifu, wavelength) to
-    # Hawaii coordinates (x_hawaii, y_hawaii)
-    label = 'model_ifu2detector'
-    filename = d[label][grating]['filename']
-    md5 = d[label][grating]['md5']
-    if (filename is not None) and (md5 is not None):
-        registry_label[filename] = label
-        registry_md5[filename] = f'md5:{md5}'
-    else:
-        raise SystemExit(f'Error: grating {grating} has not yet been defined!')
-
-    # create a Pooch instance with the previous registry
-    pooch_inst = pooch.create(
-        # use the default cache folder for the operating system
-        path=pooch.os_cache(project="fridadrp"),
-        # base URL for the remote data source
-        base_url=base_url,
-        # specify the files that can be fetched
-        registry=registry_md5
-    )
-
-    # initialize output dictionary
-    faux_dict = {}
-    for item in registry_md5:
-        try:
-            faux = pooch_inst.fetch(item, progressbar=True)
-            label = registry_label[item]
-            faux_dict[label] = faux
-        except BaseException as e:
-            raise SystemExit(e)
-
-    return faux_dict
 
 
 def main(args=None):
@@ -226,10 +131,12 @@ def main(args=None):
     grating = args.grating
     if grating is None:
         raise ValueError(f'You must specify a grating name using --grating <grating name>:\n{FRIDA_VALID_GRATINGS}')
+    grating = grating.upper()
     
     scale = args.scale
     if scale is None:
         raise ValueError(f'You must specify the camera scale using --scale <scale name>:\n{FRIDA_VALID_SPATIAL_SCALES}')
+    scale = scale.upper()
     
     seeing_fwhm_arcsec = args.seeing_fwhm_arcsec * u.arcsec
     if seeing_fwhm_arcsec.value < 0:
