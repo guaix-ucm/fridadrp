@@ -23,6 +23,7 @@ from fridadrp.processing.define_3d_wcs import get_wvparam_from_wcs3d
 from numina.tools.ctext import ctext
 
 from .display_skycalc import display_skycalc
+from .compute_image2d_rss_method1 import compute_image2d_rss_method1
 from .generate_image2d_method0_ifu import generate_image2d_method0_ifu
 from .generate_geometry_for_scene_block import generate_geometry_for_scene_block
 from .generate_image3d_method0_ifu import generate_image3d_method0_ifu
@@ -538,6 +539,19 @@ def ifu_simulator(wcs3d, header_keys,
     # ---------------------------------------------------
     # compute image2d RSS from image in detector, method1
     # ---------------------------------------------------
+    image2d_rss_method1 = compute_image2d_rss_method1(
+        image2d_detector_method0=image2d_detector_method0,
+        naxis1_detector=naxis1_detector,
+        naxis1_ifu=naxis1_ifu,
+        nslices=nslices,
+        dict_ifu2detector=dict_ifu2detector,
+        wv_crpix1=wv_crpix1,
+        wv_crval1=wv_crval1,
+        wv_cdelt1=wv_cdelt1,
+        noparallel_computation=noparallel_computation,
+        verbose=verbose
+    )
+    """
     if verbose:
         print(ctext('\n* Computing image2d RSS (method 1)', fg='green'))
 
@@ -582,6 +596,7 @@ def ifu_simulator(wcs3d, header_keys,
     t1 = time.time()
     if verbose:
         print(f'Delta time: {t1 - t0}')
+    """
 
     save_image2d_rss(
         wcs3d=wcs3d,
