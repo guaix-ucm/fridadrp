@@ -18,10 +18,10 @@ import platform
 import pooch
 import sys
 
-from fridadrp.ifu_simulator.ifu_simulator import ifu_simulator
+from numina.instrument.simulation.ifu.ifu_simulator import ifu_simulator
+from numina.instrument.simulation.ifu.define_3d_wcs import define_3d_wcs
 
 from fridadrp._version import version
-from fridadrp.processing.define_3d_wcs import define_3d_wcs
 from fridadrp.processing.linear_wavelength_calibration_frida import LinearWaveCalFRIDA
 
 # Parameters

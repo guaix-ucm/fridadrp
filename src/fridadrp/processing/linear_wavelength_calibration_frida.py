@@ -14,7 +14,7 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_VALID_GRATINGS
 from fridadrp.core import FRIDA_DEFAULT_WAVELENGTH_UNIT
 
-from .linear_wavelength_calibration import LinearWaveCal
+from numina.instrument.simulation.ifu.linear_wavelength_calibration import LinearWaveCal
 
 
 class LinearWaveCalFRIDA(LinearWaveCal):
