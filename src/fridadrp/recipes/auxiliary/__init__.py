@@ -17,6 +17,7 @@ from numina.core import Result
 from numina.core import Parameter
 from numina.core.requirements import ObservationResultRequirement
 from numina.core.recipes import BaseRecipe
+from numina.core.validator import range_validator
 from numina.instrument.simulation.ifu.compute_image2d_rss_from_detector_method1 import compute_image2d_rss_from_detector_method1
 from numina.instrument.simulation.ifu.compute_image3d_ifu_from_rss_method1 import compute_image3d_ifu_from_rss_method1
 from numina.instrument.simulation.ifu.define_3d_wcs import define_3d_wcs, get_wvparam_from_wcs3d
@@ -67,26 +68,32 @@ class Test2Recipe(BaseRecipe):
         value='TS',
         description='Observation pattern of Target and Sky',
         choices=['TS', 'ST'],
-        optional=False,
     )
 
     nexposures_before_moving = Parameter(
         value=1,
         description='Number of exposures at each T and S position before moving',
-        optional=False,
     )
 
     # Combination method: do not allow 'sum' as combination method in order
     # to avoid confusion with number of counts in resulting image
-    method = Parameter(
-        'mean',
-        description='Combination method',
+    method_target = Parameter(
+        value='mean',
+        description='Combination method for target exposures',
         choices=['mean', 'median', 'sigmaclip'],
-        optional=False,
     )
-    method_kwargs = Parameter(
+    method_target_kwargs = Parameter(
         value=dict(),
-        description='Arguments for combination method',
+        description='Arguments for combination method of target exposures',
+    )
+    method_sky = Parameter(
+        value='median',
+        description='Combination method for sky exposures',
+        choices=['mean', 'median', 'sigmaclip'],
+    )
+    method_sky_kwargs = Parameter(
+        value=dict(),
+        description='Arguments for combination method of sky exposures',
         optional=True,
     )
 
@@ -99,8 +106,10 @@ class Test2Recipe(BaseRecipe):
         frames = rinput.obresult.frames
         basic_pattern = rinput.basic_pattern
         nexposures_before_moving = rinput.nexposures_before_moving
-        method = rinput.method
-        method_kwargs = rinput.method_kwargs
+        method_target = rinput.method_target
+        method_target_kwargs = rinput.method_target_kwargs
+        method_sky = rinput.method_sky
+        method_sky_kwargs = rinput.method_sky_kwargs
 
         # Create the pattern by repeating each character in basic_pattern
         pattern = ''
@@ -115,9 +124,12 @@ class Test2Recipe(BaseRecipe):
             raise ValueError(f'Unexpected mismatch: {pattern_length=} != {nexposures_before_moving * basic_pattern_length=}')
 
         # Check combination method
-        if method != 'sigmaclip':
-            if method_kwargs != {}:
-                raise ValueError(f'Unexpected {method_kwargs=} for {method=}')
+        if method_target != 'sigmaclip':
+            if method_target_kwargs != {}:
+                raise ValueError(f'Unexpected {method_target_kwargs=} for {method_target=}')
+        if method_sky != 'sigmaclip':
+            if method_sky_kwargs != {}:
+                raise ValueError(f'Unexpected {method_sky_kwargs=} for {method_sky=}')
 
         # Check pattern sequence matches number of frames
         nimages = len(frames)
@@ -154,12 +166,14 @@ class Test2Recipe(BaseRecipe):
             raise ValueError(f'Unexpected {itarget+1=} frames. It should be {ntarget=}')
         if isky + 1 != nsky:
             raise ValueError(f'Unexpected {isky+1=} frames. It should be {nsky=}')
-        if method == 'mean':
+        if method_target == 'mean' and method_sky == 'mean':
             result = np.mean(data3d_target, axis=0) - np.mean(data3d_sky, axis=0)
-        elif method == 'median':
+        elif method_target == 'mean' and method_sky == 'median':
+            result = np.mean(data3d_target, axis=0) - np.median(data3d_sky, axis=0)
+        elif method_target == 'median' and method_sky == 'median':
             result = np.median(data3d_target, axis=0) - np.median(data3d_sky, axis=0)
         else:
-            raise ValueError(f'Unexpected {method=}')
+            raise ValueError(f'Unexpected {method_target=} and {method_sky=} combination')
         
         # Prepare output result
         header = list_of[0][0].header
@@ -207,6 +221,7 @@ class Test2Recipe(BaseRecipe):
         )
 
         # Prepare output result
+        # TODO: rethink what information to store in this header
         header = list_of[0][0].header
         hdu_rss = fits.PrimaryHDU(image2d_rss_method1, header)
         reduced_rss = hdu_rss
@@ -222,6 +237,7 @@ class Test2Recipe(BaseRecipe):
             nslices=FRIDA_NSLICES,
             verbose=False
         )
+        # TODO: rethink what information to store in this header
         header = list_of[0][0].header
         hdu_rss = fits.PrimaryHDU(image3d_ifu_method1, header)
         reduced_3d = hdu_rss
