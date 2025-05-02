@@ -7,7 +7,7 @@
 # License-Filename: LICENSE.txt
 #
 
-"""The MEGARA Data Reduction Pipeline"""
+"""The FRIDA Data Reduction Pipeline"""
 
 import logging
 

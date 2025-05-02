@@ -11,6 +11,7 @@ from astropy.coordinates import SkyCoord
 import astropy.io.fits as fits
 import astropy.units as u
 import json
+import logging
 import numpy as np
 
 from numina.core import Result
@@ -59,6 +60,8 @@ class Test1Recipe(BaseRecipe):
 
 class Test2Recipe(BaseRecipe):
     """Subtract sky from target frames"""
+
+    logger = logging.getLogger(__name__)
 
     obresult = ObservationResultRequirement()
 
@@ -115,7 +118,7 @@ class Test2Recipe(BaseRecipe):
         basic_pattern_length = len(basic_pattern)
         for i in range(basic_pattern_length):
             pattern += basic_pattern[i] * nexposures_before_moving
-        print(f'Pattern: {pattern}')
+        self.logger.info(f'Pattern: {pattern}')
 
         # Check pattern length
         pattern_length = len(pattern)
@@ -135,9 +138,9 @@ class Test2Recipe(BaseRecipe):
         nsequences = nimages // pattern_length
         if nsequences * pattern_length != nimages:
             raise ValueError(f'Expected {nsequences * pattern_length=} images, got {nimages=}')
-        print(f'Number of sequences: {nsequences}')
+        self.logger.info(f'Number of sequences: {nsequences}')
         full_pattern = pattern * nsequences
-        print(f'Full pattern: {full_pattern}')
+        self.logger.info(f'Full pattern: {full_pattern}')
 
         # ------------
         # Target - Sky
@@ -145,8 +148,8 @@ class Test2Recipe(BaseRecipe):
         # Perform combination of Target and Sky frames, and compute subtraction between them
         ntarget = full_pattern.count('T')
         nsky = full_pattern.count('S')
-        print(f'Number of target frames: {ntarget}')
-        print(f'Number of sky frames...: {nsky}')
+        self.logger.info(f'Number of target frames: {ntarget}')
+        self.logger.info(f'Number of sky frames...: {nsky}')
         data3d_target = np.zeros(shape=(ntarget, FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), 
                                  dtype=np.float32)
         data3d_sky = np.zeros(shape=(nsky, FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), 
@@ -196,7 +199,7 @@ class Test2Recipe(BaseRecipe):
         faux_dict = define_auxiliary_files(grating=grating, verbose=True)
         dict_ifu2detector = json.loads(open(faux_dict['model_ifu2detector'], mode='rt').read())
         wv_lincal = LinearWaveCalFRIDA(grating=grating)
-        print(f'wv_lincal: {wv_lincal}')
+        self.logger.info(f'wv_lincal: {wv_lincal}')
         wcs3d = define_3d_wcs(
             naxis1_ifu=FRIDA_NAXIS1_IFU,
             naxis2_ifu=FRIDA_NAXIS2_IFU,
