@@ -17,10 +17,9 @@ from numina.core import Result
 from numina.core import Parameter
 from numina.core.requirements import ObservationResultRequirement
 from numina.core.recipes import BaseRecipe
-from numina.core.validator import range_validator
 from numina.instrument.simulation.ifu.compute_image2d_rss_from_detector_method1 import compute_image2d_rss_from_detector_method1
 from numina.instrument.simulation.ifu.compute_image3d_ifu_from_rss_method1 import compute_image3d_ifu_from_rss_method1
-from numina.instrument.simulation.ifu.define_3d_wcs import define_3d_wcs, get_wvparam_from_wcs3d
+from numina.instrument.simulation.ifu.define_3d_wcs import define_3d_wcs
 from numina.util.context import manage_fits
 
 from fridadrp.instrument.define_auxiliary_files import define_auxiliary_files
