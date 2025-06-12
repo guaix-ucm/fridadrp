@@ -41,8 +41,8 @@ def main(args=None):
         description=f"description: simulator of FRIDA IFU images ({version})"
     )
     parser.add_argument("--scene", help="YAML scene file name", type=str)
-    parser.add_argument("--grating", help="Grating name", type=str, choices=FRIDA_VALID_GRATINGS)
-    parser.add_argument("--scale", help="Scale", type=str, choices=FRIDA_VALID_SPATIAL_SCALES)
+    parser.add_argument("--grating", help="Grating name", type=str)
+    parser.add_argument("--scale", help="Scale", type=str)
     parser.add_argument("--ra_teles_deg", help="Telescope central RA (deg)", type=float, default=0.0)
     parser.add_argument("--dec_teles_deg", help="Telescope central DEC (deg)", type=float, default=0.0)
     parser.add_argument("--delta_ra_teles_arcsec", help="Offset in RA (arcsec)", type=float, default=0.0)
@@ -95,8 +95,15 @@ def main(args=None):
 
     if args.scale is None:
         raise ValueError(f'You must specify --scale from\n{FRIDA_VALID_SPATIAL_SCALES}')
+    elif args.scale.upper() not in FRIDA_VALID_SPATIAL_SCALES:
+        raise ValueError(f'Invalid scale: {args.scale}. It must be one of {FRIDA_VALID_SPATIAL_SCALES}')
+    scale = args.scale.upper()
+
     if args.grating is None:
         raise ValueError(f'You must specify --grating from\n{FRIDA_VALID_GRATINGS}')
+    elif args.grating.upper() not in FRIDA_VALID_GRATINGS:
+        raise ValueError(f'Invalid grating: {args.grating}. It must be one of {FRIDA_VALID_GRATINGS}')
+    grating = args.grating.upper()
 
     # keywords that should be included in the FITS header
     header_keys = fits.Header()
@@ -111,8 +118,8 @@ def main(args=None):
     header_keys['PARANGLE'] = (args.parallactic_angle_deg, 'Parallactic angle (degrees)')
     header_keys['INSTRUME'] = ('FRIDA', 'Instrument name')
     header_keys['OBSMODE'] = ('IFS', 'Observation mode' )
-    header_keys['SCALE'] = (f'{args.scale.upper()}', 'Camera scale')
-    header_keys['GRATING'] = (f'{args.grating.upper()}', 'Grating')
+    header_keys['SCALE'] = (f'{scale}', 'Camera scale')
+    header_keys['GRATING'] = (f'{grating}', 'Grating')
     header_keys['HISTORY'] = '-' * 25
     header_keys['HISTORY'] = f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     header_keys['HISTORY'] = '-' * 25
@@ -123,21 +130,11 @@ def main(args=None):
     for arg, value in vars(args).items():
         header_keys['HISTORY'] = f'--{arg} {value}'
 
-    # simplify argument names
+    # simplify additional argument names
     scene = args.scene
     if scene is None:
         raise ValueError(f'Scene file name has not been specified!')
-    
-    grating = args.grating
-    if grating is None:
-        raise ValueError(f'You must specify a grating name using --grating <grating name>:\n{FRIDA_VALID_GRATINGS}')
-    grating = grating.upper()
-    
-    scale = args.scale
-    if scale is None:
-        raise ValueError(f'You must specify the camera scale using --scale <scale name>:\n{FRIDA_VALID_SPATIAL_SCALES}')
-    scale = scale.upper()
-    
+        
     seeing_fwhm_arcsec = args.seeing_fwhm_arcsec * u.arcsec
     if seeing_fwhm_arcsec.value < 0:
         raise ValueError(f'Unexpected {seeing_fwhm_arcsec=}. This number must be >= 0.')
