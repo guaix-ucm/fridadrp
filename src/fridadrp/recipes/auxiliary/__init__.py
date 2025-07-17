@@ -18,8 +18,10 @@ from numina.core import Result
 from numina.core import Parameter
 from numina.core.requirements import ObservationResultRequirement
 from numina.core.recipes import BaseRecipe
-from numina.instrument.simulation.ifu.compute_image2d_rss_from_detector_method1 import compute_image2d_rss_from_detector_method1
-from numina.instrument.simulation.ifu.compute_image3d_ifu_from_rss_method1 import compute_image3d_ifu_from_rss_method1
+from numina.instrument.simulation.ifu.compute_image2d_rss_from_detector_method1 \
+    import compute_image2d_rss_from_detector_method1
+from numina.instrument.simulation.ifu.compute_image3d_ifu_from_rss_method1 \
+    import compute_image3d_ifu_from_rss_method1
 from numina.instrument.simulation.ifu.define_3d_wcs import define_3d_wcs
 from numina.util.context import manage_fits
 
@@ -123,7 +125,8 @@ class Test2Recipe(BaseRecipe):
         # Check pattern length
         pattern_length = len(pattern)
         if pattern_length != nexposures_before_moving * basic_pattern_length:
-            raise ValueError(f'Unexpected mismatch: {pattern_length=} != {nexposures_before_moving * basic_pattern_length=}')
+            msg = f'Unexpected mismatch: {pattern_length=} != {nexposures_before_moving * basic_pattern_length=}'
+            raise ValueError(msg)
 
         # Check combination method
         if method_target != 'sigmaclip':
@@ -150,19 +153,19 @@ class Test2Recipe(BaseRecipe):
         nsky = full_pattern.count('S')
         self.logger.info(f'Number of target frames: {ntarget}')
         self.logger.info(f'Number of sky frames...: {nsky}')
-        data3d_target = np.zeros(shape=(ntarget, FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), 
+        data3d_target = np.zeros(shape=(ntarget, FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value),
                                  dtype=np.float32)
-        data3d_sky = np.zeros(shape=(nsky, FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), 
+        data3d_sky = np.zeros(shape=(nsky, FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value),
                               dtype=np.float32)
         with manage_fits(frames) as list_of:
             itarget = -1
             isky = -1
             for i in range(nimages):
                 if full_pattern[i] == 'T':
-                    itarget +=1
+                    itarget += 1
                     data3d_target[itarget, :, :] = list_of[i][0].data
                 elif full_pattern[i] == 'S':
-                    isky +=1
+                    isky += 1
                     data3d_sky[isky, :, :] = list_of[i][0].data
         if itarget + 1 != ntarget:
             raise ValueError(f'Unexpected {itarget+1=} frames. It should be {ntarget=}')
@@ -176,7 +179,7 @@ class Test2Recipe(BaseRecipe):
             result = np.median(data3d_target, axis=0) - np.median(data3d_sky, axis=0)
         else:
             raise ValueError(f'Unexpected {method_target=} and {method_sky=} combination')
-        
+
         # Prepare output result
         header = list_of[0][0].header
         hdu_subtraction = fits.PrimaryHDU(result, header)
@@ -209,7 +212,7 @@ class Test2Recipe(BaseRecipe):
             instrument_pa=instrument_pa,
             verbose=False
         )
-        
+
         # Generate 2D RSS
         image2d_rss_method1 = compute_image2d_rss_from_detector_method1(
             image2d_detector_method0=result,
