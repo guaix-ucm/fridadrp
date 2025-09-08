@@ -41,6 +41,10 @@ def main(args=None):
         description=f"description: simulator of FRIDA IFU images ({version})"
     )
     parser.add_argument("--scene", help="YAML scene file name", type=str)
+    parser.add_argument("--flux_factor",
+                        help="Multiplicative factor to be applied to the number"
+                        " of photons defined in the scene file (default=1.0)",
+                        type=float, default=1.0)
     parser.add_argument("--grating", help="Grating name", type=str)
     parser.add_argument("--scale", help="Scale", type=str)
     parser.add_argument("--ra_teles_deg", help="Telescope central RA (deg)", type=float, default=0.0)
@@ -61,7 +65,7 @@ def main(args=None):
     parser.add_argument("--flatpix2pix", help="Pixel-to-pixel flat field", type=str, default="default",
                         choices=["default", "none"])
     parser.add_argument("--spectral_blurring_pixel",
-                        help="Spectral blurring when converting the original 3D data cube to the original 2D RSS " + \
+                        help="Spectral blurring when converting the original 3D data cube to the original 2D RSS " +
                              "(in pixel units)",
                         type=float, default=1.0)
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=None)
@@ -108,16 +112,16 @@ def main(args=None):
     # keywords that should be included in the FITS header
     header_keys = fits.Header()
     header_keys['OBSERVAT'] = ('ORM', 'Name of the observatory (IRAF style)')
-    header_keys['TELESCOP'] = ('GTC','Telescope name')
+    header_keys['TELESCOP'] = ('GTC', 'Telescope name')
     header_keys['ORIGIN'] = ('fridadrp-ifu_simulator', 'FITS file originator')
     header_keys['LATITUDE'] = ('+28:45:43.2', 'Telescope latitude (degrees), +28:45:43.2')
     header_keys['LONGITUD'] = ('+17:52:39.5', 'Telescope longitude (degrees), +17:52:39.5')
     header_keys['HEIGHT'] = (2348, 'Telescope height above sea level (m)')
     header_keys['AIRMASS'] = (args.airmass, 'Airmass')
-    header_keys['IPA'] =  (args.instrument_pa_deg, 'Instrument position angle (degrees)')
+    header_keys['IPA'] = (args.instrument_pa_deg, 'Instrument position angle (degrees)')
     header_keys['PARANGLE'] = (args.parallactic_angle_deg, 'Parallactic angle (degrees)')
     header_keys['INSTRUME'] = ('FRIDA', 'Instrument name')
-    header_keys['OBSMODE'] = ('IFS', 'Observation mode' )
+    header_keys['OBSMODE'] = ('IFS', 'Observation mode')
     header_keys['SCALE'] = (f'{scale}', 'Camera scale')
     header_keys['GRATING'] = (f'{grating}', 'Grating')
     header_keys['HISTORY'] = '-' * 25
@@ -125,7 +129,7 @@ def main(args=None):
     header_keys['HISTORY'] = '-' * 25
     header_keys['HISTORY'] = f'Node: {platform.uname().node}'
     header_keys['HISTORY'] = f'Python: {sys.executable}'
-    header_keys['HISTORY'] = f'$ fridadrp-ifu_simulator'
+    header_keys['HISTORY'] = '$ fridadrp-ifu_simulator'
     header_keys['HISTORY'] = f'(version: {version})'
     for arg, value in vars(args).items():
         header_keys['HISTORY'] = f'--{arg} {value}'
@@ -133,60 +137,64 @@ def main(args=None):
     # simplify additional argument names
     scene = args.scene
     if scene is None:
-        raise ValueError(f'Scene file name has not been specified!')
-        
+        raise ValueError('Scene file name has not been specified!')
+
+    flux_factor = args.flux_factor
+    if flux_factor <= 0:
+        raise ValueError(f'Unexpected {flux_factor=}. This number must be > 0.')
+
     seeing_fwhm_arcsec = args.seeing_fwhm_arcsec * u.arcsec
     if seeing_fwhm_arcsec.value < 0:
         raise ValueError(f'Unexpected {seeing_fwhm_arcsec=}. This number must be >= 0.')
-    
+
     seeing_psf = args.seeing_psf
-    
+
     airmass = args.airmass
     if airmass < 1.0:
         raise ValueError(f'Unexpected {airmass=}. This number must be greater than or equal to 1.0')
-    
+
     parallactic_angle = args.parallactic_angle_deg * u.deg
     if abs(parallactic_angle.value) > 90:
         raise ValueError(f'Unexpected {parallactic_angle.value}. This number must be within the range [-90, +90]')
     if (parallactic_angle.value != 0) and (airmass == 1):
         raise ValueError(f'{parallactic_angle=} has no meaning when {airmass=}')
-    
+
     noversampling_whitelight = args.noversampling_whitelight
     if noversampling_whitelight < 1:
         raise ValueError(f'Unexpected {noversampling_whitelight=} (must be > 1)')
-    
+
     atmosphere_transmission = args.atmosphere_transmission
-    
+
     bias = args.bias
     if bias < 0:
         raise ValueError(f'Invalid bias value: {bias}. It must be >= 0')
     bias *= u.adu
-    
+
     rnoise = args.rnoise
     if rnoise < 0:
         raise ValueError(f'Invalid readout noise value: {rnoise}')
     rnoise *= u.adu
-    
+
     # avoid negative values in the output
     if bias.value < 10*rnoise.value:
         raise ValueError(f'Invalid {bias=} value. It must be >= 10*{rnoise=} to avoid negative values')
-    
+
     flatpix2pix = args.flatpix2pix
-    
+
     spectral_blurring_pixel = args.spectral_blurring_pixel * u.pix
     if spectral_blurring_pixel.value < 0:
         raise ValueError(f'Invalid {spectral_blurring_pixel=}')
-    
+
     prefix_intermediate_fits = args.prefix_intermediate_FITS
-    
+
     seed = args.seed
-    
+
     noparallel_computation = args.noparallel
-    
+
     stop_after_ifu_3D_method0 = args.stop_after_ifu_3D_method0
-    
+
     verbose = args.verbose
-    
+
     plots = args.plots
 
     # define auxiliary files
@@ -250,6 +258,7 @@ def main(args=None):
         nslices=FRIDA_NSLICES,
         noversampling_whitelight=noversampling_whitelight,
         scene_fname=scene,
+        flux_factor=flux_factor,
         seeing_fwhm_arcsec=seeing_fwhm_arcsec,
         seeing_psf=seeing_psf,
         instrument_pa=instrument_pa,
