@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Universidad Complutense de Madrid
+# Copyright 2025-2026 Universidad Complutense de Madrid
 #
 # This file is part of FRIDA DRP
 #
@@ -8,18 +8,19 @@
 #
 
 import json
+import logging
 import pooch
 
 
-def define_auxiliary_files(grating, verbose):
+def define_auxiliary_files(grating, logger):
     """"Define auxiliary files for requested configuration
 
     Parameters
     ----------
     grating : str
         Grating name.
-    verbose : bool
-        If True, display/plot additional information.
+    logger : logging.Logger
+        Logger for logging messages.
 
     Returns
     -------
@@ -33,6 +34,10 @@ def define_auxiliary_files(grating, verbose):
 
     """
 
+    # initialize logger
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
     # retrieve configuration file
     base_url = 'https://guaix.fis.ucm.es/~ncl/fridadrp_simulator_data'
     # note: compute md5 hash from terminal using:
@@ -45,8 +50,8 @@ def define_auxiliary_files(grating, verbose):
         progressbar=True
     )
     dconf = json.loads(open(fconf, mode='rt').read())
-    if verbose:
-        print(f"Configuration file uuid: {dconf['uuid']}")
+    if logger is not None:
+        logger.debug(f"Configuration file uuid: {dconf['uuid']}")
 
     # generate registry for all the auxiliary files to be used by Pooch
     d = dconf['auxfiles']

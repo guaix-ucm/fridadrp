@@ -12,14 +12,17 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 import astropy.units as u
 from datetime import datetime
+import logging
 import numpy as np
+from pathlib import Path
 import platform
-from rich import print
+from rich.logging import RichHandler
 from rich_argparse import RichHelpFormatter
 import sys
 
 from numina.instrument.simulation.ifu.ifu_simulator import ifu_simulator
 from numina.instrument.simulation.ifu.define_3d_wcs import define_3d_wcs
+from numina.user.console import NuminaConsole
 
 from fridadrp._version import version
 from fridadrp.instrument.define_auxiliary_files import define_auxiliary_files
@@ -37,6 +40,8 @@ from fridadrp.core import FRIDA_SPATIAL_SCALE
 
 
 def main(args=None):
+
+    datetime_ini = datetime.now()
 
     # parse command-line options
     parser = argparse.ArgumentParser(
@@ -77,8 +82,15 @@ def main(args=None):
                         default="test")
     parser.add_argument("--stop_after_ifu_3D_method0", help="Stop after computing ifu_3D_method0 image",
                         action="store_true")
-    parser.add_argument("-v", "--verbose", help="increase program verbosity", action="store_true")
     parser.add_argument("--plots", help="Plot intermediate results", action="store_true")
+    parser.add_argument(
+        "--log-level",
+        help="Set the logging level",
+        type=str,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+    )
+    parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
     parser.add_argument("--version", help="Display version", action="store_true")
     args = parser.parse_args(args=args)
@@ -87,18 +99,35 @@ def main(args=None):
         parser.print_usage()
         raise SystemExit()
 
+    # Configure rich console
+    console = NuminaConsole(record=args.record)
+
     if args.version:
-        print(version)
+        console.print(version)
         raise SystemExit()
 
-    if args.verbose:
-        for arg, value in vars(args).items():
-            print(f'--{arg} {value}')
-
     if args.echo:
-        print('\033[1m\033[31m% ' + ' '.join(sys.argv) + '\033[0m\n')
+        console.print(f"[bright_red]Executing:\nc{' '.join(sys.argv)}[/bright_red]\n", end="")
 
-    print(f"Welcome to fridadrp-ifu_simulator\nversion {version}\n")
+    # Configure logging
+    if args.log_level in ["DEBUG", "WARNING", "ERROR", "CRITICAL"]:
+        format_log = "%(name)s %(levelname)s %(message)s"
+        handlers = [RichHandler(console=console, show_time=False, markup=True)]
+    else:
+        format_log = "%(message)s"
+        handlers = [RichHandler(console=console, show_time=False, markup=True, show_path=False, show_level=False)]
+    logging.basicConfig(level=args.log_level, format=format_log, handlers=handlers)
+    logging.getLogger("matplotlib").setLevel(logging.ERROR)  # Suppress matplotlib debug logs
+
+    # Welcome message
+    console.rule(f"[bold magenta]Welcome to fridadrp-ifu_simulator[/bold magenta]")
+
+    # Display version info
+    logger = logging.getLogger(__name__)
+    logger.info(f"Using {__name__} version {version}")
+
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(f"Command line arguments: {args}")
 
     if args.scale is None:
         raise ValueError(f'You must specify --scale from\n{FRIDA_VALID_SPATIAL_SCALES}')
@@ -196,12 +225,10 @@ def main(args=None):
 
     stop_after_ifu_3D_method0 = args.stop_after_ifu_3D_method0
 
-    verbose = args.verbose
-
     plots = args.plots
 
     # define auxiliary files
-    faux_dict = define_auxiliary_files(grating, verbose=verbose)
+    faux_dict = define_auxiliary_files(grating, logger=logger)
 
     # World Coordinate System of the data cube
     ra_teles_deg = args.ra_teles_deg
@@ -232,8 +259,7 @@ def main(args=None):
 
     # linear wavelength calibration
     wv_lincal = LinearWaveCalFRIDA(grating=grating)
-    if verbose:
-        print(f'\n{wv_lincal}')
+    logger.debug(f'\n{wv_lincal}')
 
     # instrument Position Angle
     instrument_pa = args.instrument_pa_deg * u.deg
@@ -247,7 +273,7 @@ def main(args=None):
         spatial_scale=FRIDA_SPATIAL_SCALE[scale],
         wv_lincal=wv_lincal,
         instrument_pa=instrument_pa,
-        verbose=verbose
+        logger=logger
     )
 
     # initialize random number generator with provided seed
@@ -277,13 +303,25 @@ def main(args=None):
         noparallel_computation=noparallel_computation,
         prefix_intermediate_fits=prefix_intermediate_fits,
         stop_after_ifu_3D_method0=stop_after_ifu_3D_method0,
-        verbose=verbose,
+        logger=logger,
         instname='FRIDA',
         subtitle=f'scale: {scale}, grating: {grating}',
         plots=plots
     )
 
-    print('Program stopped')
+    datetime_end = datetime.now()
+    time_elapsed = datetime_end - datetime_ini
+    logger.info("Total time elapsed: %s", str(time_elapsed))
+
+    # Goodbye message
+    console.rule("[bold magenta] Goodbye! [/bold magenta]")
+
+    # Save console log if recording is enabled
+    if args.record:
+        log_filename = "terminal_output.txt"
+        with open(log_filename, "wt") as f:
+            f.write(console.export_text(styles=True))
+        logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
 
 
 if __name__ == "__main__":
