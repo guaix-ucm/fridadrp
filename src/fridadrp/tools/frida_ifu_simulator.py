@@ -1,5 +1,5 @@
 #
-# Copyright 2024 Universidad Complutense de Madrid
+# Copyright 2024-2026 Universidad Complutense de Madrid
 #
 # This file is part of FRIDA DRP
 #
@@ -14,6 +14,8 @@ import astropy.units as u
 from datetime import datetime
 import numpy as np
 import platform
+from rich import print
+from rich_argparse import RichHelpFormatter
 import sys
 
 from numina.instrument.simulation.ifu.ifu_simulator import ifu_simulator
@@ -38,7 +40,8 @@ def main(args=None):
 
     # parse command-line options
     parser = argparse.ArgumentParser(
-        description=f"description: simulator of FRIDA IFU images ({version})"
+        description=f"description: simulator of FRIDA IFU images ({version})",
+        formatter_class=RichHelpFormatter
     )
     parser.add_argument("--scene", help="YAML scene file name", type=str)
     parser.add_argument("--flux_factor",
