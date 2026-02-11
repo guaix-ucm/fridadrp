@@ -211,7 +211,7 @@ def main(args=None):
 
     # avoid negative values in the output
     if bias.value < 10*rnoise.value:
-        raise ValueError(f'Invalid {bias=} value. It must be >= 10*{rnoise=} to avoid negative values')
+        raise ValueError(f'Invalid {bias=} value. It must be >= 10*{rnoise=} = {10*rnoise.value} to avoid negative values')
 
     flatpix2pix = args.flatpix2pix
 
