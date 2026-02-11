@@ -14,6 +14,7 @@ import astropy.units as u
 from datetime import datetime
 import logging
 import numpy as np
+import os
 from pathlib import Path
 import platform
 from rich.logging import RichHandler
@@ -90,6 +91,7 @@ def main(args=None):
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
     )
+    parser.add_argument("--output_dir", help="Output directory", type=str, default=".")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
     parser.add_argument("--version", help="Display version", action="store_true")
@@ -279,6 +281,13 @@ def main(args=None):
     # initialize random number generator with provided seed
     rng = np.random.default_rng(seed)
 
+    # if output directory does not exist, create it
+    if args.output_dir != ".":
+        if not os.path.isdir(args.output_dir):
+            os.makedirs(args.output_dir)
+    logger.info("Output directory: %s", args.output_dir)
+
+    # start the IFU simulation
     ifu_simulator(
         wcs3d=wcs3d,
         header_keys=header_keys,
@@ -306,7 +315,8 @@ def main(args=None):
         logger=logger,
         instname='FRIDA',
         subtitle=f'scale: {scale}, grating: {grating}',
-        plots=plots
+        plots=plots,
+        output_dir=args.output_dir
     )
 
     datetime_end = datetime.now()
@@ -319,7 +329,7 @@ def main(args=None):
     # Save console log if recording is enabled
     if args.record:
         log_filename = "terminal_output.txt"
-        with open(log_filename, "wt") as f:
+        with open(Path(args.output_dir) / log_filename, "wt") as f:
             f.write(console.export_text(styles=True))
         logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
 
