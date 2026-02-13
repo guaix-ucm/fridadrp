@@ -293,6 +293,7 @@ def main(args=None):
         if not os.path.isdir(args.output_dir):
             os.makedirs(args.output_dir)
     logger.info("Output directory: %s", args.output_dir)
+    logger.info("Scene file: %s", scene)
 
     # start the IFU simulation
     ifu_simulator(
