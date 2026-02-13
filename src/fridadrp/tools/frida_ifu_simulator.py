@@ -321,6 +321,7 @@ def main(args=None):
         prefix_intermediate_fits=prefix_intermediate_fits,
         stop_after_ifu_3D_method0=stop_after_ifu_3D_method0,
         logger=logger,
+        console=console,
         instname="FRIDA",
         subtitle=f"scale: {scale}, grating: {grating}",
         plots=plots,
