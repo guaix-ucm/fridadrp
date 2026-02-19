@@ -43,15 +43,19 @@ def define_auxiliary_files(grating, logger):
     # note: compute md5 hash from terminal using:
     # linux $ md5sum <filename>
     # macOS $ md5 <filename>
+    configuration_FRIDA_IFU_file = 'configuration_FRIDA_IFU_simulator.json'
+    logger.debug(f"Retrieving configuration file from {base_url}/{configuration_FRIDA_IFU_file}")
+    # note: the configuration file contains the list of auxiliary files to be
+    # used by the FRIDA IFU simulator, together with their md5 hash for integrity check
+    logger.debug(f"path for caching auxiliary files: {pooch.os_cache(project='fridadrp')}")
     fconf = pooch.retrieve(
-        f'{base_url}/configuration_FRIDA_IFU_simulator.json',
+        f'{base_url}/{configuration_FRIDA_IFU_file}',
         known_hash='md5:981684f1920fac9835a6067782b1b531',
         path=pooch.os_cache(project="fridadrp"),
         progressbar=True
     )
     dconf = json.loads(open(fconf, mode='rt').read())
-    if logger is not None:
-        logger.debug(f"Configuration file uuid: {dconf['uuid']}")
+    logger.debug(f"Configuration file uuid: {dconf['uuid']}")
 
     # generate registry for all the auxiliary files to be used by Pooch
     d = dconf['auxfiles']
@@ -101,6 +105,7 @@ def define_auxiliary_files(grating, logger):
     faux_dict = {}
     for item in registry_md5:
         try:
+            logger.debug(f"Fetching auxiliary file {item} from {base_url}...")
             faux = pooch_inst.fetch(item, progressbar=True)
             label = registry_label[item]
             faux_dict[label] = faux
