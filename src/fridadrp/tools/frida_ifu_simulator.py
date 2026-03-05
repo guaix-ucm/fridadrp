@@ -93,7 +93,7 @@ def main(args=None):
         choices=[-32, 16],
     )
     parser.add_argument("--seed", help="Seed for random number generator", type=int, default=None)
-    parser.add_argument("--parallel", help="Use parallel processing", action="store_true")
+    parser.add_argument("--ncores", help="Number of cores to use for parallel processing", type=int, default=1)
     parser.add_argument(
         "--prefix_intermediate_FITS", help="Prefix for intermediate FITS files", type=str, default="test"
     )
@@ -236,7 +236,7 @@ def main(args=None):
 
     seed = args.seed
 
-    parallel_computation = args.parallel
+    ncores = args.ncores
 
     stop_after_ifu_3D_method0 = args.stop_after_ifu_3D_method0
 
@@ -318,7 +318,7 @@ def main(args=None):
         bitpix_detector=args.bitpix_detector,
         faux_dict=faux_dict,
         rng=rng,
-        parallel_computation=parallel_computation,
+        ncores=ncores,
         prefix_intermediate_fits=prefix_intermediate_fits,
         stop_after_ifu_3D_method0=stop_after_ifu_3D_method0,
         logger=logger,
