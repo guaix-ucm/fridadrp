@@ -15,6 +15,10 @@ import numpy as np
 # (otherwise integers are converted to float by default)
 FRIDA_NAXIS1_HAWAII = Quantity(value=2048, unit=u.pix, dtype=int)  # dispersion direction
 FRIDA_NAXIS2_HAWAII = Quantity(value=2048, unit=u.pix, dtype=int)  # spatial direction (slices)
+FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL = Quantity(value=5, unit=u.pix, dtype=int)  # first useful pixel in the dispersion direction
+FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL = Quantity(value=2044, unit=u.pix, dtype=int)  # last useful pixel in the dispersion direction
+FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL = Quantity(value=5, unit=u.pix, dtype=int)  # first useful pixel in the spatial direction
+FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL = Quantity(value=2044, unit=u.pix, dtype=int)  # last useful pixel in the spatial direction
 
 FRIDA_NAXIS1_IFU = Quantity(value=64, unit=u.pix, dtype=int)  # parallel to the slices
 FRIDA_NAXIS2_IFU = Quantity(value=60, unit=u.pix, dtype=int)  # perpendicular to the slices
