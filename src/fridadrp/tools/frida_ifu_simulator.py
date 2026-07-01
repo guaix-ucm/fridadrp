@@ -126,7 +126,7 @@ def main(args=None):
         raise SystemExit()
 
     if args.echo:
-        console.print(f"[bright_red]Executing:\nc{' '.join(sys.argv)}[/bright_red]\n", end="")
+        console.print(f"[bright_red]Executing:\n{' '.join(sys.argv)}[/bright_red]\n", end="")
 
     # Configure logging
     if args.log_level in ["DEBUG", "WARNING", "ERROR", "CRITICAL"]:
