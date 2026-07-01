@@ -26,7 +26,6 @@ import sys
 import teareduce as tea
 from tqdm import tqdm
 
-from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, find_peaks_spectrum
 from numina.user.console import NuminaConsole
 
@@ -648,6 +647,7 @@ def main(args=None):
         hdu2 = fits.ImageHDU(data=array_right_border, header=header2)
         primary_header = fits.Header()
         primary_header["FLATFILE"] = Path(args.flatfile).name
+        primary_header["KEYCODE"] = "FIND_SLICE_BOUNDARIES_FROM_FLAT"
         primary_hdu = fits.PrimaryHDU(header=primary_header)
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2])
         hdul.writeto(args.output, overwrite=True)
