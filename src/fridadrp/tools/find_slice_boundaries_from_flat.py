@@ -28,6 +28,7 @@ from tqdm import tqdm
 import types
 
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, find_peaks_spectrum
+from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
 from numina.tools.input_number import input_number
 from numina.user.console import NuminaConsole
 
@@ -135,7 +136,7 @@ def find_slice_boundaries_from_flat(
         mode="nearest",
     )
     if plots:
-        fig, axarr = plt.subplots(nrows=2, ncols=2, figsize=(15, 12), sharex=True, sharey=True)
+        fig, axarr = plt.subplots(nrows=2, ncols=2, figsize=(12, 10), sharex=True, sharey=True)
         axarr = axarr.flatten()
         vmin, vmax = ZScaleInterval().get_limits(flat_data_filtered)
         tea.imshow(
@@ -442,7 +443,7 @@ def find_slice_boundaries_from_flat(
                 list_right_border = np.full(FRIDA_NSLICES, np.nan, dtype=float)
                 list_ymin_right_border = np.full(FRIDA_NSLICES, np.nan, dtype=float)
                 if plots_extra:
-                    fig, axrr = plt.subplots(nrows=6, ncols=5, figsize=(15, 12))
+                    fig, axrr = plt.subplots(nrows=6, ncols=5, figsize=(15, 10))
                     axarr = axrr.flatten()
                     axarr[-1].axis("off")  # Turn off the last axis if there are 30 slices
                 for igap in range(FRIDA_NSLICES - 1):
@@ -586,7 +587,7 @@ def find_slice_boundaries_from_flat(
                     plt.show()
                 # Display the final slice boundaries for this column
                 if plots_extra:
-                    fig, ax = plt.subplots(nrows=6, ncols=5, figsize=(15, 12))
+                    fig, ax = plt.subplots(nrows=6, ncols=5, figsize=(15, 10))
                     axarr = ax.flatten()
                     xdum = np.arange(FRIDA_NAXIS2_HAWAII.value)
                     for islice in range(FRIDA_NSLICES):
@@ -705,15 +706,15 @@ def main(args=None):
     # for that column and not saved to a FITS file.
     if args.column is None:
         header1 = fits.Header()
-        header1["EXTNAME"] = "LEFT"
+        header1["EXTNAME"] = "L-BORDER"
         hdu1 = fits.ImageHDU(data=array_left_border, header=header1)
         header2 = fits.Header()
-        header2["EXTNAME"] = "RIGHT"
+        header2["EXTNAME"] = "R-BORDER"
         hdu2 = fits.ImageHDU(data=array_right_border, header=header2)
-        primary_header = fits.Header()
-        primary_header["FLATFILE"] = Path(args.flatfile).name
-        primary_header["KEYCODE"] = "FIND_SLICE_BOUNDARIES_FROM_FLAT"
-        primary_hdu = fits.PrimaryHDU(header=primary_header)
+        primary_hdu = fits.PrimaryHDU()
+        primary_hdu.header["FLATFILE"] = Path(args.flatfile).name
+        primary_hdu.header["KEYCODE"] = "FIND_SLICE_BOUNDARIES_FROM_FLAT"
+        add_script_info_to_fits_history(primary_hdu.header, args)
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2])
         hdul.writeto(args.output, overwrite=True)
         logger.info("Slice boundaries saved to %s", args.output)
