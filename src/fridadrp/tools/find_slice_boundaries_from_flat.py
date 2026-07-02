@@ -25,8 +25,10 @@ from scipy.signal import savgol_filter
 import sys
 import teareduce as tea
 from tqdm import tqdm
+import types
 
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, find_peaks_spectrum
+from numina.tools.input_number import input_number
 from numina.user.console import NuminaConsole
 
 from fridadrp._version import version
@@ -110,33 +112,6 @@ def find_slice_boundaries_from_flat(
         else:
             logger.debug("No NaN values found in flat data. Using median_filter directly.")
             flat_data_filtered = median_filter(flat_data, size=(1, median_filter_xsize), mode="nearest")
-        if plots:
-            fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(15, 10), sharex=True, sharey=True)
-            vmin, vmax = ZScaleInterval().get_limits(flat_data_filtered)
-            tea.imshow(
-                fig,
-                ax1,
-                data=flat_data,
-                vmin=vmin,
-                vmax=vmax,
-                cmap="viridis",
-                aspect="auto",
-                ds9mode=True,
-                title=f"{Path(flatfile).name}\nOriginal Flat Data",
-            )
-            tea.imshow(
-                fig,
-                ax2,
-                data=flat_data_filtered,
-                vmin=vmin,
-                vmax=vmax,
-                cmap="viridis",
-                aspect="auto",
-                ds9mode=True,
-                title=f"{Path(flatfile).name}\nMedian Filtered Flat Data",
-            )
-            plt.tight_layout()
-            plt.show()
     else:
         logger.warning(f"Median filter size {median_filter_xsize} is less than 3. Skipping median filtering.")
         flat_data_filtered = flat_data.copy()
@@ -160,33 +135,123 @@ def find_slice_boundaries_from_flat(
         mode="nearest",
     )
     if plots:
-        fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(15, 10), sharex=True, sharey=True)
+        fig, axarr = plt.subplots(nrows=2, ncols=2, figsize=(15, 12), sharex=True, sharey=True)
+        axarr = axarr.flatten()
+        vmin, vmax = ZScaleInterval().get_limits(flat_data_filtered)
+        tea.imshow(
+            fig,
+            axarr[0],
+            data=flat_data,
+            vmin=vmin,
+            vmax=vmax,
+            cmap="viridis",
+            aspect="equal",
+            ds9mode=True,
+            title=f"{Path(flatfile).name}\nOriginal Flat Data",
+        )
+        tea.imshow(
+            fig,
+            axarr[1],
+            data=flat_data_filtered,
+            vmin=vmin,
+            vmax=vmax,
+            cmap="viridis",
+            aspect="equal",
+            ds9mode=True,
+            title=f"{Path(flatfile).name}\nMedian Filtered Flat Data",
+        )
         vmin, vmax = ZScaleInterval().get_limits(flat_data_savgol_deriv1)
         tea.imshow(
             fig,
-            ax1,
+            axarr[2],
             data=flat_data_savgol_deriv1,
             vmin=vmin,
             vmax=vmax,
             cmap="viridis",
-            aspect="auto",
+            aspect="equal",
             ds9mode=True,
             title=f"{Path(flatfile).name}\nSavitzky-Golay First Derivative Filtered Flat Data",
         )
         vmin, vmax = ZScaleInterval().get_limits(flat_data_savgol_deriv2)
         tea.imshow(
             fig,
-            ax2,
+            axarr[3],
             data=flat_data_savgol_deriv2,
             vmin=vmin,
             vmax=vmax,
             cmap="viridis",
-            aspect="auto",
+            aspect="equal",
             ds9mode=True,
             title=f"{Path(flatfile).name}\nSavitzky-Golay Second Derivative Filtered Flat Data",
         )
-        plt.tight_layout()
-        plt.show()
+        def on_key(event):
+            if event.key == "?":
+                logger.info("-" * 79)
+                logger.info("'?': show this help message")
+                logger.info("'a': toggle imshow aspect='equal' / aspect='auto'")
+                logger.info("'v': set vmin and vmax manually")
+                logger.info("',': set vmin and vmax to min and max of the zoomed region")
+                logger.info("'/': set vmin and vmax using zscale of the zoomed region")
+                logger.info("'q': quit")
+                logger.info("-" * 79)
+            elif event.key == "a":
+                for iax, ax in enumerate(axarr):
+                    if ax.get_aspect() in ["equal", 1.0]:
+                        if iax == 0:
+                            logger.info("Setting aspect to 'auto' for all axes.")
+                        ax.set_aspect("auto")
+                    else:
+                        if iax == 0:
+                            logger.info("Setting aspect to 'equal' for all axes.")
+                        ax.set_aspect("equal")
+                fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
+                fig.tight_layout()  # apply new tight_layout adjustments
+                fig.canvas.draw()
+            elif event.key in ["v", ",", "/"]:
+                if event.inaxes in axarr:
+                    if event.inaxes == axarr[0]:
+                        data = flat_data
+                    elif event.inaxes == axarr[1]:
+                        data = flat_data_filtered
+                    elif event.inaxes == axarr[2]:
+                        data = flat_data_savgol_deriv1
+                    else:
+                        data = flat_data_savgol_deriv2
+                    if event.key == "v":
+                        current_vmin, current_vmax = event.inaxes.images[0].get_clim()
+                        vmin = input_number(expected_type='float', prompt="Enter vmin: ", default=current_vmin)
+                        vmax = input_number(expected_type='float', prompt="Enter vmax: ", default=current_vmax)
+                    else:
+                        xlim = event.inaxes.get_xlim()
+                        ylim = event.inaxes.get_ylim()
+                        x1, x2 = int(xlim[0]), int(xlim[1])
+                        y1, y2 = int(ylim[0]), int(ylim[1])
+                        x1 = max(0, min(x1, FRIDA_NAXIS1_HAWAII.value - 1))
+                        x2 = max(0, min(x2, FRIDA_NAXIS1_HAWAII.value - 1))
+                        y1 = max(0, min(y1, FRIDA_NAXIS2_HAWAII.value - 1))
+                        y2 = max(0, min(y2, FRIDA_NAXIS2_HAWAII.value - 1))
+                        if event.key == ",":
+                            vmin = np.nanmin(data[y1:y2 + 1, x1:x2 + 1])
+                            vmax = np.nanmax(data[y1:y2 + 1, x1:x2 + 1])
+                        else:
+                            vmin, vmax = ZScaleInterval().get_limits(data[y1:y2 + 1, x1:x2 + 1])
+                    event.inaxes.images[0].set_clim(vmin, vmax)
+                    fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
+                    fig.tight_layout()  # apply new tight_layout adjustments
+                    fig.canvas.draw()
+            elif event.key == "q":
+                plt.close(fig)
+        on_key(event=types.SimpleNamespace(key="?"))  # Show help message on startup
+        fig.canvas.mpl_connect("key_press_event", on_key)
+        fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
+        fig.tight_layout()  # apply new tight_layout adjustments
+        # instead of plt.show(), use a loop to keep the figure open until closed by the user
+        # (otherwise, after using input_number() in the on_key function, the matplotlib event
+        # loop is not properly restored and the execution of the code continues as if the
+        # figure was closed, which is not the case)
+        while plt.fignum_exists(fig.number):
+            plt.pause(0.1)
+        ## plt.show()
 
     # Define arrays to store slice boundaries
     array_left_border = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
