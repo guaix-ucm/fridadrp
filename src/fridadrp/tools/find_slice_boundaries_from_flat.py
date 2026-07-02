@@ -14,6 +14,7 @@ from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 from datetime import datetime
 import logging
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial import Polynomial
@@ -146,7 +147,7 @@ def find_slice_boundaries_from_flat(
             vmin=vmin,
             vmax=vmax,
             cmap="viridis",
-            aspect="equal",
+            aspect="auto",
             ds9mode=True,
             title=f"{Path(flatfile).name}\nOriginal Flat Data",
         )
@@ -157,7 +158,7 @@ def find_slice_boundaries_from_flat(
             vmin=vmin,
             vmax=vmax,
             cmap="viridis",
-            aspect="equal",
+            aspect="auto",
             ds9mode=True,
             title=f"{Path(flatfile).name}\nMedian Filtered Flat Data",
         )
@@ -169,7 +170,7 @@ def find_slice_boundaries_from_flat(
             vmin=vmin,
             vmax=vmax,
             cmap="viridis",
-            aspect="equal",
+            aspect="auto",
             ds9mode=True,
             title=f"{Path(flatfile).name}\nSavitzky-Golay First Derivative Filtered Flat Data",
         )
@@ -181,10 +182,11 @@ def find_slice_boundaries_from_flat(
             vmin=vmin,
             vmax=vmax,
             cmap="viridis",
-            aspect="equal",
+            aspect="auto",
             ds9mode=True,
             title=f"{Path(flatfile).name}\nSavitzky-Golay Second Derivative Filtered Flat Data",
         )
+        mpl.rcParams["keymap.forward"] = [] # disable 'v' (conflict with 'v' for setting vmin/vmax)
         def on_key(event):
             if event.key == "?":
                 logger.info("-" * 79)
@@ -648,7 +650,7 @@ def main(args=None):
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
     )
-    parser.add_argument("--output", help="Output FITS file name", type=str, default="slice_boundaries.fits")
+    parser.add_argument("--output", help="Output FITS file name", type=str, default="slice_boundary_borders.fits")
     parser.add_argument("--column", help="Column to analyze (1-based index)", type=int, default=None)
     parser.add_argument("--plots", help="Display plots", action="store_true")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
@@ -717,10 +719,10 @@ def main(args=None):
         add_script_info_to_fits_history(primary_hdu.header, args)
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2])
         hdul.writeto(args.output, overwrite=True)
-        logger.info("Slice boundaries saved to %s", args.output)
+        logger.info("Slice boundary borders saved to %s", args.output)
     else:
         logger.info(
-            "Slice boundaries computed for column %d. Not saved to FITS file since --column is specified.", args.column
+            "Slice boundary borders computed for column %d. Not saved to FITS file since --column is specified.", args.column
         )
 
     # Execution time
