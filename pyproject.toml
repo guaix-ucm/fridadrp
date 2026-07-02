@@ -58,8 +58,9 @@ FRIDA = "fridadrp.loader:drp_load"
 
 [project.scripts]
 fridadrp-ifu_simulator = "fridadrp.tools.frida_ifu_simulator:main"
-fridadrp-find_slice_boundaries_from_flat = "fridadrp.tools.find_slice_boundaries_from_flat:main"
-fridadrp-fit_slice_boundaries_from_flat = "fridadrp.tools.fit_slice_boundaries_from_flat:main"
+fridadrp-find_slice_boundary_borders_from_flat = "fridadrp.tools.find_slice_boundary_borders_from_flat:main"
+fridadrp-fit_slice_boundary_polynomials = "fridadrp.tools.fit_slice_boundary_polynomials:main"
+fridadrp-overplot_slice_boundary_polynomials = "fridadrp.tools.overplot_slice_boundary_polynomials:main"
 
 # pyproject.toml
 [tool.setuptools_scm]

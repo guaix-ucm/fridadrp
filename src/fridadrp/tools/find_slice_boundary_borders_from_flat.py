@@ -7,7 +7,7 @@
 # License-Filename: LICENSE.txt
 #
 
-"""Find slice boundaries from flats"""
+"""Find slice boundary borders from flats"""
 
 import argparse
 from astropy.io import fits
@@ -40,10 +40,10 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import slicenum_from_index
 
 
-def find_slice_boundaries_from_flat(
+def find_slice_boundary_borders_from_flat(
     flatfile, column=None, median_filter_xsize=21, savgol_window_length=5, savgol_polyorder=2, plots=False
 ):
-    """Find slice boundaries from flat image
+    """Find slice boundary borders from flat image
 
     This function starts by smoothing the flat data using a median filter
     along NAXIS1 to remove bad pixels. Then, it applies a Savitzky-Golay filter
@@ -697,7 +697,7 @@ def main(args=None):
         raise ValueError("Flat file is not defined. Use --flatfile to specify the flat file.")
 
     # Compute the slice boundaries from the flat file
-    array_left_border, array_right_border = find_slice_boundaries_from_flat(
+    array_left_border, array_right_border = find_slice_boundary_borders_from_flat(
         flatfile=args.flatfile,
         column=args.column,
         plots=args.plots,
