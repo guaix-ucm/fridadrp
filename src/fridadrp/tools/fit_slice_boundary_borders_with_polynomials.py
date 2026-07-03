@@ -33,7 +33,12 @@ from fridadrp.core import slicenum_from_index
 def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, plots=False):
     """Fit the slice boundaries determined from the flats
 
-    Parameters
+    The polynomials are fitted using as independent variable
+    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1, 
+    and as dependent variable the array index along the NAXIS2 axis, 
+    which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
+
+        Parameters
     ----------
     input_file : str
         Path to the FITS file containing the slice boundary borders.
@@ -124,6 +129,12 @@ def main(args=None):
         description="Fit the slice boundaries determined from flat image", formatter_class=RichHelpFormatter
     )
     parser.add_argument("--input", help="Path to the flat file", type=str, required=True)
+    parser.add_argument("--deg", help="Degree of the polynomial to fit", type=int, required=True)
+    parser.add_argument("--output", help="Output FITS file name", type=str, default="slice_boundary_polynomials.fits")
+    parser.add_argument("--plots", help="Display plots", action="store_true")
+    parser.add_argument("--record", help="Record terminal output", action="store_true")
+    parser.add_argument("--echo", help="Display full command line", action="store_true")
+    parser.add_argument("--version", help="Display version", action="store_true")
     parser.add_argument(
         "--log-level",
         help="Set the logging level",
@@ -131,12 +142,6 @@ def main(args=None):
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
     )
-    parser.add_argument("--deg", help="Degree of the polynomial to fit", type=int, default=None)
-    parser.add_argument("--output", help="Output FITS file name", type=str, default="slice_boundary_polynomials.fits")
-    parser.add_argument("--plots", help="Display plots", action="store_true")
-    parser.add_argument("--record", help="Record terminal output", action="store_true")
-    parser.add_argument("--echo", help="Display full command line", action="store_true")
-    parser.add_argument("--version", help="Display version", action="store_true")
     args = parser.parse_args(args)
 
     if len(sys.argv) == 1:
