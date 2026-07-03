@@ -45,6 +45,10 @@ def find_slice_boundary_borders_from_flat(
 ):
     """Find slice boundary borders from flat image
 
+    Important: the slice boundaries are determined using array indices
+    along NAXIS2, which ranges from 0 to FRIDA_NAXIS2_HAWAII-1, and not using
+    the physical coordinates along NAXIS2, which range from 1 to FRIDA_NAXIS2_HAWAII.
+
     This function starts by smoothing the flat data using a median filter
     along NAXIS1 to remove bad pixels. Then, it applies a Savitzky-Golay filter
     along NAXIS2 to smooth the data and compute the first and second derivatives.
@@ -642,14 +646,7 @@ def main(args=None):
     parser = argparse.ArgumentParser(
         description="Find the slice boundaries from flat image", formatter_class=RichHelpFormatter
     )
-    parser.add_argument("--flatfile", type=str, help="Path to the flat file")
-    parser.add_argument(
-        "--log-level",
-        help="Set the logging level",
-        type=str,
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-    )
+    parser.add_argument("--flatfile", type=str, help="Path to the flat file", required=True)
     parser.add_argument(
         "--output", help="Output FITS file name", type=str, default="slice_boundary_borders_from_flat.fits"
     )
@@ -658,6 +655,13 @@ def main(args=None):
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
     parser.add_argument("--version", help="Display version", action="store_true")
+    parser.add_argument(
+        "--log-level",
+        help="Set the logging level",
+        type=str,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+    )
     args = parser.parse_args(args)
 
     if len(sys.argv) == 1:
