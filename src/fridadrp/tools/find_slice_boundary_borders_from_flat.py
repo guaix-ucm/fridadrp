@@ -186,7 +186,8 @@ def find_slice_boundary_borders_from_flat(
             ds9mode=True,
             title=f"{Path(flatfile).name}\nSavitzky-Golay Second Derivative Filtered Flat Data",
         )
-        mpl.rcParams["keymap.forward"] = [] # disable 'v' (conflict with 'v' for setting vmin/vmax)
+        mpl.rcParams["keymap.forward"] = []  # disable 'v' (conflict with 'v' for setting vmin/vmax)
+
         def on_key(event):
             if event.key == "?":
                 logger.info("-" * 79)
@@ -222,8 +223,8 @@ def find_slice_boundary_borders_from_flat(
                         data = flat_data_savgol_deriv2
                     if event.key == "v":
                         current_vmin, current_vmax = event.inaxes.images[0].get_clim()
-                        vmin = input_number(expected_type='float', prompt="Enter vmin: ", default=current_vmin)
-                        vmax = input_number(expected_type='float', prompt="Enter vmax: ", default=current_vmax)
+                        vmin = input_number(expected_type="float", prompt="Enter vmin: ", default=current_vmin)
+                        vmax = input_number(expected_type="float", prompt="Enter vmax: ", default=current_vmax)
                     else:
                         xlim = event.inaxes.get_xlim()
                         ylim = event.inaxes.get_ylim()
@@ -234,16 +235,17 @@ def find_slice_boundary_borders_from_flat(
                         y1 = max(0, min(y1, FRIDA_NAXIS2_HAWAII.value - 1))
                         y2 = max(0, min(y2, FRIDA_NAXIS2_HAWAII.value - 1))
                         if event.key == ",":
-                            vmin = np.nanmin(data[y1:y2 + 1, x1:x2 + 1])
-                            vmax = np.nanmax(data[y1:y2 + 1, x1:x2 + 1])
+                            vmin = np.nanmin(data[y1 : (y2 + 1), x1 : (x2 + 1)])
+                            vmax = np.nanmax(data[y1 : (y2 + 1), x1 : (x2 + 1)])
                         else:
-                            vmin, vmax = ZScaleInterval().get_limits(data[y1:y2 + 1, x1:x2 + 1])
+                            vmin, vmax = ZScaleInterval().get_limits(data[y1 : (y2 + 1), x1 : (x2 + 1)])
                     event.inaxes.images[0].set_clim(vmin, vmax)
                     fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
                     fig.tight_layout()  # apply new tight_layout adjustments
                     fig.canvas.draw()
             elif event.key == "q":
                 plt.close(fig)
+
         on_key(event=types.SimpleNamespace(key="?"))  # Show help message on startup
         fig.canvas.mpl_connect("key_press_event", on_key)
         fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
@@ -626,9 +628,7 @@ def find_slice_boundary_borders_from_flat(
                 array_left_border[:, col - 1] = list_left_border
                 array_right_border[:, col - 1] = list_right_border
             else:
-                logger.debug(
-                    f"Column {col}: 2nd derivative peaks are not in the expected order. Skipping this column."
-                )
+                logger.debug(f"Column {col}: 2nd derivative peaks are not in the expected order. Skipping this column.")
         else:
             logger.debug(f"Column {col}: 1st derivative peaks are not in the expected order. Skipping this column.")
 
@@ -650,7 +650,9 @@ def main(args=None):
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
     )
-    parser.add_argument("--output", help="Output FITS file name", type=str, default="slice_boundary_borders.fits")
+    parser.add_argument(
+        "--output", help="Output FITS file name", type=str, default="slice_boundary_borders_from_flat.fits"
+    )
     parser.add_argument("--column", help="Column to analyze (1-based index)", type=int, default=None)
     parser.add_argument("--plots", help="Display plots", action="store_true")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
@@ -704,7 +706,7 @@ def main(args=None):
     )
 
     # Save the slice boundaries to a FITS file only if column is None
-    # If column is specified, the slice boundaries are computed only 
+    # If column is specified, the slice boundaries are computed only
     # for that column and not saved to a FITS file.
     if args.column is None:
         header1 = fits.Header()
@@ -715,14 +717,15 @@ def main(args=None):
         hdu2 = fits.ImageHDU(data=array_right_border, header=header2)
         primary_hdu = fits.PrimaryHDU()
         primary_hdu.header["FLATFILE"] = Path(args.flatfile).name
-        primary_hdu.header["KEYCODE"] = "FIND_SLICE_BOUNDARIES_FROM_FLAT"
+        primary_hdu.header["KEYCODE"] = "SLICE_BOUNDARY_BORDERS_FROM_FLAT"
         add_script_info_to_fits_history(primary_hdu.header, args)
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2])
         hdul.writeto(args.output, overwrite=True)
         logger.info("Slice boundary borders saved to %s", args.output)
     else:
         logger.info(
-            "Slice boundary borders computed for column %d. Not saved to FITS file since --column is specified.", args.column
+            "Slice boundary borders computed for column %d. Not saved to FITS file since --column is specified.",
+            args.column,
         )
 
     # Execution time
