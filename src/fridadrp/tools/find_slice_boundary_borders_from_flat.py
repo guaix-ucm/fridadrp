@@ -705,6 +705,11 @@ def main(args=None):
         plots=args.plots,
     )
 
+    # Compute slice widths as a function of the array index along the NAXIS1 axis
+    array_widths = np.zeros((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value))
+    for islice in range(FRIDA_NSLICES):
+        array_widths[islice, :] = array_right_border[islice, :] - array_left_border[islice, :]
+
     # Save the slice boundaries to a FITS file only if column is None
     # If column is specified, the slice boundaries are computed only
     # for that column and not saved to a FITS file.
@@ -715,13 +720,16 @@ def main(args=None):
         header2 = fits.Header()
         header2["EXTNAME"] = "R-BORDER"
         hdu2 = fits.ImageHDU(data=array_right_border, header=header2)
+        header3 = fits.Header()
+        header3["EXTNAME"] = "SLIWIDTH"
+        hdu3 = fits.ImageHDU(data=array_widths, header=header3)
         primary_hdu = fits.PrimaryHDU()
         primary_hdu.header["FLATFILE"] = Path(args.flatfile).name
         primary_hdu.header["KEYCODE"] = "SLICE_BOUNDARY_BORDERS_FROM_FLAT"
         add_script_info_to_fits_history(primary_hdu.header, args)
-        hdul = fits.HDUList([primary_hdu, hdu1, hdu2])
+        hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
         hdul.writeto(args.output, overwrite=True)
-        logger.info("Slice boundary borders saved to %s", args.output)
+        logger.info(f"Slice boundary borders saved to: [green]{args.output}[/green]")
     else:
         logger.info(
             "Slice boundary borders computed for column %d. Not saved to FITS file since --column is specified.",
