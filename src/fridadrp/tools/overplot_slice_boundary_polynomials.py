@@ -34,7 +34,7 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import slicenum_from_index
 
 
-def overplot_slice_boundary_polynomials(input, image, sliceid=False):
+def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False):
     """Overplot the slice boundary polynomials on an image
 
     The polynomials are assumed to be fitted using as independent variable
@@ -49,6 +49,8 @@ def overplot_slice_boundary_polynomials(input, image, sliceid=False):
     image : str
         Path to the FITS file containing the image on which to overplot
         the slice boundaries.
+    voffset : float, optional
+        Vertical (constant) offset to apply to the polynomials.
     sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
     """
@@ -85,10 +87,10 @@ def overplot_slice_boundary_polynomials(input, image, sliceid=False):
         xmin, xmax = ax.get_xlim()
         xdum = np.linspace(xmin, xmax, 1000)
         for islice in range(FRIDA_NSLICES):
-            ax.plot(xdum, list_poly_left[islice](xdum), color="white", lw=5.0, alpha=0.7)
-            ax.plot(xdum, list_poly_left[islice](xdum), color="C0", lw=2.0, alpha=1.0)
-            ax.plot(xdum, list_poly_right[islice](xdum), color="white", lw=5.0, alpha=0.7)
-            ax.plot(xdum, list_poly_right[islice](xdum), color="C1", lw=2.0, alpha=1.0)
+            ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
+            ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="C0", lw=2.0, alpha=1.0)
+            ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
+            ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="C1", lw=2.0, alpha=1.0)
             if sliceid:
                 xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
                 ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
@@ -179,6 +181,7 @@ def main(args=None):
     )
     parser.add_argument("--input", help="Path to the file with the boundary polynomials", type=str, required=True)
     parser.add_argument("--image", help="Image to display boundaries on", type=str, required=True)
+    parser.add_argument("--voffset", help="Vertical (constant) offset to apply to the polynomials", type=float, default=0.0)
     parser.add_argument("--sliceid", help="Overplot slice ID", action="store_true")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
@@ -238,6 +241,7 @@ def main(args=None):
     overplot_slice_boundary_polynomials(
         input=args.input, 
         image=args.image,
+        voffset=args.voffset,
         sliceid=args.sliceid
     )
 
