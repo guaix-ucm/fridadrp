@@ -292,6 +292,7 @@ def find_slice_boundary_borders_from_flat(
             nmaxpeaks=FRIDA_NSLICES,
             nclean_around_peak=40,
             nwinwidth=5,
+            nborder_to_ignore=5,
             debugplot=0,
         )
         list_ipeaks_deriv1_down = find_highest_peaks_spectrum(
@@ -299,6 +300,7 @@ def find_slice_boundary_borders_from_flat(
             nmaxpeaks=FRIDA_NSLICES,
             nclean_around_peak=40,
             nwinwidth=5,
+            nborder_to_ignore=5,
             debugplot=0,
         )
         # Check that the up and down peaks are in the expected order (up, down, up, down, ...)
