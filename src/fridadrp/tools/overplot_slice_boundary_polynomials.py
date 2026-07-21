@@ -34,6 +34,75 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import slicenum_from_index
 
 
+def read_slice_boundary_polynomials(input):
+    """Read the slice boundary polynomials from a FITS file
+
+    Parameters
+    ----------
+    input : str
+        Path to the FITS file containing the slice boundary polynomials.
+
+    Returns
+    -------
+    list_poly_left : list of Polynomial
+        List of Polynomial objects for the left slice boundaries.
+    list_poly_right : list of Polynomial
+        List of Polynomial objects for the right slice boundaries.
+    """
+    logger = logging.getLogger(__name__)
+
+    with fits.open(input) as hdul:
+        if "KEYCODE" not in hdul[0].header or hdul[0].header["KEYCODE"] != "SLICE_BOUNDARY_POLYNOMIALS":
+            raise ValueError(f"Input file {input} is not a valid FITS file with slice boundary polynomials (missing or incorrect KEYCODE).")
+        array_coefs_left = hdul["L-BORDER"].data
+        naxis2_left, deg_left = array_coefs_left.shape
+        if naxis2_left != FRIDA_NSLICES:
+            raise ValueError(f"Input file {input} has {naxis2_left} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}.")
+        logger.info(f"Reading {naxis2_left} slices with polynomial degree {deg_left-1}.")
+        list_poly_left = [Polynomial(array_coefs_left[islice]) for islice in range(FRIDA_NSLICES)]
+        array_coefs_right = hdul["R-BORDER"].data
+        naxis2_right, deg_right = array_coefs_right.shape
+        if naxis2_right != FRIDA_NSLICES:
+            raise ValueError(f"Input file {input} has {naxis2_right} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}.")
+        if deg_right != deg_left:
+            raise ValueError(f"Input file {input} has different polynomial degrees for left and right borders: {deg_left-1} and {deg_right-1}.")
+        logger.info(f"Reading {naxis2_right} slices with polynomial degree {deg_right-1}.")
+        list_poly_right = [Polynomial(array_coefs_right[islice]) for islice in range(FRIDA_NSLICES)]
+
+    return list_poly_left, list_poly_right
+
+
+def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False):
+    """Plot the fitted slice boundary polynomials on the given axes
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes on which to plot the polynomials.
+    list_poly_left : list of numpy.polynomial.Polynomial
+        The list of left slice boundary polynomials.
+    list_poly_right : list of numpy.polynomial.Polynomial
+        The list of right slice boundary polynomials.
+    voffset : float, optional
+        Vertical (constant) offset to apply to the polynomials.
+    sliceid : bool, optional
+        If True, overplot the slice ID at the center of each slice.
+    """
+    xmin, xmax = ax.get_xlim()
+    xdum = np.linspace(xmin, xmax, 1000)
+    for islice in range(FRIDA_NSLICES):
+        ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
+        ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="C0", lw=2.0, alpha=1.0)
+        ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
+        ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="C1", lw=2.0, alpha=1.0)
+        if sliceid:
+            xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
+            ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
+            ax.text(xcenter, ycenter, f"#{slicenum_from_index(islice)}", 
+                    color="white", fontsize=12,
+                    ha="center", va="center", fontweight="bold", alpha=1.0)
+
+
 def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False):
     """Overplot the slice boundary polynomials on an image
 
@@ -57,23 +126,7 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
     logger = logging.getLogger(__name__)
 
     # Read the polynomial coefficients from the input FITS file
-    with fits.open(input) as hdul:
-        if "KEYCODE" not in hdul[0].header or hdul[0].header["KEYCODE"] != "SLICE_BOUNDARY_POLYNOMIALS":
-            raise ValueError(f"Input file {input} is not a valid FITS file for this program.")
-        array_coefs_left = hdul["L-BORDER"].data
-        naxis2_left, deg_left = array_coefs_left.shape
-        if naxis2_left != FRIDA_NSLICES:
-            raise ValueError(f"Input file {input} has {naxis2_left} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}.")
-        logger.info(f"Reading {naxis2_left} slices with polynomial degree {deg_left-1}.")
-        list_poly_left = [Polynomial(array_coefs_left[islice]) for islice in range(FRIDA_NSLICES)]
-        array_coefs_right = hdul["R-BORDER"].data
-        naxis2_right, deg_right = array_coefs_right.shape
-        if naxis2_right != FRIDA_NSLICES:
-            raise ValueError(f"Input file {input} has {naxis2_right} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}.")
-        if deg_right != deg_left:
-            raise ValueError(f"Input file {input} has different polynomial degrees for left and right borders: {deg_left-1} and {deg_right-1}.")
-        logger.info(f"Reading {naxis2_right} slices with polynomial degree {deg_right-1}.")
-        list_poly_right = [Polynomial(array_coefs_right[islice]) for islice in range(FRIDA_NSLICES)]
+    list_poly_left, list_poly_right = read_slice_boundary_polynomials(input)
 
     # Read the image data from the input FITS file
     with fits.open(image) as hdul:
@@ -83,21 +136,7 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
     vmin, vmax = ZScaleInterval().get_limits(image_data)
     tea.imshow(fig, ax, image_data, vmin=vmin, vmax=vmax, aspect="auto",
                title=f"Image: {Path(image).name}\nPolynomials: {Path(input).name}")
-    def plot_fitted_boundaries():
-        xmin, xmax = ax.get_xlim()
-        xdum = np.linspace(xmin, xmax, 1000)
-        for islice in range(FRIDA_NSLICES):
-            ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
-            ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="C0", lw=2.0, alpha=1.0)
-            ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
-            ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="C1", lw=2.0, alpha=1.0)
-            if sliceid:
-                xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
-                ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
-                ax.text(xcenter, ycenter, f"#{slicenum_from_index(islice)}", 
-                        color="white", fontsize=12,
-                        ha="center", va="center", fontweight="bold", alpha=1.0)
-    plot_fitted_boundaries()
+    plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset, sliceid)
     mpl.rcParams["keymap.home"] = []    # disable 'h' and 'r'
     mpl.rcParams["keymap.back"] = []    # disable 'c'
     mpl.rcParams["keymap.forward"] = [] # disable 'v' (conflict with 'v' for setting vmin/vmax)
