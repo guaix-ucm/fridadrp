@@ -37,6 +37,11 @@ from fridadrp.core import slicenum_from_index
 def read_slice_boundary_polynomials(input):
     """Read the slice boundary polynomials from a FITS file
 
+    The polynomials are assumed to be fitted using as independent variable
+    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1,
+    and as dependent variable the array index along the NAXIS2 axis,
+    which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
+
     Parameters
     ----------
     input : str
@@ -53,7 +58,9 @@ def read_slice_boundary_polynomials(input):
 
     with fits.open(input) as hdul:
         if "KEYCODE" not in hdul[0].header or hdul[0].header["KEYCODE"] != "SLICE_BOUNDARY_POLYNOMIALS":
-            raise ValueError(f"Input file {input} is not a valid FITS file with slice boundary polynomials (missing or incorrect KEYCODE).")
+            raise ValueError(
+                f"Input file {input} is not a valid FITS file with slice boundary polynomials (missing or incorrect KEYCODE)."
+            )
         array_coefs_left = hdul["L-BORDER"].data
         naxis2_left, deg_left = array_coefs_left.shape
         if naxis2_left != FRIDA_NSLICES:
@@ -65,7 +72,9 @@ def read_slice_boundary_polynomials(input):
         if naxis2_right != FRIDA_NSLICES:
             raise ValueError(f"Input file {input} has {naxis2_right} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}.")
         if deg_right != deg_left:
-            raise ValueError(f"Input file {input} has different polynomial degrees for left and right borders: {deg_left-1} and {deg_right-1}.")
+            raise ValueError(
+                f"Input file {input} has different polynomial degrees for left and right borders: {deg_left-1} and {deg_right-1}."
+            )
         logger.info(f"Reading {naxis2_right} slices with polynomial degree {deg_right-1}.")
         list_poly_right = [Polynomial(array_coefs_right[islice]) for islice in range(FRIDA_NSLICES)]
 
@@ -74,6 +83,11 @@ def read_slice_boundary_polynomials(input):
 
 def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False):
     """Plot the fitted slice boundary polynomials on the given axes
+
+    The polynomials are assumed to be fitted using as independent variable
+    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1,
+    and as dependent variable the array index along the NAXIS2 axis,
+    which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
 
     Parameters
     ----------
@@ -84,7 +98,9 @@ def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sli
     list_poly_right : list of numpy.polynomial.Polynomial
         The list of right slice boundary polynomials.
     voffset : float, optional
-        Vertical (constant) offset to apply to the polynomials.
+        Vertical constant offset (pixels) to apply to the polynomials.
+        A positive value shifts the polynomials upwards, while a negative
+        value shifts them downwards.
     sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
     """
@@ -98,17 +114,25 @@ def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sli
         if sliceid:
             xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
             ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
-            ax.text(xcenter, ycenter, f"#{slicenum_from_index(islice)}", 
-                    color="white", fontsize=12,
-                    ha="center", va="center", fontweight="bold", alpha=1.0)
+            ax.text(
+                xcenter,
+                ycenter,
+                f"#{slicenum_from_index(islice)}",
+                color="white",
+                fontsize=12,
+                ha="center",
+                va="center",
+                fontweight="bold",
+                alpha=1.0,
+            )
 
 
 def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False):
     """Overplot the slice boundary polynomials on an image
 
     The polynomials are assumed to be fitted using as independent variable
-    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1, 
-    and as dependent variable the array index along the NAXIS2 axis, 
+    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1,
+    and as dependent variable the array index along the NAXIS2 axis,
     which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
 
     Parameters
@@ -119,7 +143,9 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
         Path to the FITS file containing the image on which to overplot
         the slice boundaries.
     voffset : float, optional
-        Vertical (constant) offset to apply to the polynomials.
+        Vertical constant offset (pixels) to apply to the polynomials.
+        A positive value shifts the polynomials upwards, while a negative
+        value shifts them downwards.
     sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
     """
@@ -134,13 +160,21 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
 
     fig, ax = plt.subplots(figsize=(10, 8))
     vmin, vmax = ZScaleInterval().get_limits(image_data)
-    tea.imshow(fig, ax, image_data, vmin=vmin, vmax=vmax, aspect="auto",
-               title=f"Image: {Path(image).name}\nPolynomials: {Path(input).name}")
+    tea.imshow(
+        fig,
+        ax,
+        image_data,
+        vmin=vmin,
+        vmax=vmax,
+        aspect="auto",
+        title=f"Image: {Path(image).name}\nPolynomials: {Path(input).name}",
+    )
     plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset, sliceid)
-    mpl.rcParams["keymap.home"] = []    # disable 'h' and 'r'
-    mpl.rcParams["keymap.back"] = []    # disable 'c'
-    mpl.rcParams["keymap.forward"] = [] # disable 'v' (conflict with 'v' for setting vmin/vmax)
+    mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
+    mpl.rcParams["keymap.back"] = []  # disable 'c'
+    mpl.rcParams["keymap.forward"] = []  # disable 'v' (conflict with 'v' for setting vmin/vmax)
     init_xylimits = ax.get_xlim(), ax.get_ylim()
+
     def on_key(event):
         nonlocal vmin, vmax
         nonlocal init_xylimits
@@ -176,8 +210,8 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
         elif event.key in ["v", ",", "/"]:
             if event.key == "v":
                 current_vmin, current_vmax = ax.images[0].get_clim()
-                vmin = input_number(expected_type='float', prompt="Enter vmin: ", default=current_vmin)
-                vmax = input_number(expected_type='float', prompt="Enter vmax: ", default=current_vmax)
+                vmin = input_number(expected_type="float", prompt="Enter vmin: ", default=current_vmin)
+                vmax = input_number(expected_type="float", prompt="Enter vmax: ", default=current_vmax)
             else:
                 xlim = ax.get_xlim()
                 ylim = ax.get_ylim()
@@ -188,10 +222,10 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
                 y1 = max(0, min(y1, FRIDA_NAXIS2_HAWAII.value - 1))
                 y2 = max(0, min(y2, FRIDA_NAXIS2_HAWAII.value - 1))
                 if event.key == ",":
-                    vmin = np.nanmin(image_data[y1:y2 + 1, x1:x2 + 1])
-                    vmax = np.nanmax(image_data[y1:y2 + 1, x1:x2 + 1])
+                    vmin = np.nanmin(image_data[y1 : y2 + 1, x1 : x2 + 1])
+                    vmax = np.nanmax(image_data[y1 : y2 + 1, x1 : x2 + 1])
                 else:
-                    vmin, vmax = ZScaleInterval().get_limits(image_data[y1:y2 + 1, x1:x2 + 1])
+                    vmin, vmax = ZScaleInterval().get_limits(image_data[y1 : y2 + 1, x1 : x2 + 1])
                 logger.info(f"Setting vmin={vmin}, vmax={vmax} for the zoomed region.")
             ax.images[0].set_clim(vmin, vmax)
             ax.figure.canvas.draw_idle()
@@ -201,7 +235,7 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
 
     on_key(event=types.SimpleNamespace(key="?"))  # Show help message on startup
     fig.canvas.mpl_connect("key_press_event", on_key)
-    #fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
+    # fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
     fig.tight_layout()  # apply new tight_layout adjustments
     # instead of plt.show(), use a loop to keep the figure open until closed by the user
     # (otherwise, after using input_number() in the on_key function, the matplotlib event
@@ -220,7 +254,9 @@ def main(args=None):
     )
     parser.add_argument("--input", help="Path to the file with the boundary polynomials", type=str, required=True)
     parser.add_argument("--image", help="Image to display boundaries on", type=str, required=True)
-    parser.add_argument("--voffset", help="Vertical (constant) offset to apply to the polynomials", type=float, default=0.0)
+    parser.add_argument(
+        "--voffset", help="Vertical constant offset (pixels) to apply to the polynomials", type=float, default=0.0
+    )
     parser.add_argument("--sliceid", help="Overplot slice ID", action="store_true")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
@@ -277,12 +313,7 @@ def main(args=None):
         logger.warning("No input image file defined. The slice boundaries will not be overplotted on an image.")
 
     # Overplot the slice boundary polynomials
-    overplot_slice_boundary_polynomials(
-        input=args.input, 
-        image=args.image,
-        voffset=args.voffset,
-        sliceid=args.sliceid
-    )
+    overplot_slice_boundary_polynomials(input=args.input, image=args.image, voffset=args.voffset, sliceid=args.sliceid)
 
     # Execution time
     datetime_end = datetime.now()
