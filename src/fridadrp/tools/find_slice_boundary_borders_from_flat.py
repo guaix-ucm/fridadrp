@@ -266,6 +266,8 @@ def find_slice_boundary_borders_from_flat(
     array_left_border = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
     array_right_border = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
 
+    # Main loop
+    num_useful_columns = 0
     for col in tqdm(
         columns_to_analyze,
         desc="Working on columns",
@@ -625,10 +627,13 @@ def find_slice_boundary_borders_from_flat(
                 # Store the slice boundaries for this column
                 array_left_border[:, col - 1] = list_left_border
                 array_right_border[:, col - 1] = list_right_border
+                num_useful_columns += 1
             else:
                 logger.debug(f"Column {col}: 2nd derivative peaks are not in the expected order. Skipping this column.")
         else:
             logger.debug(f"Column {col}: 1st derivative peaks are not in the expected order. Skipping this column.")
+
+    logger.info(f"Number of useful columns processed: {num_useful_columns} out of {len(columns_to_analyze)}")
 
     return array_left_border, array_right_border
 
