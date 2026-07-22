@@ -34,8 +34,8 @@ def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, plots=Fals
     """Fit the slice boundaries determined from the flats
 
     The polynomials are fitted using as independent variable
-    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1, 
-    and as dependent variable the array index along the NAXIS2 axis, 
+    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1,
+    and as dependent variable the array index along the NAXIS2 axis,
     which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
 
         Parameters
@@ -54,6 +54,8 @@ def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, plots=Fals
     list_poly_right : list
         List of polynomials fitted to the right slice boundaries.
     """
+    logger = logging.getLogger(__name__)
+
     # Check polynomial degree is defined
     if deg is None:
         raise ValueError("Polynomial degree is not defined.")
@@ -73,12 +75,32 @@ def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, plots=Fals
                 f"Input file {input_file} has unexpected shape for L-BORDER extension: {array_left_border.shape}. "
                 f"Expected shape is ({FRIDA_NSLICES}, {FRIDA_NAXIS1_HAWAII.value})."
             )
+        collapsed_left_border = np.sum(array_left_border, axis=0)
+        ibad_left = np.isnan(collapsed_left_border)
+        logger.info(f"Number of NaN values in collapsed left border : {np.sum(ibad_left)}")
         array_right_border = hdul["R-BORDER"].data
         if array_right_border.shape != (FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value):
             raise ValueError(
                 f"Input file {input_file} has unexpected shape for R-BORDER extension: {array_right_border.shape}. "
                 f"Expected shape is ({FRIDA_NSLICES}, {FRIDA_NAXIS1_HAWAII.value})."
             )
+        collapsed_right_border = np.sum(array_right_border, axis=0)
+        ibad_right = np.isnan(collapsed_right_border)
+        logger.info(f"Number of NaN values in collapsed right border: {np.sum(ibad_right)}")
+        if not np.array_equal(ibad_left, ibad_right):
+            raise ValueError(
+                "Mismatch between NaN values in collapsed left and right borders. "
+                "The NaN values should be in the same positions."
+            )
+
+    # Check enough valid columns are available for fitting
+    ibad = ibad_left  # Use either ibad_left or ibad_right, they are the same
+    logger.info(f"Number of valid columns to fit each boundary: {np.sum(~ibad)}")
+    logger.info(f"Polynomial degree: {deg}")
+    if np.sum(~ibad) < deg + 1:
+        raise ValueError(
+            f"Not enough valid columns for fitting. Number of valid columns: {np.sum(~ibad)}, required: {deg + 1}."
+        )
 
     # Fit the slice boundaries with a polynomial
     list_poly_left = []
@@ -88,13 +110,12 @@ def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, plots=Fals
         y_left = array_left_border[islice, :]
         y_right = array_right_border[islice, :]
         # Fit a polynomial of degree 3 to the left and right boundaries
-        ibad = np.isnan(y_left)
         xfit = x[~ibad]
         yfit = y_left[~ibad]
         poly_left, _, _ = polfit_residuals_with_sigma_rejection(
-            x=xfit, 
-            y=yfit, 
-            deg=deg, 
+            x=xfit,
+            y=yfit,
+            deg=deg,
             times_sigma_reject=3.0,
             xlabel="array index along NAXIS1 axis",
             ylabel="array index along NAXIS2 axis",
@@ -103,13 +124,12 @@ def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, plots=Fals
         )
         list_poly_left.append(poly_left)
         # Fit a polynomial of degree 3 to the right boundary
-        ibad = np.isnan(y_right)
         xfit = x[~ibad]
         yfit = y_right[~ibad]
         poly_right, _, _ = polfit_residuals_with_sigma_rejection(
-            x=xfit, 
-            y=yfit, 
-            deg=deg, 
+            x=xfit,
+            y=yfit,
+            deg=deg,
             times_sigma_reject=3.0,
             xlabel="array index along NAXIS1 axis",
             ylabel="array index along NAXIS2 axis",
@@ -181,7 +201,7 @@ def main(args=None):
     # Check input file is defined
     if args.input is None:
         raise ValueError("Input file is not defined. Use --input to specify the input file.")
-    
+
     # Check polynomial degree is defined
     if args.deg is None:
         raise ValueError("Polynomial degree is not defined. Use --deg to specify the polynomial degree.")
