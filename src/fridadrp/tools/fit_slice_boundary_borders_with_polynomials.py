@@ -28,9 +28,10 @@ from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import slicenum_from_index
+from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 
 
-def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, plots=False):
+def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, columns_to_analyze=None, plots=False):
     """Fit the slice boundaries determined from the flats
 
     The polynomials are fitted using as independent variable
@@ -44,6 +45,8 @@ def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, plots=Fals
         Path to the FITS file containing the slice boundary borders.
     deg : int
         Degree of the polynomial to fit. If None, an error will be raised.
+    columns_to_analyze : list of int
+        List of columns to analyze (1-based index along NAXIS1).
     plots : bool, optional
         If True, display plots of the fitted polynomials. Default is False.
 
@@ -95,7 +98,13 @@ def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, plots=Fals
 
     # Check enough valid columns are available for fitting
     ibad = ibad_left  # Use either ibad_left or ibad_right, they are the same
-    logger.info(f"Number of valid columns to fit each boundary: {np.sum(~ibad)}")
+    logger.info(f"Number of initial valid columns to fit each boundary: {np.sum(~ibad)}")
+    # Take into account columns_to_analyze
+    iskip = np.ones(FRIDA_NAXIS1_HAWAII.value, dtype=bool)
+    for col in columns_to_analyze:
+        iskip[col - 1] = False
+    ibad = ibad | iskip
+    logger.info(f"Number of valid columns to fit each boundary after applying columns_to_analyze: {np.sum(~ibad)}")
     logger.info(f"Polynomial degree: {deg}")
     if np.sum(~ibad) < deg + 1:
         raise ValueError(
@@ -148,7 +157,16 @@ def main(args=None):
     parser = argparse.ArgumentParser(
         description="Fit the slice boundaries determined from flat image", formatter_class=RichHelpFormatter
     )
-    parser.add_argument("--input", help="Path to the flat file", type=str, required=True)
+    parser.add_argument("--input", help="Path to the FITS file with border data", type=str, required=True)
+    parser.add_argument(
+            "--colrange",
+            help="Column range to fit (1-based index). This option can be specified multiple times",
+            nargs=2,
+            type=int,
+            action="append",
+            metavar=("MIN", "MAX"),
+            default=None,
+        )
     parser.add_argument("--deg", help="Degree of the polynomial to fit", type=int, required=True)
     parser.add_argument("--output", help="Output FITS file name", type=str, default="slice_boundary_polynomials.fits")
     parser.add_argument("--plots", help="Display plots", action="store_true")
@@ -206,10 +224,14 @@ def main(args=None):
     if args.deg is None:
         raise ValueError("Polynomial degree is not defined. Use --deg to specify the polynomial degree.")
 
+    # Define columns to be employed for fitting
+    columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
+
     # Fit the slice boundaries from the flat file
     list_poly_left, list_poly_right = fit_slice_boundary_borders_with_polynomials(
         input_file=args.input,
         deg=args.deg,
+        columns_to_analyze=columns_to_analyze,
         plots=args.plots,
     )
 

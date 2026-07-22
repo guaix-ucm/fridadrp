@@ -35,7 +35,6 @@ from numina.user.console import NuminaConsole
 
 from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
-from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import slicenum_from_index
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
