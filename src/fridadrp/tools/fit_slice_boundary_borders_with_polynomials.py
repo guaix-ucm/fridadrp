@@ -84,12 +84,12 @@ def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, columns_to
     # Fit the slice boundaries with a polynomial
     list_poly_left = []
     list_poly_right = []
+    x = np.arange(FRIDA_NAXIS1_HAWAII.value)
+    xfit = x[~ibad]
     for islice in tqdm(range(FRIDA_NSLICES), desc="Fitting slice boundaries"):
-        x = np.arange(FRIDA_NAXIS1_HAWAII.value)
         y_left = array_left_border[islice, :]
         y_right = array_right_border[islice, :]
         # Fit a polynomial of degree 3 to the left and right boundaries
-        xfit = x[~ibad]
         yfit = y_left[~ibad]
         poly_left, _, _ = polfit_residuals_with_sigma_rejection(
             x=xfit,

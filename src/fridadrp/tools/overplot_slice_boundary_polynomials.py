@@ -32,53 +32,8 @@ from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import slicenum_from_index
-
-
-def read_slice_boundary_polynomials(input):
-    """Read the slice boundary polynomials from a FITS file
-
-    The polynomials are assumed to be fitted using as independent variable
-    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1,
-    and as dependent variable the array index along the NAXIS2 axis,
-    which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
-
-    Parameters
-    ----------
-    input : str
-        Path to the FITS file containing the slice boundary polynomials.
-
-    Returns
-    -------
-    list_poly_left : list of Polynomial
-        List of Polynomial objects for the left slice boundaries.
-    list_poly_right : list of Polynomial
-        List of Polynomial objects for the right slice boundaries.
-    """
-    logger = logging.getLogger(__name__)
-
-    with fits.open(input) as hdul:
-        if "KEYCODE" not in hdul[0].header or hdul[0].header["KEYCODE"] != "SLICE_BOUNDARY_POLYNOMIALS":
-            raise ValueError(
-                f"Input file {input} is not a valid FITS file with slice boundary polynomials (missing or incorrect KEYCODE)."
-            )
-        array_coefs_left = hdul["L-BORDER"].data
-        naxis2_left, deg_left = array_coefs_left.shape
-        if naxis2_left != FRIDA_NSLICES:
-            raise ValueError(f"Input file {input} has {naxis2_left} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}.")
-        logger.info(f"Reading {naxis2_left} slices with polynomial degree {deg_left-1}.")
-        list_poly_left = [Polynomial(array_coefs_left[islice]) for islice in range(FRIDA_NSLICES)]
-        array_coefs_right = hdul["R-BORDER"].data
-        naxis2_right, deg_right = array_coefs_right.shape
-        if naxis2_right != FRIDA_NSLICES:
-            raise ValueError(f"Input file {input} has {naxis2_right} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}.")
-        if deg_right != deg_left:
-            raise ValueError(
-                f"Input file {input} has different polynomial degrees for left and right borders: {deg_left-1} and {deg_right-1}."
-            )
-        logger.info(f"Reading {naxis2_right} slices with polynomial degree {deg_right-1}.")
-        list_poly_right = [Polynomial(array_coefs_right[islice]) for islice in range(FRIDA_NSLICES)]
-
-    return list_poly_left, list_poly_right
+from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
+from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
 
 def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False):
@@ -108,9 +63,9 @@ def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sli
     xdum = np.linspace(xmin, xmax, 1000)
     for islice in range(FRIDA_NSLICES):
         ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
-        ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="C0", lw=2.0, alpha=1.0)
+        ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="C0", lw=2.0, alpha=0.7)
         ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
-        ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="C1", lw=2.0, alpha=1.0)
+        ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="C1", lw=2.0, alpha=0.7)
         if sliceid:
             xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
             ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
@@ -127,7 +82,32 @@ def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sli
             )
 
 
-def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False):
+def plot_borders(ax, array_left_border, array_right_border, ibad, 
+                 color="white", marker=".", markersize=0.5, alpha=1.0):
+    """Plot the slice boundary borders on the given axes
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes on which to plot the borders.
+    array_left_border : numpy.ndarray
+        The array of left slice boundary borders.
+    array_right_border : numpy.ndarray
+        The array of right slice boundary borders.
+    ibad : list of int
+        List of indices of bad columns (to be ignored).
+    """
+    x = np.arange(FRIDA_NAXIS1_HAWAII.value)
+    xplot = x[~ibad]
+
+    for islice in range(FRIDA_NSLICES):
+        y_left = array_left_border[islice, ~ibad]
+        y_right = array_right_border[islice, ~ibad]
+        ax.plot(xplot, y_left, color=color, marker=marker, markersize=markersize, linestyle="None",alpha=alpha)
+        ax.plot(xplot, y_right, color=color, marker=marker, markersize=markersize, linestyle="None", alpha=alpha)
+
+
+def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, voffset=0.0, sliceid=False):
     """Overplot the slice boundary polynomials on an image
 
     The polynomials are assumed to be fitted using as independent variable
@@ -137,8 +117,11 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
 
     Parameters
     ----------
-    input : str
+    input_polynomial : str
         Path to the FITS file containing the slice boundary polynomials.
+    input_borders : str
+        Path to the file containing the slice boundary borders.
+        This is optional and can be used to overplot the borders as well.
     image : str
         Path to the FITS file containing the image on which to overplot
         the slice boundaries.
@@ -152,7 +135,12 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
     logger = logging.getLogger(__name__)
 
     # Read the polynomial coefficients from the input FITS file
-    list_poly_left, list_poly_right = read_slice_boundary_polynomials(input)
+    list_poly_left, list_poly_right = read_slice_boundary_polynomials(input_polynomial)
+
+    # Read the slice boundary borders from the input file if provided
+    if input_borders is not None:
+        array_left_border, array_right_border, ibad = read_slice_boundary_borders(input_borders)
+        logger.info(f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from {input_borders}.")
 
     # Read the image data from the input FITS file
     with fits.open(image) as hdul:
@@ -167,9 +155,19 @@ def overplot_slice_boundary_polynomials(input, image, voffset=0.0, sliceid=False
         vmin=vmin,
         vmax=vmax,
         aspect="auto",
-        title=f"Image: {Path(image).name}\nPolynomials: {Path(input).name}",
+        title=f"Image: {Path(image).name}\nPolynomials: {Path(input_polynomial).name}",
     )
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+
     plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset, sliceid)
+    if input_borders is not None:
+        plot_borders(ax, array_left_border, array_right_border, ibad)
+
+    # reset the x and y limits to the original values after plotting the boundaries (and borders if provided)
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+
     mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
     mpl.rcParams["keymap.back"] = []  # disable 'c'
     mpl.rcParams["keymap.forward"] = []  # disable 'v' (conflict with 'v' for setting vmin/vmax)
@@ -252,7 +250,8 @@ def main(args=None):
     parser = argparse.ArgumentParser(
         description="Overplot the slice boundaries polynomial on image", formatter_class=RichHelpFormatter
     )
-    parser.add_argument("--input", help="Path to the file with the boundary polynomials", type=str, required=True)
+    parser.add_argument("--poly", help="Path to the file with the boundary polynomials", type=str, required=True)
+    parser.add_argument("--borders", help="Path to the file with the boundary borders (optional)", type=str, required=False)
     parser.add_argument("--image", help="Image to display boundaries on", type=str, required=True)
     parser.add_argument(
         "--voffset", help="Vertical constant offset (pixels) to apply to the polynomials", type=float, default=0.0
@@ -305,15 +304,21 @@ def main(args=None):
         logger.debug(f"Command line arguments: {args}")
 
     # Check input polynomials file is defined
-    if args.input is None:
-        raise ValueError("Input file is not defined. Use --input to specify the input file.")
+    if args.poly is None:
+        raise ValueError("Input file is not defined. Use --poly to specify the input file with polynomials.")
 
     # Check the input image file is defined if the user wants to overplot the boundaries
     if args.image is None:
         logger.warning("No input image file defined. The slice boundaries will not be overplotted on an image.")
 
     # Overplot the slice boundary polynomials
-    overplot_slice_boundary_polynomials(input=args.input, image=args.image, voffset=args.voffset, sliceid=args.sliceid)
+    overplot_slice_boundary_polynomials(
+        input_polynomial=args.poly, 
+        input_borders=args.borders,
+        image=args.image, 
+        voffset=args.voffset, 
+        sliceid=args.sliceid
+    )
 
     # Execution time
     datetime_end = datetime.now()
