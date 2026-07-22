@@ -17,7 +17,6 @@ import logging
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from numpy.polynomial import Polynomial
 from pathlib import Path
 from rich.logging import RichHandler
 from rich_argparse import RichHelpFormatter
