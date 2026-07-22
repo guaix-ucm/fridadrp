@@ -31,37 +31,29 @@ from fridadrp.core import slicenum_from_index
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 
 
-def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, columns_to_analyze=None, plots=False):
-    """Fit the slice boundaries determined from the flats
+def read_slice_boundary_borders(input_file):
+    """Read the slice boundary borders from a FITS file
 
-    The polynomials are fitted using as independent variable
-    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1,
-    and as dependent variable the array index along the NAXIS2 axis,
-    which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
+    The FITS file is expected to contain two extensions:
+    "L-BORDER" and "R-BORDER", each with shape
+    (FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value).
 
-        Parameters
+    Parameters
     ----------
     input_file : str
         Path to the FITS file containing the slice boundary borders.
-    deg : int
-        Degree of the polynomial to fit. If None, an error will be raised.
-    columns_to_analyze : list of int
-        List of columns to analyze (1-based index along NAXIS1).
-    plots : bool, optional
-        If True, display plots of the fitted polynomials. Default is False.
 
     Returns
     -------
-    list_poly_left : list
-        List of polynomials fitted to the left slice boundaries.
-    list_poly_right : list
-        List of polynomials fitted to the right slice boundaries.
+    array_left_border : np.ndarray
+        Array containing the left slice boundaries.
+    array_right_border : np.ndarray
+        Array containing the right slice boundaries.
+    ibad : np.ndarray
+        Boolean array indicating the positions of NaN values in the collapsed borders.
     """
     logger = logging.getLogger(__name__)
 
-    # Check polynomial degree is defined
-    if deg is None:
-        raise ValueError("Polynomial degree is not defined.")
     # Check input file corresponds to the expected FITS file
     with fits.open(input_file) as hdul:
         if "KEYCODE" not in hdul[0].header:
@@ -95,9 +87,47 @@ def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, columns_to
                 "Mismatch between NaN values in collapsed left and right borders. "
                 "The NaN values should be in the same positions."
             )
+        ibad = ibad_left  # Use either ibad_left or ibad_right, they are the same
+
+    return array_left_border, array_right_border, ibad
+
+
+def fit_slice_boundary_borders_with_polynomials(input_file, deg=None, columns_to_analyze=None, plots=False):
+    """Fit the slice boundaries determined from the flats
+
+    The polynomials are fitted using as independent variable
+    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1,
+    and as dependent variable the array index along the NAXIS2 axis,
+    which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
+
+        Parameters
+    ----------
+    input_file : str
+        Path to the FITS file containing the slice boundary borders.
+    deg : int
+        Degree of the polynomial to fit. If None, an error will be raised.
+    columns_to_analyze : list of int
+        List of columns to analyze (1-based index along NAXIS1).
+    plots : bool, optional
+        If True, display plots of the fitted polynomials. Default is False.
+
+    Returns
+    -------
+    list_poly_left : list
+        List of polynomials fitted to the left slice boundaries.
+    list_poly_right : list
+        List of polynomials fitted to the right slice boundaries.
+    """
+    logger = logging.getLogger(__name__)
+
+    # Check polynomial degree is defined
+    if deg is None:
+        raise ValueError("Polynomial degree is not defined.")
+
+    # Read the slice boundary borders from the input FITS file
+    array_left_border, array_right_border, ibad = read_slice_boundary_borders(input_file)
 
     # Check enough valid columns are available for fitting
-    ibad = ibad_left  # Use either ibad_left or ibad_right, they are the same
     logger.info(f"Number of initial valid columns to fit each boundary: {np.sum(~ibad)}")
     # Take into account columns_to_analyze
     iskip = np.ones(FRIDA_NAXIS1_HAWAII.value, dtype=bool)
@@ -159,14 +189,14 @@ def main(args=None):
     )
     parser.add_argument("--input", help="Path to the FITS file with border data", type=str, required=True)
     parser.add_argument(
-            "--colrange",
-            help="Column range to fit (1-based index). This option can be specified multiple times",
-            nargs=2,
-            type=int,
-            action="append",
-            metavar=("MIN", "MAX"),
-            default=None,
-        )
+        "--colrange",
+        help="Column range to fit (1-based index). This option can be specified multiple times",
+        nargs=2,
+        type=int,
+        action="append",
+        metavar=("MIN", "MAX"),
+        default=None,
+    )
     parser.add_argument("--deg", help="Degree of the polynomial to fit", type=int, required=True)
     parser.add_argument("--output", help="Output FITS file name", type=str, default="slice_boundary_polynomials.fits")
     parser.add_argument("--plots", help="Display plots", action="store_true")
