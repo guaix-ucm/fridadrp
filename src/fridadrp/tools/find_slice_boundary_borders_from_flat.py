@@ -38,10 +38,11 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import slicenum_from_index
+from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 
 
 def find_slice_boundary_borders_from_flat(
-    flatfile, column=None, median_filter_xsize=21, savgol_window_length=5, savgol_polyorder=2, plots=False
+    flatfile, columns_to_analyze, median_filter_xsize=21, savgol_window_length=5, savgol_polyorder=2, plots=False
 ):
     """Find slice boundary borders from flat image
 
@@ -63,16 +64,15 @@ def find_slice_boundary_borders_from_flat(
     the left and right slice boundaries for each slice and each column.
 
     If plots is True, it displays plots of the data, the smoothed data,
-    the first and second derivatives, and the slice boundaries for the specified column.
+    the first and second derivatives. If columns_to_analyze only specify a single
+    column, it analyzes only that column and displays the slice boundaries for it.
 
     Parameters
     ----------
     flatfile : str
         Path to the flat file.
-    column : int, optional
-        Column to analyze (1-based index). If None, all columns are analyzed.
-        If specified, additional plots will be displayed for this column if
-        plots is True.
+    columns_to_analyze : list of int
+        List of columns to analyze (1-based index along NAXIS1).
     median_filter_xsize : int, optional
         Size of the median filter to apply to the flat data to remove
         bad pixels.
@@ -266,20 +266,12 @@ def find_slice_boundary_borders_from_flat(
     array_left_border = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
     array_right_border = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
 
-    # For each column, find the slice boundaries
-    if column is None:
-        columns_to_analyze = range(
-            FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value + 1
-        )
-    else:
-        columns_to_analyze = [column]
-
     for col in tqdm(
         columns_to_analyze,
         desc="Working on columns",
     ):
-        if column is not None:
-            plots_extra = plots and (col == column)  # Only plot for the specified column
+        if len(columns_to_analyze) == 1:
+            plots_extra = plots  # Only plot for the specified column
         else:
             plots_extra = False
         ydata = flat_data[:, col - 1]
@@ -652,7 +644,15 @@ def main(args=None):
     parser.add_argument(
         "--output", help="Output FITS file name", type=str, default="slice_boundary_borders_from_flat.fits"
     )
-    parser.add_argument("--column", help="Column to analyze (1-based index)", type=int, default=None)
+    parser.add_argument(
+        "--colrange",
+        help="Column range to analyze (1-based index). This option can be specified multiple times",
+        nargs=2,
+        type=int,
+        action="append",
+        metavar=("MIN", "MAX"),
+        default=None,
+    )
     parser.add_argument("--plots", help="Display plots", action="store_true")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
@@ -704,10 +704,12 @@ def main(args=None):
     if args.flatfile is None:
         raise ValueError("Flat file is not defined. Use --flatfile to specify the flat file.")
 
+    columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
+
     # Compute the slice boundaries from the flat file
     array_left_border, array_right_border = find_slice_boundary_borders_from_flat(
         flatfile=args.flatfile,
-        column=args.column,
+        columns_to_analyze=columns_to_analyze,
         plots=args.plots,
     )
 
@@ -716,10 +718,8 @@ def main(args=None):
     for islice in range(FRIDA_NSLICES):
         array_widths[islice, :] = array_right_border[islice, :] - array_left_border[islice, :]
 
-    # Save the slice boundaries to a FITS file only if column is None
-    # If column is specified, the slice boundaries are computed only
-    # for that column and not saved to a FITS file.
-    if args.column is None:
+    # If more than a single column is specified, the slice boundaries are saved to a FITS file
+    if len(columns_to_analyze) > 1:
         header1 = fits.Header()
         header1["EXTNAME"] = "L-BORDER"
         hdu1 = fits.ImageHDU(data=array_left_border, header=header1)
@@ -738,8 +738,8 @@ def main(args=None):
         logger.info(f"Slice boundary borders saved to: [green]{args.output}[/green]")
     else:
         logger.info(
-            "Slice boundary borders computed for column %d. Not saved to FITS file since --column is specified.",
-            args.column,
+            "Slice boundary borders computed for column %d. Not saved to FITS file since a single column is specified.",
+            columns_to_analyze[0],
         )
 
     # Execution time
