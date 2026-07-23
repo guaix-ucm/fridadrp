@@ -35,13 +35,23 @@ from numina.user.console import NuminaConsole
 
 from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
+from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import slicenum_from_index
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 
 
 def find_slice_boundary_borders_from_flat(
-    flatfile, columns_to_analyze, median_filter_xsize=21, savgol_window_length=5, savgol_polyorder=2, plots=False
+    flatfile,
+    columns_to_analyze,
+    slice_ini,
+    slice_end,
+    row_ini,
+    row_end,
+    median_filter_xsize=21,
+    savgol_window_length=5,
+    savgol_polyorder=2,
+    plots=False,
 ):
     """Find slice boundary borders from flat image
 
@@ -72,6 +82,14 @@ def find_slice_boundary_borders_from_flat(
         Path to the flat file.
     columns_to_analyze : list of int
         List of columns to analyze (1-based index along NAXIS1).
+    slice_ini : int
+        Initial slice number (1-based index).
+    slice_end : int
+        Final slice number (1-based index).
+    row_ini : int
+        Initial row number (1-based index along NAXIS2).
+    row_end : int
+        Final row number (1-based index along NAXIS2).
     median_filter_xsize : int, optional
         Size of the median filter to apply to the flat data to remove
         bad pixels.
@@ -103,6 +121,10 @@ def find_slice_boundary_borders_from_flat(
         raise ValueError(
             f"Flat file dimensions ({naxis1}, {naxis2}) do not match expected dimensions ({FRIDA_NAXIS1_HAWAII.value}, {FRIDA_NAXIS2_HAWAII.value})"
         )
+
+    # Set to zero the pixels outside the specified row range (1-based index along NAXIS2)
+    flat_data[: (row_ini - 1), :] = 0.0
+    flat_data[row_end:, :] = 0.0
 
     # Median filter the flat data to remove bad pixels. If there are NaN values,
     # use generic_filter with np.nanmedian to ignore NaN values. Otherwise, use median_filter directly,ç
@@ -261,9 +283,12 @@ def find_slice_boundary_borders_from_flat(
             plt.pause(0.1)
         ## plt.show()
 
-    # Define arrays to store slice boundaries
+    # Define arrays to store slice boundaries for all the FRIDA_NSLICES slices
     array_left_border = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
     array_right_border = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
+
+    # Number of slices to be found
+    nslices_eff = slice_end - slice_ini + 1
 
     # Main loop
     num_useful_columns = 0
@@ -282,7 +307,7 @@ def find_slice_boundary_borders_from_flat(
         # Find the highest FRIDA_NSLICES peaks in the 1st derivative (up and down refer to the positive and negative peaks)
         list_ipeaks_deriv1_up = find_highest_peaks_spectrum(
             sx=yderiv1,
-            nmaxpeaks=FRIDA_NSLICES,
+            nmaxpeaks=nslices_eff,
             nclean_around_peak=40,
             nwinwidth=5,
             nborder_to_ignore=5,
@@ -290,7 +315,7 @@ def find_slice_boundary_borders_from_flat(
         )
         list_ipeaks_deriv1_down = find_highest_peaks_spectrum(
             sx=-yderiv1,
-            nmaxpeaks=FRIDA_NSLICES,
+            nmaxpeaks=nslices_eff,
             nclean_around_peak=40,
             nwinwidth=5,
             nborder_to_ignore=5,
@@ -298,13 +323,13 @@ def find_slice_boundary_borders_from_flat(
         )
         # Check that the up and down peaks are in the expected order (up, down, up, down, ...)
         flag_deriv1_ok = True
-        for islice in range(FRIDA_NSLICES):
+        for islice in range(nslices_eff):
             if list_ipeaks_deriv1_up[islice] > list_ipeaks_deriv1_down[islice]:
                 flag_deriv1_ok = False
                 logger.debug(
                     f"Column {col}: Up peak {list_ipeaks_deriv1_up[islice]} is after down peak {list_ipeaks_deriv1_down[islice]}."
                 )
-        for igap in range(FRIDA_NSLICES - 1):
+        for igap in range(nslices_eff - 1):
             if list_ipeaks_deriv1_down[igap] > list_ipeaks_deriv1_up[igap + 1]:
                 flag_deriv1_ok = False
                 logger.debug(
@@ -312,14 +337,14 @@ def find_slice_boundary_borders_from_flat(
                 )
         if flag_deriv1_ok:
             # Median signal within each slice
-            list_perc90 = np.zeros(FRIDA_NSLICES, dtype=float)
-            for islice in range(FRIDA_NSLICES):
+            list_perc90 = np.zeros(nslices_eff, dtype=float)
+            for islice in range(nslices_eff):
                 list_perc90[islice] = np.percentile(
                     ydata_smoothed[list_ipeaks_deriv1_up[islice] : list_ipeaks_deriv1_down[islice]], 90
                 )
             # Location of minimum between slices
-            imin_between_slices = np.zeros(FRIDA_NSLICES - 1, dtype=int)
-            for igap in range(FRIDA_NSLICES - 1):
+            imin_between_slices = np.zeros(nslices_eff - 1, dtype=int)
+            for igap in range(nslices_eff - 1):
                 imin_between_slices[igap] = (
                     np.argmin(ydata_smoothed[list_ipeaks_deriv1_down[igap] : (list_ipeaks_deriv1_up[igap + 1] + 1)])
                     + list_ipeaks_deriv1_down[igap]
@@ -331,15 +356,15 @@ def find_slice_boundary_borders_from_flat(
                 debugplot=0,
             )
             # Closest peak in the 2nd derivative to each peak in the 1st derivative
-            list_ipeaks_deriv2_up = np.zeros(FRIDA_NSLICES, dtype=int)
-            for islice in range(FRIDA_NSLICES):
+            list_ipeaks_deriv2_up = np.zeros(nslices_eff, dtype=int)
+            for islice in range(nslices_eff):
                 ipeak_deriv1_up = list_ipeaks_deriv1_up[islice]
                 idx = np.searchsorted(list_ipeaks_deriv2, ipeak_deriv1_up, side="left") - 1
                 if idx < 0:
                     raise ValueError(f"No peak found in 2nd derivative for 1st derivative peak at {ipeak_deriv1_up}")
                 list_ipeaks_deriv2_up[islice] = list_ipeaks_deriv2[idx]
-            list_ipeaks_deriv2_down = np.zeros(FRIDA_NSLICES, dtype=int)
-            for islice in range(FRIDA_NSLICES):
+            list_ipeaks_deriv2_down = np.zeros(nslices_eff, dtype=int)
+            for islice in range(nslices_eff):
                 ipeak_deriv1_down = list_ipeaks_deriv1_down[islice]
                 idx = np.searchsorted(list_ipeaks_deriv2, ipeak_deriv1_down, side="right")
                 if idx < 0:
@@ -347,19 +372,19 @@ def find_slice_boundary_borders_from_flat(
                 list_ipeaks_deriv2_down[islice] = list_ipeaks_deriv2[idx]
             # Check that the up and down peaks in the 2nd derivative are also in the expected order
             flag_deriv2_ok = True
-            for islice in range(FRIDA_NSLICES):
+            for islice in range(nslices_eff):
                 if list_ipeaks_deriv2_up[islice] > list_ipeaks_deriv2_down[islice]:
                     flag_deriv2_ok = False
                     logger.debug(
                         f"Column {col}: 2nd derivative up peak {list_ipeaks_deriv2_up[islice]} is after down peak {list_ipeaks_deriv2_down[islice]}."
                     )
-            for igap in range(FRIDA_NSLICES - 1):
+            for igap in range(nslices_eff - 1):
                 if list_ipeaks_deriv2_down[igap] > list_ipeaks_deriv2_up[igap + 1]:
                     flag_deriv2_ok = False
                     logger.debug(
                         f"Column {col}: 2nd derivative down peak {list_ipeaks_deriv2_down[igap]} is after next up peak {list_ipeaks_deriv2_up[igap + 1]}."
                     )
-            for igap in range(FRIDA_NSLICES - 1):
+            for igap in range(nslices_eff - 1):
                 x1 = list_ipeaks_deriv1_down[igap]
                 x2 = list_ipeaks_deriv1_up[igap + 1]
                 xx1 = list_ipeaks_deriv2_down[igap]
@@ -402,7 +427,7 @@ def find_slice_boundary_borders_from_flat(
                     )
                     ymin, ymax = ax.get_ylim()
                     dy = ymax - ymin
-                    for islice in range(FRIDA_NSLICES):
+                    for islice in range(nslices_eff):
                         x1 = list_ipeaks_deriv1_up[islice]
                         x2 = list_ipeaks_deriv1_down[islice]
                         y1 = ydata_smoothed[x1]
@@ -413,7 +438,7 @@ def find_slice_boundary_borders_from_flat(
                         ax.text(
                             xmid,
                             ymid + dy / 100,
-                            f"#{slicenum_from_index(islice)}",
+                            f"#{slicenum_from_index(islice + slice_ini - 1)}",
                             ha="center",
                             va="bottom",
                             fontsize=8,
@@ -441,15 +466,16 @@ def find_slice_boundary_borders_from_flat(
                     plt.tight_layout()
                     plt.show()
                 # Determine the slice boundaries
-                list_left_border = np.full(FRIDA_NSLICES, np.nan, dtype=float)
-                list_ymin_left_border = np.full(FRIDA_NSLICES, np.nan, dtype=float)
-                list_right_border = np.full(FRIDA_NSLICES, np.nan, dtype=float)
-                list_ymin_right_border = np.full(FRIDA_NSLICES, np.nan, dtype=float)
+                list_left_border = np.full(nslices_eff, np.nan, dtype=float)
+                list_ymin_left_border = np.full(nslices_eff, np.nan, dtype=float)
+                list_right_border = np.full(nslices_eff, np.nan, dtype=float)
+                list_ymin_right_border = np.full(nslices_eff, np.nan, dtype=float)
                 if plots_extra:
                     fig, axrr = plt.subplots(nrows=6, ncols=5, figsize=(15, 10))
                     axarr = axrr.flatten()
-                    axarr[-1].axis("off")  # Turn off the last axis if there are 30 slices
-                for igap in range(FRIDA_NSLICES - 1):
+                    for ax in axarr:
+                        ax.axis("off")  # Turn off all axes initially
+                for igap in range(nslices_eff - 1):
                     x1 = list_ipeaks_deriv1_down[igap]
                     x2 = list_ipeaks_deriv1_up[igap + 1]
                     xx1 = list_ipeaks_deriv2_down[igap]
@@ -488,8 +514,10 @@ def find_slice_boundary_borders_from_flat(
                     # Display result for each slice if plots is enabled
                     if plots_extra:
                         ax = axarr[igap]
+                        ax.axis("on")  # Turn on the axis for this subplot
                         ax.plot(xdum, ydum, ".")
-                        ax.set_title(f"Gap #{slicenum_from_index(igap)}-{slicenum_from_index(igap + 1)}")
+                        igap_eff = igap + slice_ini - 1
+                        ax.set_title(f"Gap #{slicenum_from_index(igap_eff)}-{slicenum_from_index(igap_eff + 1)}")
                         ax.set_xlabel("array index along NAXIS2 axis")
                         ax.set_ylabel("data")
                         ax.plot(x1, ydata_smoothed[x1], "C3o")
@@ -539,7 +567,7 @@ def find_slice_boundary_borders_from_flat(
                 if plots_extra:
                     fig, ax = plt.subplots()
                     ax.plot(xdum, ydum, ".")
-                    ax.set_title(f"Left border of slice #{slicenum_from_index(0)}")
+                    ax.set_title(f"Left border of slice #{slicenum_from_index(slice_ini - 1)}")
                     ax.set_xlabel("array index along NAXIS2 axis")
                     ax.set_ylabel("data")
                     ax.plot(x2, ydata_smoothed[x2], "C3.")
@@ -574,7 +602,7 @@ def find_slice_boundary_borders_from_flat(
                 if plots_extra:
                     fig, ax = plt.subplots()
                     ax.plot(xdum, ydum, ".")
-                    ax.set_title(f"Right border of slice #{slicenum_from_index(FRIDA_NSLICES - 1)}")
+                    ax.set_title(f"Right border of slice #{slicenum_from_index(slice_end - 1)}")
                     ax.set_xlabel("array index along NAXIS2 axis")
                     ax.set_ylabel("data")
                     ax.plot(x1, ydata_smoothed[x1], "C3.")
@@ -592,9 +620,12 @@ def find_slice_boundary_borders_from_flat(
                 if plots_extra:
                     fig, ax = plt.subplots(nrows=6, ncols=5, figsize=(15, 10))
                     axarr = ax.flatten()
+                    for ax in axarr:
+                        ax.axis("off")  # Turn off all axes initially
                     xdum = np.arange(FRIDA_NAXIS2_HAWAII.value)
-                    for islice in range(FRIDA_NSLICES):
+                    for islice in range(nslices_eff):
                         ax = axarr[islice]
+                        ax.axis("on")  # Turn on the axis for this subplot
                         ax.plot(xdum, ydata, "-", color="gray")
                         ax.plot(xdum, ydata_smoothed, "C0-")
                         ax.axhline(0, linestyle=":", color="gray")
@@ -616,7 +647,7 @@ def find_slice_boundary_borders_from_flat(
                         ax.axvline(list_right_border[islice], linestyle="--", color="k")
                         ax.set_xlabel("array index along NAXIS2 axis")
                         ax.set_ylabel("data")
-                        ax.set_title(f"Slice #{slicenum_from_index(islice)}")
+                        ax.set_title(f"Slice #{slicenum_from_index(islice + slice_ini - 1)}")
                     plt.suptitle(
                         f"{Path(flatfile).name}\nColumn {col} (from 1 to NAXIS1) - Slice boundaries from flat",
                         fontsize=14,
@@ -624,8 +655,8 @@ def find_slice_boundary_borders_from_flat(
                     plt.tight_layout()
                     plt.show()
                 # Store the slice boundaries for this column
-                array_left_border[:, col - 1] = list_left_border
-                array_right_border[:, col - 1] = list_right_border
+                array_left_border[slice_ini - 1 : slice_end, col - 1] = list_left_border
+                array_right_border[slice_ini - 1 : slice_end :, col - 1] = list_right_border
                 num_useful_columns += 1
             else:
                 logger.debug(f"Column {col}: 2nd derivative peaks are not in the expected order. Skipping this column.")
@@ -648,9 +679,23 @@ def main(args=None):
     parser.add_argument(
         "--output", help="Output FITS file name", type=str, default="slice_boundary_borders_from_flat.fits"
     )
+    parser.add_argument("--slice-ini", help="Initial slice number (1-based index)", type=int, default=1)
+    parser.add_argument("--slice-end", help="Final slice number (1-based index)", type=int, default=FRIDA_NSLICES)
+    parser.add_argument(
+        "--row-ini",
+        help="Initial row number (1-based index) along NAXIS2",
+        type=int,
+        default=FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value,
+    )
+    parser.add_argument(
+        "--row-end",
+        help="Final row number (1-based index) along NAXIS2",
+        type=int,
+        default=FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value,
+    )
     parser.add_argument(
         "--colrange",
-        help="Column range to analyze (1-based index). This option can be specified multiple times",
+        help="Column range to analyze (1-based index) along NAXIS1. This option can be specified multiple times",
         nargs=2,
         type=int,
         action="append",
@@ -708,12 +753,41 @@ def main(args=None):
     if args.flatfile is None:
         raise ValueError("Flat file is not defined. Use --flatfile to specify the flat file.")
 
+    # Check input parameters
+    if args.slice_ini < 1 or args.slice_ini > FRIDA_NSLICES:
+        raise ValueError(f"Initial slice number must be between 1 and {FRIDA_NSLICES}.")
+    if args.slice_end < 1 or args.slice_end > FRIDA_NSLICES:
+        raise ValueError(f"Final slice number must be between 1 and {FRIDA_NSLICES}.")
+    if args.slice_ini > args.slice_end:
+        raise ValueError("Initial slice number cannot be greater than final slice number.")
+    if (
+        args.row_ini < FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value
+        or args.row_ini > FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value
+    ):
+        raise ValueError(
+            f"Initial row number must be between {FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value} and {FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value}."
+        )
+    if (
+        args.row_end < FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value
+        or args.row_end > FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value
+    ):
+        raise ValueError(
+            f"Final row number must be between {FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value} and {FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value}."
+        )
+    if args.row_ini > args.row_end:
+        raise ValueError("Initial row number cannot be greater than final row number.")
+
+    # Define the columns to analyze based on the specified column ranges
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
 
     # Compute the slice boundaries from the flat file
     array_left_border, array_right_border = find_slice_boundary_borders_from_flat(
         flatfile=args.flatfile,
         columns_to_analyze=columns_to_analyze,
+        slice_ini=args.slice_ini,
+        slice_end=args.slice_end,
+        row_ini=args.row_ini,
+        row_end=args.row_end,
         plots=args.plots,
     )
 
@@ -736,6 +810,10 @@ def main(args=None):
         primary_hdu = fits.PrimaryHDU()
         primary_hdu.header["FLATFILE"] = Path(args.flatfile).name
         primary_hdu.header["KEYCODE"] = "SLICE_BOUNDARY_BORDERS_FROM_FLAT"
+        primary_hdu.header["SLICEINI"] = (args.slice_ini, "Initial slice number (1-based index)")
+        primary_hdu.header["SLICEEND"] = (args.slice_end, "Final slice number (1-based index)")
+        primary_hdu.header["ROWINI"] = (args.row_ini, "Initial row number (1-based index)")
+        primary_hdu.header["ROWEND"] = (args.row_end, "Final row number (1-based index)")
         add_script_info_to_fits_history(primary_hdu.header, args)
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
         hdul.writeto(args.output, overwrite=True)
