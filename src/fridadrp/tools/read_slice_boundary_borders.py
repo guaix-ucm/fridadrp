@@ -37,6 +37,8 @@ def read_slice_boundary_borders(input_file):
         Array containing the right slice boundaries.
     ibad : np.ndarray
         Boolean array indicating the positions of NaN values in the collapsed borders.
+    keywords_dict : dict
+        Dictionary containing relevant header keywords from the input FITS file.
     """
     logger = logging.getLogger(__name__)
 
@@ -47,6 +49,15 @@ def read_slice_boundary_borders(input_file):
         keycode = hdul[0].header["KEYCODE"]
         if keycode != "SLICE_BOUNDARY_BORDERS_FROM_FLAT":
             raise ValueError(f"Invalid KEYCODE={keycode}.\nExpected value is 'SLICE_BOUNDARY_BORDERS_FROM_FLAT'.")
+        keywords_dict = dict()
+        for keyword in ["UUID", "SLICEINI", "SLICEEND"]:
+            if keyword not in hdul[0].header:
+                raise ValueError(f"Input file {input_file} does not contain the expected header keyword '{keyword}'.")
+            if keyword == "UUID":
+                kw = "UUID-BOR"
+            else:
+                kw = keyword
+            keywords_dict[kw] = hdul[0].header[keyword]
         for extname in ["L-BORDER", "R-BORDER"]:
             if extname not in hdul:
                 raise ValueError(f"Input file {input_file} does not contain the expected extension '{extname}'.")
@@ -75,4 +86,4 @@ def read_slice_boundary_borders(input_file):
             )
         ibad = ibad_left  # Use either ibad_left or ibad_right, they are the same
 
-    return array_left_border, array_right_border, ibad
+    return array_left_border, array_right_border, ibad, keywords_dict
