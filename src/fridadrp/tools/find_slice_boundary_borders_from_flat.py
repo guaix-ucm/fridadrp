@@ -677,7 +677,7 @@ def main(args=None):
     )
     parser.add_argument("--flatfile", type=str, help="Path to the flat file", required=True)
     parser.add_argument(
-        "--output", help="Output FITS file name", type=str, default="slice_boundary_borders_from_flat.fits"
+        "--output", help="Output FITS file name", type=str, default=None
     )
     parser.add_argument("--slice-ini", help="Initial slice number (1-based index)", type=int, default=1)
     parser.add_argument("--slice-end", help="Final slice number (1-based index)", type=int, default=FRIDA_NSLICES)
@@ -816,6 +816,8 @@ def main(args=None):
         primary_hdu.header["ROWEND"] = (args.row_end, "Final row number (1-based index)")
         add_script_info_to_fits_history(primary_hdu.header, args)
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
+        if args.output is None:
+            args.output = f"slice_boundary_borders_from_flat_{args.slice_ini}-{args.slice_end}.fits"
         hdul.writeto(args.output, overwrite=True)
         logger.info(f"Slice boundary borders saved to: [green]{args.output}[/green]")
     else:
