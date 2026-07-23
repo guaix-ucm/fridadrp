@@ -677,9 +677,8 @@ def main(args=None):
         description="Find the slice boundaries from flat image", formatter_class=RichHelpFormatter
     )
     parser.add_argument("--flatfile", type=str, help="Path to the flat file", required=True)
-    parser.add_argument(
-        "--output", help="Output FITS file name", type=str, default=None
-    )
+    parser.add_argument("--output", help="Output FITS file name", type=str, default=None)
+    parser.add_argument("--overwrite", help="Overwrite output file if it exists", action="store_true")
     parser.add_argument("--slice-ini", help="Initial slice number (1-based index)", type=int, default=1)
     parser.add_argument("--slice-end", help="Final slice number (1-based index)", type=int, default=FRIDA_NSLICES)
     parser.add_argument(
@@ -781,6 +780,15 @@ def main(args=None):
     # Define the columns to analyze based on the specified column ranges
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
 
+    # Check if more than one column is specified and set the output file name accordingly
+    if len(columns_to_analyze) > 1:
+        if args.output is None:
+            args.output = f"slice_boundary_borders_from_flat_{args.slice_ini}-{args.slice_end}.fits"
+        # check if the output file already exists and handle overwrite option
+        output_path = Path(args.output)
+        if output_path.exists() and not args.overwrite:
+            raise FileExistsError(f"Output file {args.output} already exists. Use --overwrite to overwrite it.")
+
     # Compute the slice boundaries from the flat file
     array_left_border, array_right_border = find_slice_boundary_borders_from_flat(
         flatfile=args.flatfile,
@@ -818,9 +826,7 @@ def main(args=None):
         primary_hdu.header["ROWEND"] = (args.row_end, "Final row number (1-based index)")
         add_script_info_to_fits_history(primary_hdu.header, args)
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
-        if args.output is None:
-            args.output = f"slice_boundary_borders_from_flat_{args.slice_ini}-{args.slice_end}.fits"
-        hdul.writeto(args.output, overwrite=True)
+        hdul.writeto(args.output, overwrite=args.overwrite)
         logger.info(f"Slice boundary borders saved to: [green]{args.output}[/green]")
     else:
         logger.info(
