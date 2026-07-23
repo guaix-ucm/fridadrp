@@ -27,6 +27,7 @@ import sys
 import teareduce as tea
 from tqdm import tqdm
 import types
+import uuid
 
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, find_peaks_spectrum
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
@@ -810,6 +811,7 @@ def main(args=None):
         primary_hdu = fits.PrimaryHDU()
         primary_hdu.header["FLATFILE"] = Path(args.flatfile).name
         primary_hdu.header["KEYCODE"] = "SLICE_BOUNDARY_BORDERS_FROM_FLAT"
+        primary_hdu.header["UUID"] = str(uuid.uuid4())
         primary_hdu.header["SLICEINI"] = (args.slice_ini, "Initial slice number (1-based index)")
         primary_hdu.header["SLICEEND"] = (args.slice_end, "Final slice number (1-based index)")
         primary_hdu.header["ROWINI"] = (args.row_ini, "Initial row number (1-based index)")
