@@ -36,7 +36,8 @@ def read_slice_boundary_borders(input_file):
     array_right_border : np.ndarray
         Array containing the right slice boundaries.
     ibad : np.ndarray
-        Boolean array indicating the positions of NaN values in the collapsed borders.
+        Boolean array indicating the columns with NaN values
+        in the collapsed borders (0-based).
     keywords_dict : dict
         Dictionary containing relevant header keywords from the input FITS file.
     """
@@ -58,6 +59,9 @@ def read_slice_boundary_borders(input_file):
             else:
                 kw = keyword
             keywords_dict[kw] = hdul[0].header[keyword]
+        slice_ini = keywords_dict["SLICEINI"]
+        slice_end = keywords_dict["SLICEEND"]
+        islice_ok = np.arange(slice_ini - 1, slice_end)  # indices of slices to be analyzed (0-based index)
         for extname in ["L-BORDER", "R-BORDER"]:
             if extname not in hdul:
                 raise ValueError(f"Input file {input_file} does not contain the expected extension '{extname}'.")
@@ -67,7 +71,7 @@ def read_slice_boundary_borders(input_file):
                 f"Input file {input_file} has unexpected shape for L-BORDER extension: {array_left_border.shape}. "
                 f"Expected shape is ({FRIDA_NSLICES}, {FRIDA_NAXIS1_HAWAII.value})."
             )
-        collapsed_left_border = np.sum(array_left_border, axis=0)
+        collapsed_left_border = np.sum(array_left_border[islice_ok, :], axis=0)
         ibad_left = np.isnan(collapsed_left_border)
         logger.info(f"Number of NaN values in collapsed left border : {np.sum(ibad_left)}")
         array_right_border = hdul["R-BORDER"].data
@@ -76,7 +80,7 @@ def read_slice_boundary_borders(input_file):
                 f"Input file {input_file} has unexpected shape for R-BORDER extension: {array_right_border.shape}. "
                 f"Expected shape is ({FRIDA_NSLICES}, {FRIDA_NAXIS1_HAWAII.value})."
             )
-        collapsed_right_border = np.sum(array_right_border, axis=0)
+        collapsed_right_border = np.sum(array_right_border[islice_ok, :], axis=0)
         ibad_right = np.isnan(collapsed_right_border)
         logger.info(f"Number of NaN values in collapsed right border: {np.sum(ibad_right)}")
         if not np.array_equal(ibad_left, ibad_right):

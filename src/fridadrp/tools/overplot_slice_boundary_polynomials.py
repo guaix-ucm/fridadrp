@@ -138,7 +138,7 @@ def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, 
 
     # Read the slice boundary borders from the input file if provided
     if input_borders is not None:
-        array_left_border, array_right_border, ibad = read_slice_boundary_borders(input_borders)
+        array_left_border, array_right_border, ibad, keywords_dict = read_slice_boundary_borders(input_borders)
         logger.info(f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from {input_borders}.")
 
     # Read the image data from the input FITS file
