@@ -38,13 +38,13 @@ FRIDA_SPATIAL_SCALE = {
 }
 
 # Define array for slice number from index conversions
-DEF_SLICENUM_FROM_INDEX = np.array(
+DEF_SLICEID_FROM_SLICEINDEX = np.array(
     [30, 1, 29, 2, 28, 3, 27, 4, 26, 5, 25, 6, 24, 7, 23, 8, 22, 9, 21, 10, 20, 11, 19, 12, 18, 13, 17, 14, 16, 15],
     dtype=int,
 )  # slice number from index (0-29)
-if len(DEF_SLICENUM_FROM_INDEX) != FRIDA_NSLICES:
+if len(DEF_SLICEID_FROM_SLICEINDEX) != FRIDA_NSLICES:
     raise ValueError(
-        f"Length of DEF_SLICENUM_FROM_INDEX ({len(DEF_SLICENUM_FROM_INDEX)}) does not match FRIDA_NSLICES ({FRIDA_NSLICES})"
+        f"Length of DEF_SLICENUM_FROM_INDEX ({len(DEF_SLICEID_FROM_SLICEINDEX)}) does not match FRIDA_NSLICES ({FRIDA_NSLICES})"
     )
 
 
@@ -65,25 +65,25 @@ def sliceid_from_sliceindex(slice_index):
     if isinstance(slice_index, int):
         if slice_index < 0 or slice_index >= FRIDA_NSLICES:
             raise ValueError(f"Slice index must be in the range [0, {FRIDA_NSLICES - 1}]")
-        return DEF_SLICENUM_FROM_INDEX[slice_index]
+        return DEF_SLICEID_FROM_SLICEINDEX[slice_index]
     elif isinstance(slice_index, (list, np.ndarray, range)):
         slice_index = np.asarray(slice_index)
         if np.any((slice_index < 0) | (slice_index >= FRIDA_NSLICES)):
             raise ValueError(f"Slice index must be in the range [0, {FRIDA_NSLICES - 1}]")
-        return DEF_SLICENUM_FROM_INDEX[slice_index]
+        return DEF_SLICEID_FROM_SLICEINDEX[slice_index]
     else:
         raise TypeError("slice_index must be an int or array-like of int")
 
 
 # Define array for slice index from slice number conversions
 # (note: slice number is 1-30, slice index is 0-29; the first element of the array is a dummy value for non-existent slice number 0)
-DEF_SLICEINDEX_FROM_NUM = np.array(
+DEF_SLICEINDEX_FROM_SLICEID = np.array(
     [-1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0],
     dtype=int,
 )  # slice index (0-29) from slice number (1-30)
-if len(DEF_SLICEINDEX_FROM_NUM) != FRIDA_NSLICES + 1:
+if len(DEF_SLICEINDEX_FROM_SLICEID) != FRIDA_NSLICES + 1:
     raise ValueError(
-        f"Length of DEF_SLICEINDEX_FROM_NUM ({len(DEF_SLICEINDEX_FROM_NUM)}) does not match FRIDA_NSLICES + 1 ({FRIDA_NSLICES + 1})"
+        f"Length of DEF_SLICEINDEX_FROM_NUM ({len(DEF_SLICEINDEX_FROM_SLICEID)}) does not match FRIDA_NSLICES + 1 ({FRIDA_NSLICES + 1})"
     )
 
 
@@ -104,11 +104,11 @@ def sliceindex_from_sliceid(slice_number):
     if isinstance(slice_number, int):
         if slice_number < 1 or slice_number > FRIDA_NSLICES:
             raise ValueError(f"Slice number must be in the range [1, {FRIDA_NSLICES}]")
-        return DEF_SLICEINDEX_FROM_NUM[slice_number]
+        return DEF_SLICEINDEX_FROM_SLICEID[slice_number]
     elif isinstance(slice_number, (list, np.ndarray, range)):
         slice_number = np.asarray(slice_number)
         if np.any((slice_number < 1) | (slice_number > FRIDA_NSLICES)):
             raise ValueError(f"Slice number must be in the range [1, {FRIDA_NSLICES}]")
-        return DEF_SLICEINDEX_FROM_NUM[slice_number]
+        return DEF_SLICEINDEX_FROM_SLICEID[slice_number]
     else:
         raise TypeError("slice_number must be an int or array-like of int")
