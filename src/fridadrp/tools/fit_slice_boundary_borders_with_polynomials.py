@@ -80,7 +80,7 @@ def fit_slice_boundary_borders_with_polynomials(
     for col in columns_to_analyze:
         iskip[col - 1] = False
     ibad = ibad | iskip
-    logger.info(f"Number of valid columns to fit each boundary after applying columns_to_analyze: {np.sum(~ibad)}")
+    logger.info(f"Number of valid columns after applying columns_to_analyze: {np.sum(~ibad)}")
     logger.info(f"Polynomial degree: {deg}")
     if np.sum(~ibad) < deg + 1:
         raise ValueError(
@@ -92,10 +92,12 @@ def fit_slice_boundary_borders_with_polynomials(
     list_poly_right = []
     x = np.arange(FRIDA_NAXIS1_HAWAII.value)
     xfit = x[~ibad]
+    islice_skipped = []
     for islice in tqdm(range(FRIDA_NSLICES), desc="Fitting slice boundaries"):
         if islice not in islice_ok:
             list_poly_left.append(None)
             list_poly_right.append(None)
+            islice_skipped.append(islice)
             continue
         y_left = array_left_border[islice, :]
         y_right = array_right_border[islice, :]
@@ -126,6 +128,9 @@ def fit_slice_boundary_borders_with_polynomials(
             debugplot=0 if not plots else 2,
         )
         list_poly_right.append(poly_right)
+
+    if len(islice_skipped) > 0:
+        logger.warning(f"Skipped slices (id): {', '.join([f'#{slicenum_from_index(i)}' for i in islice_skipped])}")
 
     return list_poly_left, list_poly_right
 
