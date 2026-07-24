@@ -61,28 +61,30 @@ def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sli
     xmin, xmax = ax.get_xlim()
     xdum = np.linspace(xmin, xmax, 1000)
     for islice in range(FRIDA_NSLICES):
-        ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
-        ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="C0", lw=2.0, alpha=0.7)
-        ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
-        ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="C1", lw=2.0, alpha=0.7)
+        if list_poly_left[islice] is not None:
+            ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
+            ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="C0", lw=2.0, alpha=0.7)
+        if list_poly_right[islice] is not None:
+            ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
+            ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="C1", lw=2.0, alpha=0.7)
         if sliceid:
-            xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
-            ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
-            ax.text(
-                xcenter,
-                ycenter,
-                f"#{slicenum_from_index(islice)}",
-                color="white",
-                fontsize=12,
-                ha="center",
-                va="center",
-                fontweight="bold",
-                alpha=1.0,
-            )
+            if list_poly_left[islice] is not None and list_poly_right[islice] is not None:
+                xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
+                ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
+                ax.text(
+                    xcenter,
+                    ycenter,
+                    f"#{slicenum_from_index(islice)}",
+                    color="white",
+                    fontsize=12,
+                    ha="center",
+                    va="center",
+                    fontweight="bold",
+                    alpha=1.0,
+                )
 
 
-def plot_borders(ax, array_left_border, array_right_border, ibad, 
-                 color="white", marker=".", markersize=0.5, alpha=1.0):
+def plot_borders(ax, array_left_border, array_right_border, ibad, color="white", marker=".", markersize=0.5, alpha=1.0):
     """Plot the slice boundary borders on the given axes
 
     Parameters
@@ -102,8 +104,10 @@ def plot_borders(ax, array_left_border, array_right_border, ibad,
     for islice in range(FRIDA_NSLICES):
         y_left = array_left_border[islice, ~ibad]
         y_right = array_right_border[islice, ~ibad]
-        ax.plot(xplot, y_left, color=color, marker=marker, markersize=markersize, linestyle="None",alpha=alpha)
-        ax.plot(xplot, y_right, color=color, marker=marker, markersize=markersize, linestyle="None", alpha=alpha)
+        if not np.all(np.isnan(y_left)):
+            ax.plot(xplot, y_left, color=color, marker=marker, markersize=markersize, linestyle="None", alpha=alpha)
+        if not np.all(np.isnan(y_right)):
+            ax.plot(xplot, y_right, color=color, marker=marker, markersize=markersize, linestyle="None", alpha=alpha)
 
 
 def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, voffset=0.0, sliceid=False):
@@ -139,7 +143,9 @@ def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, 
     # Read the slice boundary borders from the input file if provided
     if input_borders is not None:
         array_left_border, array_right_border, ibad, keywords_dict = read_slice_boundary_borders(input_borders)
-        logger.info(f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from {input_borders}.")
+        logger.info(
+            f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from {input_borders}."
+        )
 
     # Read the image data from the input FITS file
     with fits.open(image) as hdul:
@@ -250,7 +256,9 @@ def main(args=None):
         description="Overplot the slice boundaries polynomial on image", formatter_class=RichHelpFormatter
     )
     parser.add_argument("--poly", help="Path to the file with the boundary polynomials", type=str, required=True)
-    parser.add_argument("--borders", help="Path to the file with the boundary borders (optional)", type=str, required=False)
+    parser.add_argument(
+        "--borders", help="Path to the file with the boundary borders (optional)", type=str, required=False
+    )
     parser.add_argument("--image", help="Image to display boundaries on", type=str, required=True)
     parser.add_argument(
         "--voffset", help="Vertical constant offset (pixels) to apply to the polynomials", type=float, default=0.0
@@ -312,11 +320,11 @@ def main(args=None):
 
     # Overplot the slice boundary polynomials
     overplot_slice_boundary_polynomials(
-        input_polynomial=args.poly, 
+        input_polynomial=args.poly,
         input_borders=args.borders,
-        image=args.image, 
-        voffset=args.voffset, 
-        sliceid=args.sliceid
+        image=args.image,
+        voffset=args.voffset,
+        sliceid=args.sliceid,
     )
 
     # Execution time
