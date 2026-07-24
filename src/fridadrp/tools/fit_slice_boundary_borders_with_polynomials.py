@@ -28,7 +28,7 @@ from numina.user.console import NuminaConsole
 from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_NSLICES
-from fridadrp.core import slicenum_from_index
+from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 
@@ -110,7 +110,7 @@ def fit_slice_boundary_borders_with_polynomials(
             times_sigma_reject=3.0,
             xlabel="array index along NAXIS1 axis",
             ylabel="array index along NAXIS2 axis",
-            title=f"Slice {slicenum_from_index(islice)} - Left boundary fit",
+            title=f"Slice {sliceid_from_sliceindex(islice)} - Left boundary fit",
             debugplot=0 if not plots else 2,
         )
         list_poly_left.append(poly_left)
@@ -124,13 +124,13 @@ def fit_slice_boundary_borders_with_polynomials(
             times_sigma_reject=3.0,
             xlabel="array index along NAXIS1 axis",
             ylabel="array index along NAXIS2 axis",
-            title=f"Slice {slicenum_from_index(islice)} - Right boundary fit",
+            title=f"Slice {sliceid_from_sliceindex(islice)} - Right boundary fit",
             debugplot=0 if not plots else 2,
         )
         list_poly_right.append(poly_right)
 
     if len(islice_skipped) > 0:
-        logger.warning(f"Skipped slices (id): {', '.join([f'#{slicenum_from_index(i)}' for i in islice_skipped])}")
+        logger.warning(f"Skipped slices (id): {', '.join([f'#{sliceid_from_sliceindex(i)}' for i in islice_skipped])}")
 
     return list_poly_left, list_poly_right
 

@@ -48,7 +48,7 @@ if len(DEF_SLICENUM_FROM_INDEX) != FRIDA_NSLICES:
     )
 
 
-def slicenum_from_index(slice_index):
+def sliceid_from_sliceindex(slice_index):
     """Convert slice index (0-29) to slice number (1-30)
 
     Parameters
@@ -87,7 +87,7 @@ if len(DEF_SLICEINDEX_FROM_NUM) != FRIDA_NSLICES + 1:
     )
 
 
-def sliceindex_from_num(slice_number):
+def sliceindex_from_sliceid(slice_number):
     """Convert slice number (1-30) to slice index (0-29)
 
     Parameters

@@ -30,7 +30,7 @@ from numina.user.console import NuminaConsole
 from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
-from fridadrp.core import slicenum_from_index
+from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
@@ -74,7 +74,7 @@ def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sli
                 ax.text(
                     xcenter,
                     ycenter,
-                    f"#{slicenum_from_index(islice)}",
+                    f"#{sliceid_from_sliceindex(islice)}",
                     color="white",
                     fontsize=12,
                     ha="center",

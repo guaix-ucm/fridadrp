@@ -7,15 +7,15 @@
 # License-Filename: LICENSE.txt
 #
 
-from fridadrp.core import slicenum_from_index
-from fridadrp.core import sliceindex_from_num
+from fridadrp.core import sliceid_from_sliceindex
+from fridadrp.core import sliceindex_from_sliceid
 
 
 def test_slicenum_from_index():
     # Test valid slice indices
     for i in range(30):
         assert (
-            slicenum_from_index(i)
+            sliceid_from_sliceindex(i)
             == [
                 30,
                 1,
@@ -52,13 +52,13 @@ def test_slicenum_from_index():
 
     # Test invalid slice indices
     try:
-        slicenum_from_index(-1)
+        sliceid_from_sliceindex(-1)
         assert False
     except ValueError:
         pass
 
     try:
-        slicenum_from_index(30)
+        sliceid_from_sliceindex(30)
         assert False
     except ValueError:
         pass
@@ -67,7 +67,7 @@ def test_slicenum_from_index():
 def test_sliceindex_from_slicenum():
     # Test valid slice numbers
     for i in range(1, 31):
-        assert sliceindex_from_num(i) == [
+        assert sliceindex_from_sliceid(i) == [
             30,
             1,
             29,
@@ -102,13 +102,13 @@ def test_sliceindex_from_slicenum():
 
     # Test invalid slice numbers
     try:
-        sliceindex_from_num(0)
+        sliceindex_from_sliceid(0)
         assert False
     except ValueError:
         pass
 
     try:
-        sliceindex_from_num(31)
+        sliceindex_from_sliceid(31)
         assert False
     except ValueError:
         pass

@@ -38,7 +38,7 @@ from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NSLICES
-from fridadrp.core import slicenum_from_index
+from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 
 
@@ -439,7 +439,7 @@ def find_slice_boundary_borders_from_flat(
                         ax.text(
                             xmid,
                             ymid + dy / 100,
-                            f"#{slicenum_from_index(islice + slice_ini - 1)}",
+                            f"#{sliceid_from_sliceindex(islice + slice_ini - 1)}",
                             ha="center",
                             va="bottom",
                             fontsize=8,
@@ -518,7 +518,7 @@ def find_slice_boundary_borders_from_flat(
                         ax.axis("on")  # Turn on the axis for this subplot
                         ax.plot(xdum, ydum, ".")
                         igap_eff = igap + slice_ini - 1
-                        ax.set_title(f"Gap #{slicenum_from_index(igap_eff)}-{slicenum_from_index(igap_eff + 1)}")
+                        ax.set_title(f"Gap #{sliceid_from_sliceindex(igap_eff)}-{sliceid_from_sliceindex(igap_eff + 1)}")
                         ax.set_xlabel("array index along NAXIS2 axis")
                         ax.set_ylabel("data")
                         ax.plot(x1, ydata_smoothed[x1], "C3o")
@@ -568,7 +568,7 @@ def find_slice_boundary_borders_from_flat(
                 if plots_extra:
                     fig, ax = plt.subplots()
                     ax.plot(xdum, ydum, ".")
-                    ax.set_title(f"Left border of slice #{slicenum_from_index(slice_ini - 1)}")
+                    ax.set_title(f"Left border of slice #{sliceid_from_sliceindex(slice_ini - 1)}")
                     ax.set_xlabel("array index along NAXIS2 axis")
                     ax.set_ylabel("data")
                     ax.plot(x2, ydata_smoothed[x2], "C3.")
@@ -603,7 +603,7 @@ def find_slice_boundary_borders_from_flat(
                 if plots_extra:
                     fig, ax = plt.subplots()
                     ax.plot(xdum, ydum, ".")
-                    ax.set_title(f"Right border of slice #{slicenum_from_index(slice_end - 1)}")
+                    ax.set_title(f"Right border of slice #{sliceid_from_sliceindex(slice_end - 1)}")
                     ax.set_xlabel("array index along NAXIS2 axis")
                     ax.set_ylabel("data")
                     ax.plot(x1, ydata_smoothed[x1], "C3.")
@@ -648,7 +648,7 @@ def find_slice_boundary_borders_from_flat(
                         ax.axvline(list_right_border[islice], linestyle="--", color="k")
                         ax.set_xlabel("array index along NAXIS2 axis")
                         ax.set_ylabel("data")
-                        ax.set_title(f"Slice #{slicenum_from_index(islice + slice_ini - 1)}")
+                        ax.set_title(f"Slice #{sliceid_from_sliceindex(islice + slice_ini - 1)}")
                     plt.suptitle(
                         f"{Path(flatfile).name}\nColumn {col} (from 1 to NAXIS1) - Slice boundaries from flat",
                         fontsize=14,
