@@ -45,7 +45,7 @@ def read_slice_boundary_polynomials(input_polynomial):
     logger = logging.getLogger(__name__)
 
     with fits.open(input_polynomial) as hdul:
-        list_required_keywords = ["KEYCODE", "SLICEINI", "SLICEEND"]
+        list_required_keywords = ["KEYCODE", "SLICEINI", "SLICEEND", "POLDEG"]
         for keyword in list_required_keywords:
             if keyword not in hdul[0].header:
                 raise ValueError(f"Input file {input_polynomial} does not contain a {keyword} header keyword.")
@@ -55,15 +55,21 @@ def read_slice_boundary_polynomials(input_polynomial):
             )
         slice_ini = hdul[0].header["SLICEINI"]
         slice_end = hdul[0].header["SLICEEND"]
+        poldeg = hdul[0].header["POLDEG"]
         islice_ok = np.arange(slice_ini - 1, slice_end)  # indices of slices to be analyzed (0-based index)
 
         array_coefs_left = hdul["L-BORDER"].data
-        naxis2_left, deg_left = array_coefs_left.shape
+        naxis2_left, ncoeff_left = array_coefs_left.shape
         if naxis2_left != FRIDA_NSLICES:
             raise ValueError(
                 f"Input file {input_polynomial} has {naxis2_left} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}."
             )
-        logger.info(f"Reading {naxis2_left} slices with polynomial degree {deg_left-1}.")
+        if ncoeff_left != poldeg + 1:
+            raise ValueError(
+                f"Input file {input_polynomial} has POLDEG={hdul[0].header['POLDEG']}, "
+                f"but the L-BORDER extension has polynomial degree {ncoeff_left-1}."
+            )
+        logger.info(f"Reading {naxis2_left} slices with polynomial degree {ncoeff_left-1}.")
 
         list_poly_left = []
         for islice in range(FRIDA_NSLICES):
@@ -82,16 +88,17 @@ def read_slice_boundary_polynomials(input_polynomial):
                 list_poly_left.append(Polynomial(array_coefs_left[islice]))
 
         array_coefs_right = hdul["R-BORDER"].data
-        naxis2_right, deg_right = array_coefs_right.shape
+        naxis2_right, ncoeff_right = array_coefs_right.shape
+        if ncoeff_right != poldeg + 1:
+            raise ValueError(
+                f"Input file {input_polynomial} has POLDEG={hdul[0].header['POLDEG']}, "
+                f"but the R-BORDER extension has polynomial degree {ncoeff_right-1}."
+            )
         if naxis2_right != FRIDA_NSLICES:
             raise ValueError(
                 f"Input file {input_polynomial} has {naxis2_right} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}."
             )
-        if deg_right != deg_left:
-            raise ValueError(
-                f"Input file {input_polynomial} has different polynomial degrees for left and right borders: {deg_left-1} and {deg_right-1}."
-            )
-        logger.info(f"Reading {naxis2_right} slices with polynomial degree {deg_right-1}.")
+        logger.info(f"Reading {naxis2_right} slices with polynomial degree {ncoeff_right-1}.")
 
         list_poly_right = []
         for islice in range(FRIDA_NSLICES):
