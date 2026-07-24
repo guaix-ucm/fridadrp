@@ -817,7 +817,11 @@ def main(args=None):
         header3["EXTNAME"] = "SLIWIDTH"
         hdu3 = fits.ImageHDU(data=array_widths, header=header3)
         primary_hdu = fits.PrimaryHDU()
+        primary_hdu.header.add_history("*" * 71)
+        primary_hdu.header.add_history("Boundary borders from flat image")
+        primary_hdu.header.add_history("-" * 71)
         primary_hdu.header["FLATFILE"] = Path(args.flatfile).name
+        primary_hdu.header["OUTFILE"] = Path(args.output).name
         primary_hdu.header["KEYCODE"] = "SLICE_BOUNDARY_BORDERS_FROM_FLAT"
         primary_hdu.header["UUID"] = str(uuid.uuid4())
         primary_hdu.header["SLICEINI"] = (args.slice_ini, "Initial slice number (1-based index)")

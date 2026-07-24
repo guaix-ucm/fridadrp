@@ -266,7 +266,11 @@ def main(args=None):
     header3["EXTNAME"] = "SLIWIDTH"
     hdu3 = fits.ImageHDU(data=array_widths, header=header3)
     primary_hdu = fits.PrimaryHDU()
+    primary_hdu.header.add_history("*" * 71)
+    primary_hdu.header.add_history("Boundary polynomials fitted from slice borders")
+    primary_hdu.header.add_history("-" * 71)
     primary_hdu.header["INPFILE"] = Path(args.input).name
+    primary_hdu.header["OUTFILE"] = Path(args.output).name
     for key, value in keywords_dict.items():
         primary_hdu.header[key] = value
     primary_hdu.header["POLDEG"] = args.deg
