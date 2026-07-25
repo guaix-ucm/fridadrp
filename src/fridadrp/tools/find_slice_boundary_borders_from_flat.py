@@ -518,7 +518,9 @@ def find_slice_boundary_borders_from_flat(
                         ax.axis("on")  # Turn on the axis for this subplot
                         ax.plot(xdum, ydum, ".")
                         igap_eff = igap + slice_ini - 1
-                        ax.set_title(f"Gap #{sliceid_from_sliceindex(igap_eff)}-{sliceid_from_sliceindex(igap_eff + 1)}")
+                        ax.set_title(
+                            f"Gap #{sliceid_from_sliceindex(igap_eff)}-{sliceid_from_sliceindex(igap_eff + 1)}"
+                        )
                         ax.set_xlabel("array index along NAXIS2 axis")
                         ax.set_ylabel("data")
                         ax.plot(x1, ydata_smoothed[x1], "C3o")
@@ -824,10 +826,17 @@ def main(args=None):
         primary_hdu.header["OUTFILE"] = Path(args.output).name
         primary_hdu.header["KEYCODE"] = "SLICE_BOUNDARY_BORDERS_FROM_FLAT"
         primary_hdu.header["UUID"] = str(uuid.uuid4())
-        primary_hdu.header["SLICEINI"] = (args.slice_ini, "Initial slice number (1-based index)")
-        primary_hdu.header["SLICEEND"] = (args.slice_end, "Final slice number (1-based index)")
-        primary_hdu.header["ROWINI"] = (args.row_ini, "Initial row number (1-based index)")
-        primary_hdu.header["ROWEND"] = (args.row_end, "Final row number (1-based index)")
+        for i in range(1, FRIDA_NSLICES + 1):
+            if i in range(args.slice_ini, args.slice_end + 1):
+                primary_hdu.header[f"SLCNUM{i:02d}"] = (
+                    True,
+                    f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is included",
+                )
+            else:
+                primary_hdu.header[f"SLCNUM{i:02d}"] = (
+                    False,
+                    f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is not included",
+                )
         add_script_info_to_fits_history(primary_hdu.header, args)
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
         hdul.writeto(args.output, overwrite=args.overwrite)
