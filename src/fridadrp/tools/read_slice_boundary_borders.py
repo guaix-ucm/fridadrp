@@ -40,18 +40,15 @@ def read_slice_boundary_borders(input_file):
         in the collapsed borders (0-based).
     keywords_dict : dict
         Dictionary containing relevant header keywords from the input FITS file.
+    islice_ok : np.ndarray
+        Array containing the indices of the slices to be analyzed (0-based).
     """
     logger = logging.getLogger(__name__)
 
     # Check input file corresponds to the expected FITS file
     with fits.open(input_file) as hdul:
-        if "KEYCODE" not in hdul[0].header:
-            raise ValueError(f"Input file {input_file} does not contain a KEYCODE header keyword.")
-        keycode = hdul[0].header["KEYCODE"]
-        if keycode != "SLICE_BOUNDARY_BORDERS_FROM_FLAT":
-            raise ValueError(f"Invalid KEYCODE={keycode}.\nExpected value is 'SLICE_BOUNDARY_BORDERS_FROM_FLAT'.")
         keywords_dict = dict()
-        for keyword in ["UUID", "SLICEINI", "SLICEEND"]:
+        for keyword in ["KEYCODE", "UUID"]:
             if keyword not in hdul[0].header:
                 raise ValueError(f"Input file {input_file} does not contain the expected header keyword '{keyword}'.")
             if keyword == "UUID":
@@ -59,9 +56,17 @@ def read_slice_boundary_borders(input_file):
             else:
                 kw = keyword
             keywords_dict[kw] = hdul[0].header[keyword]
-        slice_ini = keywords_dict["SLICEINI"]
-        slice_end = keywords_dict["SLICEEND"]
-        islice_ok = np.arange(slice_ini - 1, slice_end)  # indices of slices to be analyzed (0-based index)
+        keycode = hdul[0].header["KEYCODE"]
+        if keycode != "SLICE_BOUNDARY_BORDERS_FROM_FLAT":
+            raise ValueError(f"Invalid KEYCODE={keycode}.\nExpected value is 'SLICE_BOUNDARY_BORDERS_FROM_FLAT'.")
+        islice_ok = []  # indices of slices to be analyzed (0-based index)
+        for i in range(1, FRIDA_NSLICES + 1):
+            kw = f"SLCNUM{i:02d}"
+            if kw not in hdul[0].header:
+                raise ValueError(f"Input file {input_file} does not contain the expected header keyword '{kw}'.")
+            if hdul[0].header[kw]:
+                islice_ok.append(i - 1)  # Store 0-based index of the slice
+        islice_ok = np.array(islice_ok, dtype=int)
         for extname in ["L-BORDER", "R-BORDER"]:
             if extname not in hdul:
                 raise ValueError(f"Input file {input_file} does not contain the expected extension '{extname}'.")
@@ -90,4 +95,4 @@ def read_slice_boundary_borders(input_file):
             )
         ibad = ibad_left  # Use either ibad_left or ibad_right, they are the same
 
-    return array_left_border, array_right_border, ibad, keywords_dict
+    return array_left_border, array_right_border, ibad, keywords_dict, islice_ok

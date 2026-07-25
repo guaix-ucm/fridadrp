@@ -43,7 +43,11 @@ def fit_slice_boundary_borders_with_polynomials(
     and as dependent variable the array index along the NAXIS2 axis,
     which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
 
-        Parameters
+    The slices without defined boundaries (i.e., those with NaN values)
+    are skipped and the returned list of polynomials will contain None 
+    for those slices.
+
+    Parameters
     ----------
     array_left_border : numpy.ndarray
         2D array containing the left slice boundary borders.
@@ -101,7 +105,7 @@ def fit_slice_boundary_borders_with_polynomials(
             continue
         y_left = array_left_border[islice, :]
         y_right = array_right_border[islice, :]
-        # Fit a polynomial of degree 3 to the left and right boundaries
+        # Fit a polynomial to the left and right boundaries
         yfit = y_left[~ibad]
         poly_left, _, _ = polfit_residuals_with_sigma_rejection(
             x=xfit,
@@ -114,7 +118,7 @@ def fit_slice_boundary_borders_with_polynomials(
             debugplot=0 if not plots else 2,
         )
         list_poly_left.append(poly_left)
-        # Fit a polynomial of degree 3 to the right boundary
+        # Fit a polynomial to the right boundary
         xfit = x[~ibad]
         yfit = y_right[~ibad]
         poly_right, _, _ = polfit_residuals_with_sigma_rejection(
@@ -214,14 +218,11 @@ def main(args=None):
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
 
     # Read the slice boundary borders from the input FITS file
-    array_left_border, array_right_border, ibad, keywords_dict = read_slice_boundary_borders(args.input)
-    slice_ini = keywords_dict["SLICEINI"]
-    slice_end = keywords_dict["SLICEEND"]
-    islice_ok = np.arange(slice_ini - 1, slice_end)  # indices of slices to be analyzed (0-based index)
+    array_left_border, array_right_border, ibad, keywords_dict, islice_ok = read_slice_boundary_borders(args.input)
 
     # Set output file name if not defined
     if args.output is None:
-        args.output = f"slice_boundary_polynomials_{slice_ini}-{slice_end}.fits"
+        args.output = f"slice_boundary_polynomials.fits"
     # check if the output file already exists and handle overwrite option
     output_path = Path(args.output)
     if output_path.exists() and not args.overwrite:
@@ -281,6 +282,17 @@ def main(args=None):
     primary_hdu.header["POLDEG"] = args.deg
     primary_hdu.header["KEYCODE"] = "SLICE_BOUNDARY_POLYNOMIALS"
     primary_hdu.header["UUID"] = str(uuid.uuid4())
+    for i in range(1, FRIDA_NSLICES + 1):
+        if i - 1 in islice_ok:
+            primary_hdu.header[f"SLCNUM{i:02d}"] = (
+                True,
+                f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is included",
+            )
+        else:
+            primary_hdu.header[f"SLCNUM{i:02d}"] = (
+                False,
+                f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is excluded",
+            )
     add_script_info_to_fits_history(primary_hdu.header, args)
     hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
     hdul.writeto(args.output, overwrite=args.overwrite)
