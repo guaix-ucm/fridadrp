@@ -218,7 +218,7 @@ def main(args=None):
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
 
     # Read the slice boundary borders from the input FITS file
-    array_left_border, array_right_border, ibad, keywords_dict, islice_ok = read_slice_boundary_borders(args.input)
+    array_left_border, array_right_border, ibad, uuid_borders, islice_ok = read_slice_boundary_borders(args.input)
 
     # Set output file name if not defined
     if args.output is None:
@@ -227,6 +227,8 @@ def main(args=None):
     output_path = Path(args.output)
     if output_path.exists() and not args.overwrite:
         raise FileExistsError(f"Output file {args.output} already exists. Use --overwrite to overwrite it.")
+    if output_path.is_dir():
+        raise IsADirectoryError(f"Output file {args.output} is a directory. Please specify a valid output file name.")
 
     # Fit the slice boundaries from the flat file
     list_poly_left, list_poly_right = fit_slice_boundary_borders_with_polynomials(
@@ -287,16 +289,12 @@ def main(args=None):
     header3["EXTNAME"] = "SLIWIDTH"
     hdu3 = fits.ImageHDU(data=array_widths, header=header3)
     primary_hdu = fits.PrimaryHDU()
-    primary_hdu.header.add_history("*" * 71)
-    primary_hdu.header.add_history("Boundary polynomials fitted from slice borders")
-    primary_hdu.header.add_history("-" * 71)
-    primary_hdu.header["INPFILE"] = Path(args.input).name
-    primary_hdu.header["OUTFILE"] = Path(args.output).name
-    for key, value in keywords_dict.items():
-        primary_hdu.header[key] = value
-    primary_hdu.header["POLDEG"] = args.deg
     primary_hdu.header["KEYCODE"] = "SLICE_BOUNDARY_POLYNOMIALS"
     primary_hdu.header["UUID"] = str(uuid.uuid4())
+    primary_hdu.header["UUID-BOR"] = uuid_borders
+    primary_hdu.header["INPFILE"] = Path(args.input).name
+    primary_hdu.header["OUTFILE"] = Path(args.output).name
+    primary_hdu.header["POLDEG"] = args.deg
     for i in range(1, FRIDA_NSLICES + 1):
         if i - 1 in islice_ok:
             primary_hdu.header[f"SLCNUM{i:02d}"] = (
@@ -308,7 +306,7 @@ def main(args=None):
                 False,
                 f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is excluded",
             )
-    add_script_info_to_fits_history(primary_hdu.header, args)
+    add_script_info_to_fits_history(primary_hdu.header, args, title="Boundary polynomials fitted from slice borders")
     hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
     hdul.writeto(args.output, overwrite=args.overwrite)
     logger.info(f"Slice boundary polynomials saved to: [green]{args.output}[/green]")

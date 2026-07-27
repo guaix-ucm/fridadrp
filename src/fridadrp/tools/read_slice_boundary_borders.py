@@ -17,6 +17,33 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 
 
+def check_is_a_valid_slice_boundary_border_file(hdul):
+    """Check if the input FITS file is a valid slice boundary border file
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+        HDUList object containing the FITS file to be checked.
+
+    Raises
+    ------
+    ValueError
+        If the input FITS file is not a valid slice boundary border file.
+    """
+    list_required_keywords = ["KEYCODE", "UUID"]
+    for keyword in list_required_keywords:
+        if keyword not in hdul[0].header:
+            raise ValueError(f"Input file does not contain a {keyword} header keyword.")
+    if hdul[0].header["KEYCODE"] != "SLICE_BOUNDARY_BORDERS_FROM_FLAT":
+        raise ValueError(
+            f"Invalid KEYCODE={hdul[0].header['KEYCODE']}.\nExpected value is 'SLICE_BOUNDARY_BORDERS_FROM_FLAT'."
+        )
+    list_required_extensions = ["L-BORDER", "R-BORDER"]
+    for extname in list_required_extensions:
+        if extname not in hdul:
+            raise ValueError(f"Input file does not contain a {extname} extension.")
+
+
 def read_slice_boundary_borders(input_file):
     """Read the slice boundary borders from a FITS file
 
@@ -38,8 +65,8 @@ def read_slice_boundary_borders(input_file):
     ibad : np.ndarray
         Boolean array indicating the columns with NaN values
         in the collapsed borders (0-based).
-    keywords_dict : dict
-        Dictionary containing relevant header keywords from the input FITS file.
+    uuid_borders : str
+        UUID of the slice boundary borders.
     islice_ok : np.ndarray
         Array containing the indices of the slices to be analyzed (0-based).
     """
@@ -47,18 +74,8 @@ def read_slice_boundary_borders(input_file):
 
     # Check input file corresponds to the expected FITS file
     with fits.open(input_file) as hdul:
-        keywords_dict = dict()
-        for keyword in ["KEYCODE", "UUID"]:
-            if keyword not in hdul[0].header:
-                raise ValueError(f"Input file {input_file} does not contain the expected header keyword '{keyword}'.")
-            if keyword == "UUID":
-                kw = "UUID-BOR"
-            else:
-                kw = keyword
-            keywords_dict[kw] = hdul[0].header[keyword]
-        keycode = hdul[0].header["KEYCODE"]
-        if keycode != "SLICE_BOUNDARY_BORDERS_FROM_FLAT":
-            raise ValueError(f"Invalid KEYCODE={keycode}.\nExpected value is 'SLICE_BOUNDARY_BORDERS_FROM_FLAT'.")
+        check_is_a_valid_slice_boundary_border_file(hdul)
+        uuid_borders = hdul[0].header["UUID"]
         islice_ok = []  # indices of slices to be analyzed (0-based index)
         for i in range(1, FRIDA_NSLICES + 1):
             kw = f"SLCNUM{i:02d}"
@@ -95,4 +112,4 @@ def read_slice_boundary_borders(input_file):
             )
         ibad = ibad_left  # Use either ibad_left or ibad_right, they are the same
 
-    return array_left_border, array_right_border, ibad, keywords_dict, islice_ok
+    return array_left_border, array_right_border, ibad, uuid_borders, islice_ok
