@@ -16,6 +16,32 @@ from numpy.polynomial import Polynomial
 
 from fridadrp.core import FRIDA_NSLICES
 
+def check_is_a_valid_slice_boundary_polynomial_file(hdul):
+    """Check if the input FITS file is a valid slice boundary polynomial file
+
+    Parameters
+    ----------
+    hdul : astropy.io.fits.HDUList
+        HDUList object containing the FITS file to be checked.
+
+    Raises
+    ------
+    ValueError
+        If the input FITS file is not a valid slice boundary polynomial file.
+    """
+    list_required_keywords = ["KEYCODE", "UUID", "POLDEG"]
+    for keyword in list_required_keywords:
+        if keyword not in hdul[0].header:
+            raise ValueError(f"Input file does not contain a {keyword} header keyword.")
+    if hdul[0].header["KEYCODE"] != "SLICE_BOUNDARY_POLYNOMIALS":
+        raise ValueError(
+            f"Invalid KEYCODE={hdul[0].header['KEYCODE']}.\nExpected value is 'SLICE_BOUNDARY_POLYNOMIALS'."
+        )
+    list_required_extensions = ["L-BORDER", "R-BORDER"]
+    for extname in list_required_extensions:
+        if extname not in hdul:
+            raise ValueError(f"Input file does not contain a {extname} extension.")
+
 
 def read_slice_boundary_polynomials(input_polynomial):
     """Read the slice boundary polynomials from a FITS file
@@ -47,14 +73,7 @@ def read_slice_boundary_polynomials(input_polynomial):
     logger = logging.getLogger(__name__)
 
     with fits.open(input_polynomial) as hdul:
-        list_required_keywords = ["KEYCODE", "POLDEG"]
-        for keyword in list_required_keywords:
-            if keyword not in hdul[0].header:
-                raise ValueError(f"Input file {input_polynomial} does not contain a {keyword} header keyword.")
-        if hdul[0].header["KEYCODE"] != "SLICE_BOUNDARY_POLYNOMIALS":
-            raise ValueError(
-                f"Invalid KEYCODE={hdul[0].header['KEYCODE']}.\nExpected value is 'SLICE_BOUNDARY_POLYNOMIALS'."
-            )
+        check_is_a_valid_slice_boundary_polynomial_file(hdul)
         poldeg = hdul[0].header["POLDEG"]
         islice_ok = []  # indices of slices to be analyzed (0-based index)
         for i in range(1, FRIDA_NSLICES + 1):

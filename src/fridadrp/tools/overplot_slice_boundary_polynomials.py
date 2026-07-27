@@ -174,7 +174,7 @@ def overplot_slice_boundaries(input_polynomial, input_borders, image, voffset=0.
 
     # Read the slice boundary borders from the input file if provided
     if input_borders is not None:
-        array_left_border, array_right_border, ibad, keywords_dict, islice_ok = read_slice_boundary_borders(
+        array_left_border, array_right_border, ibad, uuid_borders, islice_ok = read_slice_boundary_borders(
             input_borders
         )
         logger.info(
