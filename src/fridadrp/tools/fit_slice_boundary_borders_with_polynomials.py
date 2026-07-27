@@ -44,7 +44,7 @@ def fit_slice_boundary_borders_with_polynomials(
     which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
 
     The slices without defined boundaries (i.e., those with NaN values)
-    are skipped and the returned list of polynomials will contain None 
+    are skipped and the returned list of polynomials will contain None
     for those slices.
 
     Parameters

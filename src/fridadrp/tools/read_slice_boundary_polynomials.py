@@ -41,11 +41,13 @@ def read_slice_boundary_polynomials(input_polynomial):
         List of Polynomial objects for the left slice boundaries.
     list_poly_right : list of Polynomial
         List of Polynomial objects for the right slice boundaries.
+    poldeg : int
+        Degree of the polynomials.
     """
     logger = logging.getLogger(__name__)
 
     with fits.open(input_polynomial) as hdul:
-        list_required_keywords = ["KEYCODE", "SLICEINI", "SLICEEND", "POLDEG"]
+        list_required_keywords = ["KEYCODE", "POLDEG"]
         for keyword in list_required_keywords:
             if keyword not in hdul[0].header:
                 raise ValueError(f"Input file {input_polynomial} does not contain a {keyword} header keyword.")
@@ -53,10 +55,15 @@ def read_slice_boundary_polynomials(input_polynomial):
             raise ValueError(
                 f"Invalid KEYCODE={hdul[0].header['KEYCODE']}.\nExpected value is 'SLICE_BOUNDARY_POLYNOMIALS'."
             )
-        slice_ini = hdul[0].header["SLICEINI"]
-        slice_end = hdul[0].header["SLICEEND"]
         poldeg = hdul[0].header["POLDEG"]
-        islice_ok = np.arange(slice_ini - 1, slice_end)  # indices of slices to be analyzed (0-based index)
+        islice_ok = []  # indices of slices to be analyzed (0-based index)
+        for i in range(1, FRIDA_NSLICES + 1):
+            kw = f"SLCNUM{i:02d}"
+            if kw not in hdul[0].header:
+                raise ValueError(f"Input file {input_polynomial} does not contain the expected header keyword '{kw}'.")
+            if hdul[0].header[kw]:
+                islice_ok.append(i - 1)  # Store 0-based index of the slice
+        islice_ok = np.array(islice_ok, dtype=int)
 
         array_coefs_left = hdul["L-BORDER"].data
         naxis2_left, ncoeff_left = array_coefs_left.shape
@@ -77,7 +84,7 @@ def read_slice_boundary_polynomials(input_polynomial):
                 if not np.all(np.isnan(array_coefs_left[islice])):
                     raise ValueError(
                         f"Slice {islice+1} has valid polynomial coefficients in the input file {input_polynomial}, "
-                        f"but it is outside the range of slices to be analyzed (SLICEINI={slice_ini}, SLICEEND={slice_end})."
+                        f"but SLCNUM{islice+1:02d} is False in the primary header."
                     )
                 list_poly_left.append(None)
             else:
@@ -106,7 +113,7 @@ def read_slice_boundary_polynomials(input_polynomial):
                 if not np.all(np.isnan(array_coefs_right[islice])):
                     raise ValueError(
                         f"Slice {islice+1} has valid polynomial coefficients in the input file {input_polynomial}, "
-                        f"but it is outside the range of slices to be analyzed (SLICEINI={slice_ini}, SLICEEND={slice_end})."
+                        f"but SLCNUM{islice+1:02d} is False in the primary header."
                     )
                 list_poly_right.append(None)
             else:
@@ -116,4 +123,4 @@ def read_slice_boundary_polynomials(input_polynomial):
                     )
                 list_poly_right.append(Polynomial(array_coefs_right[islice]))
 
-    return list_poly_left, list_poly_right
+    return list_poly_left, list_poly_right, poldeg
