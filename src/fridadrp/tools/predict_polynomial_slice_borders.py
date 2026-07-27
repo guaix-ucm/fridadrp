@@ -282,6 +282,11 @@ def main(args=None):
             True,
             f"Slice number {args.slicenum:02d} (ID: {sliceid_from_sliceindex(args.slicenum - 1):02d}) is included",
         )
+        nslices_defined = sum(
+            1 for i in range(1, FRIDA_NSLICES + 1) if hdul[0].header.get(f"SLCNUM{i:02d}", False)
+        )  # Count the number of slices defined in the output file
+        # update the SLCNUMT keyword to reflect the new number of slices defined
+        hdul[0].header["SLCNUMT"] = (nslices_defined, "Number of slices with polynomial boundaries")
         add_script_info_to_fits_history(
             hdul[0].header,
             args,

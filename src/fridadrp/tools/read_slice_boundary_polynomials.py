@@ -84,6 +84,14 @@ def read_slice_boundary_polynomials(input_polynomial):
             if hdul[0].header[kw]:
                 islice_ok.append(i - 1)  # Store 0-based index of the slice
         islice_ok = np.array(islice_ok, dtype=int)
+        slcnumt = hdul[0].header["SLCNUMT"]
+        if slcnumt == len(islice_ok):
+            logger.info(f"Number of slices defined: SLCNUMT={slcnumt}")
+        else:
+            raise ValueError(
+                f"Input file {input_polynomial} has inconsistent number of slices defined: SLCNUMT={slcnumt}, "
+                f"but found {len(islice_ok)} slices with SLCNUMxx=True in the header."
+            )
 
         array_coefs_left = hdul["L-BORDER"].data
         naxis2_left, ncoeff_left = array_coefs_left.shape
@@ -96,7 +104,7 @@ def read_slice_boundary_polynomials(input_polynomial):
                 f"Input file {input_polynomial} has POLDEG={hdul[0].header['POLDEG']}, "
                 f"but the L-BORDER extension has polynomial degree {ncoeff_left-1}."
             )
-        logger.info(f"Reading {naxis2_left} slices with polynomial degree {ncoeff_left-1}.")
+        logger.info(f"Reading {naxis2_left} slices with polynomial degree {ncoeff_left-1} (left borders).")
 
         list_poly_left = []
         for islice in range(FRIDA_NSLICES):
@@ -126,7 +134,7 @@ def read_slice_boundary_polynomials(input_polynomial):
             raise ValueError(
                 f"Input file {input_polynomial} has {naxis2_right} slices, but FRIDA_NSLICES is {FRIDA_NSLICES}."
             )
-        logger.info(f"Reading {naxis2_right} slices with polynomial degree {ncoeff_right-1}.")
+        logger.info(f"Reading {naxis2_right} slices with polynomial degree {ncoeff_right-1} (right borders).")
 
         list_poly_right = []
         for islice in range(FRIDA_NSLICES):

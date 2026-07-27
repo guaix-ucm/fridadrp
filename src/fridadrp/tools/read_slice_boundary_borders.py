@@ -84,6 +84,14 @@ def read_slice_boundary_borders(input_file):
             if hdul[0].header[kw]:
                 islice_ok.append(i - 1)  # Store 0-based index of the slice
         islice_ok = np.array(islice_ok, dtype=int)
+        slcnumt = hdul[0].header["SLCNUMT"]
+        if slcnumt == len(islice_ok):
+            logger.info(f"Number of slices defined: SLCNUMT={slcnumt}")
+        else:
+            raise ValueError(
+                f"Input file {input_file} has inconsistent number of slices defined: SLCNUMT={slcnumt}, "
+                f"but found {len(islice_ok)} slices with SLCNUMxx=True in the header."
+            )
         for extname in ["L-BORDER", "R-BORDER"]:
             if extname not in hdul:
                 raise ValueError(f"Input file {input_file} does not contain the expected extension '{extname}'.")

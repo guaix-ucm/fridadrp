@@ -826,6 +826,7 @@ def main(args=None):
         primary_hdu.header["UUID"] = str(uuid.uuid4())
         primary_hdu.header["FLATFILE"] = Path(args.flatfile).name
         primary_hdu.header["OUTFILE"] = Path(args.output).name
+        primary_hdu.header["SLCNUMT"] = (args.slice_end - args.slice_ini + 1, "Number of slices with boundaries computed")
         for i in range(1, FRIDA_NSLICES + 1):
             if i in range(args.slice_ini, args.slice_end + 1):
                 primary_hdu.header[f"SLCNUM{i:02d}"] = (

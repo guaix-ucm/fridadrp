@@ -295,6 +295,7 @@ def main(args=None):
     primary_hdu.header["INPFILE"] = Path(args.input).name
     primary_hdu.header["OUTFILE"] = Path(args.output).name
     primary_hdu.header["POLDEG"] = args.deg
+    primary_hdu.header["SLCNUMT"] = (len(islice_ok), "Number of slices with polynomial boundaries")
     for i in range(1, FRIDA_NSLICES + 1):
         if i - 1 in islice_ok:
             primary_hdu.header[f"SLCNUM{i:02d}"] = (
