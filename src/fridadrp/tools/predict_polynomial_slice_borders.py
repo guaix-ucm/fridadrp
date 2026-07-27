@@ -17,21 +17,19 @@ import numpy as np
 import shutil
 import sys
 from pathlib import Path
-from rich.logging import RichHandler
 from rich_argparse import RichHelpFormatter
-from tqdm import tqdm
 import uuid
 
 from numina.array.display.polfit_residuals import polfit_residuals
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
-from numina.user.console import NuminaConsole
+from numina.tools.progressbarlines import ProgressBarLines
 
-from fridadrp._version import version
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import DEF_SLICEID_FROM_SLICEINDEX
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.core import sliceindex_from_sliceid
+from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
 
@@ -119,7 +117,9 @@ def predict_polynomial_slice_borders(input_polynomial, slicenum, degslice=2, for
     xfit = np.array([sliceindex_from_sliceid(sid) for sid in list_slicesid_to_fit])
     ypredicted_left = np.zeros(FRIDA_NAXIS1_HAWAII.value)
     ypredicted_right = np.zeros(FRIDA_NAXIS1_HAWAII.value)
-    for icol in tqdm(range(FRIDA_NAXIS1_HAWAII.value), desc=f"Fitting along NAXIS1"):
+    logger.info("Fitting along NAXIS1...")
+    pbar = ProgressBarLines(total=FRIDA_NAXIS1_HAWAII.value, logger=logger)
+    for icol in range(FRIDA_NAXIS1_HAWAII.value):
         debugplot = 0
         if plots:
             if icol in [0, FRIDA_NAXIS1_HAWAII.value // 2, FRIDA_NAXIS1_HAWAII.value - 1]:
@@ -150,6 +150,7 @@ def predict_polynomial_slice_borders(input_polynomial, slicenum, degslice=2, for
         ypredicted_right[icol] = poly(
             sliceindex_from_sliceid(sliceid)
         )  # predict the right border for the specified slice
+        pbar.update()
 
     # Fit a polynomial of the same degree as the one used for the slices in the group,
     # to the predicted left and right borders
@@ -204,6 +205,7 @@ def main(args=None):
         "--force", help="Force recomputation of existing polynomials in chosen slice", action="store_true"
     )
     parser.add_argument("--plots", help="Display plots of the polynomial fitting", action="store_true")
+    parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
     parser.add_argument("--version", help="Display version", action="store_true")
@@ -216,52 +218,31 @@ def main(args=None):
     )
     args = parser.parse_args(args)
 
-    if len(sys.argv) == 1:
-        parser.print_usage()
-        raise SystemExit()
-
-    # Configure rich console
-    console = NuminaConsole(record=args.record)
-
-    if args.version:
-        console.print(version)
-        raise SystemExit()
-
-    if args.echo:
-        console.print(f"[bright_red]Executing:\n{' '.join(sys.argv)}[/bright_red]\n", end="")
-
-    # Configure logging
-    if args.log_level in ["DEBUG", "WARNING", "ERROR", "CRITICAL"]:
-        format_log = "%(name)s %(levelname)s %(message)s"
-        handlers = [RichHandler(console=console, show_time=False, markup=True)]
-    else:
-        format_log = "%(message)s"
-        handlers = [RichHandler(console=console, show_time=False, markup=True, show_path=False, show_level=False)]
-    logging.basicConfig(level=args.log_level, format=format_log, handlers=handlers)
-    logging.getLogger("matplotlib").setLevel(logging.ERROR)  # Suppress matplotlib debug logs
-
-    # Welcome message
-    console.rule(f"[bold magenta]Welcome to fridadrp-predict_polynomial_slice_borders[/bold magenta]")
-
-    # Display version info
-    logger = logging.getLogger(__name__)
-    logger.info(f"Using {__name__} version {version}")
-
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"Command line arguments: {args}")
+    # Initialize the script with the provided arguments
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
 
     # Check input polynomials file is defined
     if args.poly is None:
         raise ValueError("Input file is not defined. Use --poly to specify the input file with polynomials.")
 
+    # If output directory does not exist, create it
+    output_dir_path = Path(args.output_dir)
+    if not output_dir_path.exists():
+        output_dir_path.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Output directory {output_dir_path} created.")
+    # if output file ist not an absolute path, prepend the output directory path
+    if not Path(args.output).is_absolute():
+        output_fname = str(output_dir_path / args.output)
+    else:
+        output_fname = args.output
     # Check output file
-    if Path(args.output).exists():
-        if Path(args.output).is_dir():
+    if Path(output_fname).exists():
+        if Path(output_fname).is_dir():
             raise IsADirectoryError(
-                f"Output file {args.output} is a directory. Please specify a valid output file name."
+                f"Output file {output_fname} is a directory. Please specify a valid output file name."
             )
         if not args.overwrite:
-            raise FileExistsError(f"Output file {args.output} already exists. Use --overwrite to overwrite it.")
+            raise FileExistsError(f"Output file {output_fname} already exists. Use --overwrite to overwrite it.")
 
     # Predict the polynomial slice borders for the specified slice
     predicted_poly_left, predicted_poly_right = predict_polynomial_slice_borders(
@@ -270,12 +251,12 @@ def main(args=None):
 
     # Save the predicted polynomials to the output FITS file
     # Copy the input polynomials file to the output file
-    shutil.copyfile(args.poly, args.output)  # This always overwrites the output file if it exists
-    logger.info(f"Copied input polynomials file {args.poly} to output file {args.output}.")
+    shutil.copyfile(args.poly, output_fname)  # This always overwrites the output file if it exists
+    logger.info(f"Copied input polynomials file {args.poly} to output file {output_fname}.")
     logger.info(
         f"Updating the output FITS file with the predicted polynomials for slice number {args.slicenum} (slice ID {sliceid_from_sliceindex(args.slicenum - 1):02d})."
     )
-    with fits.open(args.output, mode="update") as hdul:
+    with fits.open(output_fname, mode="update") as hdul:
         uuid_pol = hdul[0].header["UUID"]
         hdul[0].header["UUID"] = str(uuid.uuid4())  # Generate a new UUID for the output file
         idx = hdul[0].header.index("UUID-BOR")
