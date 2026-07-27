@@ -62,7 +62,7 @@ def sliceid_from_sliceindex(slice_index):
         Slice number (1-30).
 
     """
-    if isinstance(slice_index, int):
+    if isinstance(slice_index, (int, np.integer)):
         if slice_index < 0 or slice_index >= FRIDA_NSLICES:
             raise ValueError(f"Slice index must be in the range [0, {FRIDA_NSLICES - 1}]")
         return DEF_SLICEID_FROM_SLICEINDEX[slice_index]
@@ -72,7 +72,7 @@ def sliceid_from_sliceindex(slice_index):
             raise ValueError(f"Slice index must be in the range [0, {FRIDA_NSLICES - 1}]")
         return DEF_SLICEID_FROM_SLICEINDEX[slice_index]
     else:
-        raise TypeError("slice_index must be an int or array-like of int")
+        raise TypeError(f"slice_index of type {type(slice_index)} must be an int or array-like of int")
 
 
 # Define array for slice index from slice number conversions
@@ -101,7 +101,7 @@ def sliceindex_from_sliceid(slice_number):
         Slice index (0-29).
 
     """
-    if isinstance(slice_number, int):
+    if isinstance(slice_number, (int, np.integer)):
         if slice_number < 1 or slice_number > FRIDA_NSLICES:
             raise ValueError(f"Slice number must be in the range [1, {FRIDA_NSLICES}]")
         return DEF_SLICEINDEX_FROM_SLICEID[slice_number]
@@ -111,4 +111,4 @@ def sliceindex_from_sliceid(slice_number):
             raise ValueError(f"Slice number must be in the range [1, {FRIDA_NSLICES}]")
         return DEF_SLICEINDEX_FROM_SLICEID[slice_number]
     else:
-        raise TypeError("slice_number must be an int or array-like of int")
+        raise TypeError(f"slice_number of type {type(slice_number)} must be an int or array-like of int")
