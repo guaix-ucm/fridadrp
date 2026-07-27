@@ -112,8 +112,8 @@ def fit_slice_boundary_borders_with_polynomials(
             y=yfit,
             deg=deg,
             times_sigma_reject=3.0,
-            xlabel="array index along NAXIS1 axis",
-            ylabel="array index along NAXIS2 axis",
+            xlabel="array index along NAXIS1",
+            ylabel="array index along NAXIS2",
             title=f"Slice {sliceid_from_sliceindex(islice)} - Left boundary fit",
             debugplot=0 if not plots else 2,
         )
@@ -126,8 +126,8 @@ def fit_slice_boundary_borders_with_polynomials(
             y=yfit,
             deg=deg,
             times_sigma_reject=3.0,
-            xlabel="array index along NAXIS1 axis",
-            ylabel="array index along NAXIS2 axis",
+            xlabel="array index along NAXIS1",
+            ylabel="array index along NAXIS2",
             title=f"Slice {sliceid_from_sliceindex(islice)} - Right boundary fit",
             debugplot=0 if not plots else 2,
         )
@@ -249,18 +249,33 @@ def main(args=None):
         y_right = list_poly_right[islice](xdum)
         array_widths[islice, :] = y_right - y_left
 
-    # Save the fitted polynomials to a FITS file
+    # Define polynomial coefficients arrays for left and right boundaries,
+    # filling with NaN for slices without defined boundaries
     array_coefs_left = np.full((FRIDA_NSLICES, args.deg + 1), np.nan, dtype=float)
     for islice in range(FRIDA_NSLICES):
         if islice not in islice_ok:
             continue
-        array_coefs_left[islice, :] = list_poly_left[islice].convert().coef
+        coeffs = list_poly_left[islice].convert().coef
+        if len(coeffs) != args.deg + 1:
+            raise ValueError(
+                f"Polynomial degree mismatch for slice ID {sliceid_from_sliceindex(islice)}. "
+                f"Expected degree {args.deg}, got {len(coeffs) - 1}."
+            )
+        array_coefs_left[islice, :] = coeffs
     logger.info(f"coefs_left shape....: {array_coefs_left.shape}")
     array_coefs_right = np.full((FRIDA_NSLICES, args.deg + 1), np.nan, dtype=float)
     for islice in range(FRIDA_NSLICES):
         if islice not in islice_ok:
             continue
-        array_coefs_right[islice, :] = list_poly_right[islice].convert().coef
+        coeffs = list_poly_right[islice].convert().coef
+        if len(coeffs) != args.deg + 1:
+            raise ValueError(
+                f"Polynomial degree mismatch for slice ID {sliceid_from_sliceindex(islice)}. "
+                f"Expected degree {args.deg}, got {len(coeffs) - 1}."
+            )
+        array_coefs_right[islice, :] = coeffs
+
+    # Save the fitted polynomials to a FITS file
     logger.info(f"coefs_right shape...: {array_coefs_right.shape}")
     header1 = fits.Header()
     header1["EXTNAME"] = "L-BORDER"
