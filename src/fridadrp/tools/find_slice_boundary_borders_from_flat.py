@@ -106,11 +106,12 @@ def find_slice_boundary_borders_from_flat(
     -------
     array_left_border : np.ndarray
         Array of shape (FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII) containing the
-        left border of each slice for each column.
+        left border of each slice for each column. The coordinates of the slice
+        boundaries are given as 0-based indices along the NAXIS2 axis.
     array_right_border : np.ndarray
         Array of shape (FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII) containing the
-        right border of each slice for each column.
-
+        right border of each slice for each column. The coordinates of the slice
+        boundaries are given as 0-based indices along the NAXIS2 axis.
     """
     logger = logging.getLogger(__name__)
 
