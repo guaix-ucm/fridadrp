@@ -172,15 +172,6 @@ def overplot_slice_boundaries(input_polynomial, input_borders, image, voffset=0.
     """
     logger = logging.getLogger(__name__)
 
-    # Read the slice boundary borders from the input file if provided
-    if input_borders is not None:
-        array_left_border, array_right_border, ibad, uuid_borders, islice_ok = read_slice_boundary_borders(
-            input_borders
-        )
-        logger.info(
-            f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from {input_borders}."
-        )
-
     # Read the image data from the input FITS file
     with fits.open(image) as hdul:
         image_data = hdul[0].data
@@ -209,6 +200,13 @@ def overplot_slice_boundaries(input_polynomial, input_borders, image, voffset=0.
         plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset, sliceid)
 
     if input_borders is not None:
+        array_left_border, array_right_border, ibad, uuid_borders, islice_ok = read_slice_boundary_borders(
+            input_borders
+        )
+        logger.info(
+            f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from {input_borders}."
+        )
+
         sliceid_ = sliceid
         if input_polynomial is not None:
             sliceid_ = False  # Avoid overplotting slice IDs twice

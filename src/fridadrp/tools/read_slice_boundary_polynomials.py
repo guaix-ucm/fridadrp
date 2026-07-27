@@ -16,6 +16,7 @@ from numpy.polynomial import Polynomial
 
 from fridadrp.core import FRIDA_NSLICES
 
+
 def check_is_a_valid_slice_boundary_polynomial_file(hdul):
     """Check if the input FITS file is a valid slice boundary polynomial file
 

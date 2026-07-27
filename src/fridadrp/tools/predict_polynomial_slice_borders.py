@@ -35,11 +35,19 @@ from fridadrp.core import sliceindex_from_sliceid
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
 
-def predict_polynomial_slice_borders(input_polynomial, slicenum, force=False, plots=False):
+def predict_polynomial_slice_borders(input_polynomial, slicenum, degslice=2, force=False, plots=False):
     """
     Predict the polynomial borders of a slice by
     interpolating/extrapolating the polynomials of slices belonging
     to the same group (i.e., slices id 1-15 and slices id 16-30).
+
+    The predicted polynomials are fitted to the left and right borders
+    of the slices in the group, and then used to predict the left and
+    right borders of the specified slice. The predicted borders are then fitted
+    to a new polynomial degree degslice. We have found that degslice=2 is the
+    best compromise between accuracy and stability. A 3rd-degree polynomial
+    tends to overfit the data and produce shifts in the predicted borders, while
+    a 1st-degree polynomial does not capture the curvature of the borders well enough.
 
     Parameters
     ----------
@@ -49,6 +57,8 @@ def predict_polynomial_slice_borders(input_polynomial, slicenum, force=False, pl
         Number of the slice to be predicted. This is a number between 1 and FRIDA_NSLICES,
         where slice 1 corresponds to the one appearing at the bottom of the H2RG
         image and slice FRIDA_NSLICES corresponds to the one appearing at the top.
+    degslice : int, optional
+        Degree of the polynomial to be fitted.
     force : bool, optional
         If True, overwrite existing polynomial borders for the specified slice.
         If False, raise an error if the polynomial borders for the specified
@@ -104,21 +114,39 @@ def predict_polynomial_slice_borders(input_polynomial, slicenum, force=False, pl
                 logger.warning(f"Polynomial borders for slice ID {sid} are undefined.")
     logger.info(f"Using the polynomials of the following slice IDs to predict the new borders:\n{list_slicesid_to_fit}")
 
-    # Fit a 3rd-degree polynomial, for each column along NAXIS1,
+    # Fit a polynomial of degree degslice for each column along NAXIS1,
     # to the left and right borders of the slices in the group.
-    # We have tried different polynomial degrees and found that a 3rd-degree polynomial
-    # is the best compromise between accuracy and stability.
     xfit = np.array([sliceindex_from_sliceid(sid) for sid in list_slicesid_to_fit])
     ypredicted_left = np.zeros(FRIDA_NAXIS1_HAWAII.value)
     ypredicted_right = np.zeros(FRIDA_NAXIS1_HAWAII.value)
     for icol in tqdm(range(FRIDA_NAXIS1_HAWAII.value), desc=f"Fitting along NAXIS1"):
+        debugplot = 0
+        if plots:
+            if icol in [0, FRIDA_NAXIS1_HAWAII.value // 2, FRIDA_NAXIS1_HAWAII.value - 1]:
+                debugplot = 2
         yfit_left = np.array([list_poly_left[sliceindex_from_sliceid(sid)](icol) for sid in list_slicesid_to_fit])
-        poly, _ = polfit_residuals(xfit, yfit_left, deg=3, debugplot=0)
+        poly, _ = polfit_residuals(
+            xfit,
+            yfit_left,
+            deg=degslice,
+            debugplot=debugplot,
+            xlabel="slice index",
+            ylabel="array index along NAXIS2",
+            title=f"Fitted right border polynomial for pixel {icol+1} along NAXIS1",
+        )
         ypredicted_left[icol] = poly(
             sliceindex_from_sliceid(sliceid)
         )  # predict the left border for the specified slice
         yfit_right = np.array([list_poly_right[sliceindex_from_sliceid(sid)](icol) for sid in list_slicesid_to_fit])
-        poly, _ = polfit_residuals(xfit, yfit_right, deg=3, debugplot=0)
+        poly, _ = polfit_residuals(
+            xfit,
+            yfit_right,
+            deg=degslice,
+            debugplot=debugplot,
+            xlabel="slice index",
+            ylabel="array index along NAXIS2",
+            title=f"Fitted right border polynomial for pixel {icol+1} along NAXIS1",
+        )
         ypredicted_right[icol] = poly(
             sliceindex_from_sliceid(sliceid)
         )  # predict the right border for the specified slice
@@ -166,6 +194,9 @@ def main(args=None):
         required=True,
         metavar="SLICE_INDEX",
         choices=range(1, FRIDA_NSLICES + 1),
+    )
+    parser.add_argument(
+        "--degslice", help="Degree of the polynomial to be fitted (slice border vs. slice index)", type=int, default=2
     )
     parser.add_argument("--output", help="Output file name for the predicted polynomials", type=str, required=True)
     parser.add_argument("--overwrite", help="Overwrite existing output file", action="store_true")
@@ -234,7 +265,7 @@ def main(args=None):
 
     # Predict the polynomial slice borders for the specified slice
     predicted_poly_left, predicted_poly_right = predict_polynomial_slice_borders(
-        input_polynomial=args.poly, slicenum=args.slicenum, force=args.force, plots=args.plots
+        input_polynomial=args.poly, slicenum=args.slicenum, degslice=args.degslice, force=args.force, plots=args.plots
     )
 
     # Save the predicted polynomials to the output FITS file
@@ -257,6 +288,8 @@ def main(args=None):
         )
         hdul["L-BORDER"].data[args.slicenum - 1, :] = predicted_poly_left.convert().coef
         hdul["R-BORDER"].data[args.slicenum - 1, :] = predicted_poly_right.convert().coef
+        xdum = np.arange(FRIDA_NAXIS1_HAWAII.value)
+        hdul["SLIWIDTH"].data[args.slicenum - 1, :] = predicted_poly_right(xdum) - predicted_poly_left(xdum)
         hdul.flush()
 
     # Execution time
