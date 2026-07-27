@@ -18,19 +18,17 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
-from rich.logging import RichHandler
 from rich_argparse import RichHelpFormatter
 import sys
 import teareduce as tea
 import types
 
 from numina.tools.input_number import input_number
-from numina.user.console import NuminaConsole
 
-from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
+from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
@@ -310,6 +308,7 @@ def main(args=None):
         "--voffset", help="Vertical constant offset (pixels) to apply to the polynomials", type=float, default=0.0
     )
     parser.add_argument("--sliceid", help="Overplot slice ID", action="store_true")
+    parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
     parser.add_argument("--version", help="Display version", action="store_true")
@@ -322,39 +321,8 @@ def main(args=None):
     )
     args = parser.parse_args(args)
 
-    if len(sys.argv) == 1:
-        parser.print_usage()
-        raise SystemExit()
-
-    # Configure rich console
-    console = NuminaConsole(record=args.record)
-
-    if args.version:
-        console.print(version)
-        raise SystemExit()
-
-    if args.echo:
-        console.print(f"[bright_red]Executing:\n{' '.join(sys.argv)}[/bright_red]\n", end="")
-
-    # Configure logging
-    if args.log_level in ["DEBUG", "WARNING", "ERROR", "CRITICAL"]:
-        format_log = "%(name)s %(levelname)s %(message)s"
-        handlers = [RichHandler(console=console, show_time=False, markup=True)]
-    else:
-        format_log = "%(message)s"
-        handlers = [RichHandler(console=console, show_time=False, markup=True, show_path=False, show_level=False)]
-    logging.basicConfig(level=args.log_level, format=format_log, handlers=handlers)
-    logging.getLogger("matplotlib").setLevel(logging.ERROR)  # Suppress matplotlib debug logs
-
-    # Welcome message
-    console.rule(f"[bold magenta]Welcome to fridadrp-overplot_slice_boundaries_polynomials[/bold magenta]")
-
-    # Display version info
-    logger = logging.getLogger(__name__)
-    logger.info(f"Using {__name__} version {version}")
-
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"Command line arguments: {args}")
+    # Initialize the script with the provided arguments
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
 
     # Check input polynomials file is defined
     if args.poly is None and args.borders is None:
@@ -386,6 +354,9 @@ def main(args=None):
     # Save console log if recording is enabled
     if args.record:
         log_filename = "terminal_output.txt"
+        output_dir_path = Path(args.output_dir)
+        if not output_dir_path.exists():
+            output_dir_path.mkdir(parents=True, exist_ok=True)
         with open(Path(args.output_dir) / log_filename, "wt") as f:
             f.write(console.export_text(styles=True))
         logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
