@@ -90,7 +90,8 @@ def read_slice_boundary_polynomials(input_polynomial):
             else:
                 if np.any(np.isnan(array_coefs_left[islice])):
                     raise ValueError(
-                        f"Slice {islice+1} has invalid polynomial coefficients in the input file {input_polynomial}."
+                        f"Slice {islice+1} has invalid polynomial coefficients in the input file {input_polynomial}, "
+                        f"but SLCNUM{islice+1:02d} is True in the primary header."
                     )
                 list_poly_left.append(Polynomial(array_coefs_left[islice]))
 
