@@ -791,6 +791,8 @@ def main(args=None):
         output_path = Path(args.output)
         if output_path.exists() and not args.overwrite:
             raise FileExistsError(f"Output file {args.output} already exists. Use --overwrite to overwrite it.")
+    if Path(args.output).is_dir():
+        raise IsADirectoryError(f"Output file {args.output} is a directory. Please specify a valid file name.")
 
     # Compute the slice boundaries from the flat file
     array_left_border, array_right_border = find_slice_boundary_borders_from_flat(
@@ -820,13 +822,10 @@ def main(args=None):
         header3["EXTNAME"] = "SLIWIDTH"
         hdu3 = fits.ImageHDU(data=array_widths, header=header3)
         primary_hdu = fits.PrimaryHDU()
-        primary_hdu.header.add_history("*" * 71)
-        primary_hdu.header.add_history("Boundary borders from flat image")
-        primary_hdu.header.add_history("-" * 71)
-        primary_hdu.header["FLATFILE"] = Path(args.flatfile).name
-        primary_hdu.header["OUTFILE"] = Path(args.output).name
         primary_hdu.header["KEYCODE"] = "SLICE_BOUNDARY_BORDERS_FROM_FLAT"
         primary_hdu.header["UUID"] = str(uuid.uuid4())
+        primary_hdu.header["FLATFILE"] = Path(args.flatfile).name
+        primary_hdu.header["OUTFILE"] = Path(args.output).name
         for i in range(1, FRIDA_NSLICES + 1):
             if i in range(args.slice_ini, args.slice_end + 1):
                 primary_hdu.header[f"SLCNUM{i:02d}"] = (
@@ -838,7 +837,7 @@ def main(args=None):
                     False,
                     f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is not included",
                 )
-        add_script_info_to_fits_history(primary_hdu.header, args)
+        add_script_info_to_fits_history(primary_hdu.header, args, title="Slice boundary borders from flat image")
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
         hdul.writeto(args.output, overwrite=args.overwrite)
         logger.info(f"Slice boundary borders saved to: [green]{args.output}[/green]")
