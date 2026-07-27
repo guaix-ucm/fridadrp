@@ -15,21 +15,19 @@ from datetime import datetime
 import logging
 import numpy as np
 from pathlib import Path
-from rich.logging import RichHandler
 from rich_argparse import RichHelpFormatter
 import sys
-from tqdm import tqdm
 import uuid
 
 from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
-from numina.user.console import NuminaConsole
+from numina.tools.progressbarlines import ProgressBarLines
 
-from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
+from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 
 
@@ -97,7 +95,9 @@ def fit_slice_boundary_borders_with_polynomials(
     x = np.arange(FRIDA_NAXIS1_HAWAII.value)
     xfit = x[~ibad]
     islice_skipped = []
-    for islice in tqdm(range(FRIDA_NSLICES), desc="Fitting slice boundaries"):
+    logger.info("Fitting slice boundaries with polynomials...")
+    pbar = ProgressBarLines(total=FRIDA_NSLICES, logger=logger)
+    for islice in range(FRIDA_NSLICES):
         if islice not in islice_ok:
             list_poly_left.append(None)
             list_poly_right.append(None)
@@ -132,6 +132,7 @@ def fit_slice_boundary_borders_with_polynomials(
             debugplot=0 if not plots else 2,
         )
         list_poly_right.append(poly_right)
+        pbar.update()
 
     if len(islice_skipped) > 0:
         logger.warning(f"Skipped slices (id): {', '.join([f'#{sliceid_from_sliceindex(i)}' for i in islice_skipped])}")
@@ -160,6 +161,7 @@ def main(args=None):
     parser.add_argument("--output", help="Output FITS file name", type=str, default=None)
     parser.add_argument("--overwrite", help="Overwrite output file if it exists", action="store_true")
     parser.add_argument("--plots", help="Display plots", action="store_true")
+    parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
     parser.add_argument("--version", help="Display version", action="store_true")
@@ -172,39 +174,8 @@ def main(args=None):
     )
     args = parser.parse_args(args)
 
-    if len(sys.argv) == 1:
-        parser.print_usage()
-        raise SystemExit()
-
-    # Configure rich console
-    console = NuminaConsole(record=args.record)
-
-    if args.version:
-        console.print(version)
-        raise SystemExit()
-
-    if args.echo:
-        console.print(f"[bright_red]Executing:\n{' '.join(sys.argv)}[/bright_red]\n", end="")
-
-    # Configure logging
-    if args.log_level in ["DEBUG", "WARNING", "ERROR", "CRITICAL"]:
-        format_log = "%(name)s %(levelname)s %(message)s"
-        handlers = [RichHandler(console=console, show_time=False, markup=True)]
-    else:
-        format_log = "%(message)s"
-        handlers = [RichHandler(console=console, show_time=False, markup=True, show_path=False, show_level=False)]
-    logging.basicConfig(level=args.log_level, format=format_log, handlers=handlers)
-    logging.getLogger("matplotlib").setLevel(logging.ERROR)  # Suppress matplotlib debug logs
-
-    # Welcome message
-    console.rule(f"[bold magenta]Welcome to fridadrp-fit_slice_boundaries_from_flat[/bold magenta]")
-
-    # Display version info
-    logger = logging.getLogger(__name__)
-    logger.info(f"Using {__name__} version {version}")
-
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"Command line arguments: {args}")
+    # Initialize the script with the provided arguments
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
 
     # Check input file is defined
     if args.input is None:
@@ -223,12 +194,22 @@ def main(args=None):
     # Set output file name if not defined
     if args.output is None:
         args.output = f"slice_boundary_polynomials.fits"
+    # if output directory does not exist, create it
+    output_dir_path = Path(args.output_dir)
+    if not output_dir_path.exists():
+        output_dir_path.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Output directory {output_dir_path} created.")
+    # if output file is not an absolute path, prepend the output directory path
+    if not Path(args.output).is_absolute():
+        output_fname = str(output_dir_path / args.output)
+    else:
+        output_fname = args.output
     # check if the output file already exists and handle overwrite option
-    output_path = Path(args.output)
+    output_path = Path(output_fname)
     if output_path.exists() and not args.overwrite:
-        raise FileExistsError(f"Output file {args.output} already exists. Use --overwrite to overwrite it.")
+        raise FileExistsError(f"Output file {output_fname} already exists. Use --overwrite to overwrite it.")
     if output_path.is_dir():
-        raise IsADirectoryError(f"Output file {args.output} is a directory. Please specify a valid output file name.")
+        raise IsADirectoryError(f"Output file {output_fname} is a directory. Please specify a valid output file name.")
 
     # Fit the slice boundaries from the flat file
     list_poly_left, list_poly_right = fit_slice_boundary_borders_with_polynomials(
@@ -309,8 +290,8 @@ def main(args=None):
             )
     add_script_info_to_fits_history(primary_hdu.header, args, title="Boundary polynomials fitted from slice borders")
     hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
-    hdul.writeto(args.output, overwrite=args.overwrite)
-    logger.info(f"Slice boundary polynomials saved to: [green]{args.output}[/green]")
+    hdul.writeto(output_fname, overwrite=args.overwrite)
+    logger.info(f"Slice boundary polynomials saved to: [green]{output_fname}[/green]")
 
     # Execution time
     datetime_end = datetime.now()
