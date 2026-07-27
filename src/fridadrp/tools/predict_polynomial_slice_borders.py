@@ -272,6 +272,7 @@ def main(args=None):
     # Copy the input polynomials file to the output file
     shutil.copyfile(args.poly, args.output)  # This always overwrites the output file if it exists
     logger.info(f"Copied input polynomials file {args.poly} to output file {args.output}.")
+    logger.info(f"Updating the output FITS file with the predicted polynomials for slice number {args.slicenum} (slice ID {sliceid_from_sliceindex(args.slicenum - 1):02d}).")
     with fits.open(args.output, mode="update") as hdul:
         uuid_pol = hdul[0].header["UUID"]
         hdul[0].header["UUID"] = str(uuid.uuid4())  # Generate a new UUID for the output file
