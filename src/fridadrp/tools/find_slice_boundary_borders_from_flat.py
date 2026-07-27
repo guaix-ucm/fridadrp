@@ -19,27 +19,25 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial import Polynomial
 from pathlib import Path
-from rich.logging import RichHandler
 from rich_argparse import RichHelpFormatter
 from scipy.ndimage import median_filter, generic_filter
 from scipy.signal import savgol_filter
 import sys
 import teareduce as tea
-from tqdm import tqdm
 import types
 import uuid
 
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, find_peaks_spectrum
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
+from numina.tools.progressbarlines import ProgressBarLines
 from numina.tools.input_number import input_number
-from numina.user.console import NuminaConsole
 
-from fridadrp._version import version
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
+from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 
 
 def find_slice_boundary_borders_from_flat(
@@ -294,10 +292,9 @@ def find_slice_boundary_borders_from_flat(
 
     # Main loop
     num_useful_columns = 0
-    for col in tqdm(
-        columns_to_analyze,
-        desc="Working on columns",
-    ):
+    logger.info("Working on columns...")
+    pbar = ProgressBarLines(total=len(columns_to_analyze), logger=logger)
+    for col in columns_to_analyze:
         if len(columns_to_analyze) == 1:
             plots_extra = plots  # Only plot for the specified column
         else:
@@ -666,6 +663,7 @@ def find_slice_boundary_borders_from_flat(
                 logger.debug(f"Column {col}: 2nd derivative peaks are not in the expected order. Skipping this column.")
         else:
             logger.debug(f"Column {col}: 1st derivative peaks are not in the expected order. Skipping this column.")
+        pbar.update()
 
     logger.info(f"Number of useful columns processed: {num_useful_columns} out of {len(columns_to_analyze)}")
 
@@ -706,6 +704,7 @@ def main(args=None):
         default=None,
     )
     parser.add_argument("--plots", help="Display plots", action="store_true")
+    parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
     parser.add_argument("--version", help="Display version", action="store_true")
@@ -718,39 +717,8 @@ def main(args=None):
     )
     args = parser.parse_args(args)
 
-    if len(sys.argv) == 1:
-        parser.print_usage()
-        raise SystemExit()
-
-    # Configure rich console
-    console = NuminaConsole(record=args.record)
-
-    if args.version:
-        console.print(version)
-        raise SystemExit()
-
-    if args.echo:
-        console.print(f"[bright_red]Executing:\n{' '.join(sys.argv)}[/bright_red]\n", end="")
-
-    # Configure logging
-    if args.log_level in ["DEBUG", "WARNING", "ERROR", "CRITICAL"]:
-        format_log = "%(name)s %(levelname)s %(message)s"
-        handlers = [RichHandler(console=console, show_time=False, markup=True)]
-    else:
-        format_log = "%(message)s"
-        handlers = [RichHandler(console=console, show_time=False, markup=True, show_path=False, show_level=False)]
-    logging.basicConfig(level=args.log_level, format=format_log, handlers=handlers)
-    logging.getLogger("matplotlib").setLevel(logging.ERROR)  # Suppress matplotlib debug logs
-
-    # Welcome message
-    console.rule(f"[bold magenta]Welcome to fridadrp-find_slice_boundaries_from_flat[/bold magenta]")
-
-    # Display version info
-    logger = logging.getLogger(__name__)
-    logger.info(f"Using {__name__} version {version}")
-
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"Command line arguments: {args}")
+    # Initialize the script with the provided arguments
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
 
     # Check flat file is defined
     if args.flatfile is None:
@@ -787,12 +755,22 @@ def main(args=None):
     if len(columns_to_analyze) > 1:
         if args.output is None:
             args.output = f"slice_boundary_borders_from_flat_{args.slice_ini}-{args.slice_end}.fits"
+        # if output directory does not exist, create it
+        output_dir_path = Path(args.output_dir)
+        if not output_dir_path.exists():
+            output_dir_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Output directory {output_dir_path} created.")
+        # if output file is not an absolute path, prepend the output directory path
+        if not Path(args.output).is_absolute():
+            output_fname = str(output_dir_path / args.output)
+        else:
+            output_fname = args.output
         # check if the output file already exists and handle overwrite option
-        output_path = Path(args.output)
+        output_path = Path(output_fname)
         if output_path.exists() and not args.overwrite:
-            raise FileExistsError(f"Output file {args.output} already exists. Use --overwrite to overwrite it.")
-    if Path(args.output).is_dir():
-        raise IsADirectoryError(f"Output file {args.output} is a directory. Please specify a valid file name.")
+            raise FileExistsError(f"Output file {output_fname} already exists. Use --overwrite to overwrite it.")
+        if Path(output_fname).is_dir():
+            raise IsADirectoryError(f"Output file {output_fname} is a directory. Please specify a valid file name.")
 
     # Compute the slice boundaries from the flat file
     array_left_border, array_right_border = find_slice_boundary_borders_from_flat(
@@ -843,8 +821,8 @@ def main(args=None):
                 )
         add_script_info_to_fits_history(primary_hdu.header, args, title="Slice boundary borders from flat image")
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
-        hdul.writeto(args.output, overwrite=args.overwrite)
-        logger.info(f"Slice boundary borders saved to: [green]{args.output}[/green]")
+        hdul.writeto(output_fname, overwrite=args.overwrite)
+        logger.info(f"Slice boundary borders saved to: [green]{output_fname}[/green]")
     else:
         logger.info(
             "Slice boundary borders computed for column %d. Not saved to FITS file since a single column is specified.",
