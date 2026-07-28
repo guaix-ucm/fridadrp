@@ -33,7 +33,7 @@ from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borde
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
 
-def plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False):
+def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False):
     """Plot the fitted slice boundary polynomials on the given axes
 
     The polynomials are assumed to be fitted using as independent variable
@@ -134,7 +134,7 @@ def plot_borders(
             )
 
 
-def overplot_slice_boundaries(input_polynomial, input_borders, image, voffset=0.0, sliceid=False):
+def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, voffset=0.0, sliceid=False):
     """Overplot the slice boundary borders and/or polynomials on an image
 
     The slice boundary borders are given as 2D arrays of shape
@@ -195,7 +195,7 @@ def overplot_slice_boundaries(input_polynomial, input_borders, image, voffset=0.
     # Read the polynomial coefficients from the input FITS file
     if input_polynomial is not None:
         list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(input_polynomial)
-        plot_fitted_boundaries(ax, list_poly_left, list_poly_right, voffset, sliceid)
+        plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset, sliceid)
 
     if input_borders is not None:
         array_left_border, array_right_border, ibad, uuid_borders, islice_ok = read_slice_boundary_borders(
@@ -335,7 +335,7 @@ def main(args=None):
         logger.warning("No input image file defined. The slice boundaries will not be overplotted on an image.")
 
     # Overplot the slice boundary polynomials
-    overplot_slice_boundaries(
+    overplot_slice_boundary_polynomials(
         input_polynomial=args.poly,
         input_borders=args.borders,
         image=args.image,

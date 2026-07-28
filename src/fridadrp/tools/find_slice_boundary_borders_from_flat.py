@@ -128,8 +128,8 @@ def find_slice_boundary_borders_from_flat(
     flat_data[row_end:, :] = 0.0
 
     # Median filter the flat data to remove bad pixels. If there are NaN values,
-    # use generic_filter with np.nanmedian to ignore NaN values. Otherwise, use median_filter directly,ç
-    # which is faster.
+    # use generic_filter with np.nanmedian to ignore NaN values. 
+    # Otherwise, use median_filter directly, which is faster.
     if xmedian % 2 == 0:
         xmedian += 1  # Ensure the median filter size is odd
         logger.warning(f"Median filter size adjusted to {xmedian} to ensure it is odd.")
