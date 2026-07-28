@@ -64,7 +64,7 @@ def initialize_script_with_args(sys_argv, parser, args, local_name):
     if not hasattr(args, "log_level"):
         args.log_level = "INFO"
     if args.log_level in ["DEBUG", "WARNING", "ERROR", "CRITICAL"]:
-        format_log = "%(name)s %(levelname)s %(message)s"
+        format_log = "%(name)s %(levelname)s\n%(message)s"
         handlers = [RichHandler(console=console, show_time=False, markup=True)]
     else:
         format_log = "%(message)s"
