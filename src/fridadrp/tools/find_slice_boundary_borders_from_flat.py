@@ -47,8 +47,8 @@ def find_slice_boundary_borders_from_flat(
     slice_end,
     row_ini,
     row_end,
-    median_filter_xsize=21,
-    savgol_window_length=5,
+    xmedian=21,
+    savgol_ywindow=5,
     savgol_polyorder=2,
     plots=False,
 ):
@@ -89,11 +89,12 @@ def find_slice_boundary_borders_from_flat(
         Initial row number (1-based index along NAXIS2).
     row_end : int
         Final row number (1-based index along NAXIS2).
-    median_filter_xsize : int, optional
-        Size of the median filter to apply to the flat data to remove
-        bad pixels.
-    savgol_window_length : int, optional
-        Window length for the Savitzky-Golay filter to smooth the data.
+    xmedian : int, optional
+        Size of the median filter to apply to the flat data along NAXIS1
+        to remove bad pixels.
+    savgol_ywindow : int, optional
+        Window length for the Savitzky-Golay filter to smooth the data
+        along NAXIS2.
     savgol_polyorder : int, optional
         Polynomial order for the Savitzky-Golay filter to smooth the data
         and compute the first and second derivatives.
@@ -129,25 +130,25 @@ def find_slice_boundary_borders_from_flat(
     # Median filter the flat data to remove bad pixels. If there are NaN values,
     # use generic_filter with np.nanmedian to ignore NaN values. Otherwise, use median_filter directly,ç
     # which is faster.
-    if median_filter_xsize % 2 == 0:
-        median_filter_xsize += 1  # Ensure the median filter size is odd
-        logger.debug(f"Median filter size adjusted to {median_filter_xsize} to ensure it is odd.")
-    if median_filter_xsize >= 3:
+    if xmedian % 2 == 0:
+        xmedian += 1  # Ensure the median filter size is odd
+        logger.warning(f"Median filter size adjusted to {xmedian} to ensure it is odd.")
+    if xmedian >= 3:
         if np.isnan(flat_data).any():
             logger.debug("NaN values found in flat data. Using generic_filter with np.nanmedian to ignore NaN values.")
-            flat_data_filtered = generic_filter(flat_data, np.nanmedian, size=(1, median_filter_xsize), mode="nearest")
+            flat_data_filtered = generic_filter(flat_data, np.nanmedian, size=(1, xmedian), mode="nearest")
         else:
             logger.debug("No NaN values found in flat data. Using median_filter directly.")
-            flat_data_filtered = median_filter(flat_data, size=(1, median_filter_xsize), mode="nearest")
+            flat_data_filtered = median_filter(flat_data, size=(1, xmedian), mode="nearest")
     else:
-        logger.warning(f"Median filter size {median_filter_xsize} is less than 3. Skipping median filtering.")
+        logger.warning(f"Median filter size {xmedian} is less than 3. Skipping median filtering.")
         flat_data_filtered = flat_data.copy()
 
     # Apply Savitzky-Golay filter along the slice direction (axis=0) to smooth the data
     # and compute first and second derivatives to find the slice boundaries
     flat_data_savgol_deriv1 = savgol_filter(
         x=flat_data_filtered,
-        window_length=savgol_window_length,
+        window_length=savgol_ywindow,
         polyorder=savgol_polyorder,
         axis=0,
         deriv=1,
@@ -155,7 +156,7 @@ def find_slice_boundary_borders_from_flat(
     )
     flat_data_savgol_deriv2 = savgol_filter(
         x=flat_data_filtered,
-        window_length=savgol_window_length,
+        window_length=savgol_ywindow,
         polyorder=savgol_polyorder,
         axis=0,
         deriv=2,
@@ -703,6 +704,9 @@ def main(args=None):
         metavar=("MIN", "MAX"),
         default=None,
     )
+    parser.add_argument("--xmedian", help="Size of the median filter along NAXIS1 axis (odd; default: 21)", type=int, default=21)
+    parser.add_argument("--savgol-ywindow", help="Savitzky-Golay filter window size along NAXIS2 axis (default: 5)", type=int, default=5)
+    parser.add_argument("--savgol-polyorder", help="Savitzky-Golay filter polynomial order along NAXIS2 axis (default: 2)", type=int, default=2)
     parser.add_argument("--plots", help="Display plots", action="store_true")
     parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
@@ -748,6 +752,9 @@ def main(args=None):
     if args.row_ini > args.row_end:
         raise ValueError("Initial row number cannot be greater than final row number.")
 
+    if args.xmedian < 0:
+        raise ValueError("Median filter size must be a non-negative integer.")
+
     # Define the columns to analyze based on the specified column ranges
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
 
@@ -780,6 +787,9 @@ def main(args=None):
         slice_end=args.slice_end,
         row_ini=args.row_ini,
         row_end=args.row_end,
+        xmedian=args.xmedian,
+        savgol_ywindow=args.savgol_ywindow,
+        savgol_polyorder=args.savgol_polyorder,
         plots=args.plots,
     )
 
