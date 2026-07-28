@@ -755,6 +755,16 @@ def main(args=None):
     if args.xmedian < 0:
         raise ValueError("Median filter size must be a non-negative integer.")
 
+    if args.savgol_ywindow is None:
+        raise ValueError("Savitzky-Golay filter window size is not defined. Use --savgol-ywindow to specify it.")
+    if args.savgol_ywindow <= 0:
+        raise ValueError("Savitzky-Golay filter window size must be a positive integer.")
+
+    if args.savgol_polyorder is None:
+        raise ValueError("Savitzky-Golay filter polynomial order is not defined. Use --savgol-polyorder to specify it.")
+    if args.savgol_polyorder <= 0:
+        raise ValueError("Savitzky-Golay filter polynomial order must be a positive integer.")
+
     # Define the columns to analyze based on the specified column ranges
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
 
