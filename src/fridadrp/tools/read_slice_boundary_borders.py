@@ -7,7 +7,7 @@
 # License-Filename: LICENSE.txt
 #
 
-"""Fit the slice boundaries determined from the flats"""
+"""Read the slice boundary borders from a FITS file"""
 
 from astropy.io import fits
 import logging
@@ -38,7 +38,7 @@ def check_is_a_valid_slice_boundary_border_file(hdul):
         raise ValueError(
             f"Invalid KEYCODE={hdul[0].header['KEYCODE']}.\nExpected value is 'SLICE_BOUNDARY_BORDERS_FROM_FLAT'."
         )
-    list_required_extensions = ["L-BORDER", "R-BORDER"]
+    list_required_extensions = ["L-BORDER", "R-BORDER", "SLIWIDTH"]
     for extname in list_required_extensions:
         if extname not in hdul:
             raise ValueError(f"Input file does not contain a {extname} extension.")

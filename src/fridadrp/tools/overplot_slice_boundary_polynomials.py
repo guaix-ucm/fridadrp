@@ -7,7 +7,7 @@
 # License-Filename: LICENSE.txt
 #
 
-"""Overplot the slice boundary polynomials on image"""
+"""Overplot the slice boundary polynomials, borders and/or traces on image"""
 
 import argparse
 from astropy.io import fits
@@ -31,6 +31,7 @@ from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
+from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynomials
 
 
 def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False):
@@ -134,7 +135,38 @@ def plot_borders(
             )
 
 
-def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, voffset=0.0, sliceid=False):
+def plot_traces(ax, list_poly_traces_all_slices, color="cyan", alpha=1.0):
+    """Plot the slice trace polynomials on the given axes
+    
+    The polynomials are assumed to be fitted using as independent variable
+    the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1,
+    and as dependent variable the array index along the NAXIS2 axis, 
+    which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
+    
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes on which to plot the traces.
+    list_poly_traces_all_slices : list of list of numpy.polynomial.Polynomial
+        The list of polynomials for each slice.
+    color : str, optional
+        Color of the lines for the traces.
+    alpha : float, optional
+        Transparency level of the lines for the traces (0.0 to 1.0).
+    """
+    xdum = np.arange(FRIDA_NAXIS1_HAWAII.value)
+    for islice in range(FRIDA_NSLICES):
+        for poly in list_poly_traces_all_slices[islice]:
+            ax.plot(
+                xdum,
+                poly(xdum),
+                color=color,
+                lw=1.0,
+                alpha=alpha,
+            )
+
+
+def overplot_slice_boundary_polynomials(input_poly, input_borders, input_traces, image, voffset=0.0, sliceid=False):
     """Overplot the slice boundary borders and/or polynomials on an image
 
     The slice boundary borders are given as 2D arrays of shape
@@ -153,11 +185,14 @@ def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, 
 
     Parameters
     ----------
-    input_polynomial : str
+    input_poly : str
         Path to the FITS file containing the slice boundary polynomials.
     input_borders : str
         Path to the file containing the slice boundary borders.
         This is optional and can be used to overplot the borders as well.
+    input_traces : str
+        Path to the file containing the slice trace polynomials.
+        This is optional and can be used to overplot the traces as well.
     image : str
         Path to the FITS file containing the image on which to overplot
         the slice boundaries.
@@ -176,10 +211,11 @@ def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, 
 
     fig, ax = plt.subplots(figsize=(10, 8))
     vmin, vmax = ZScaleInterval().get_limits(image_data)
-    if input_polynomial is None:
-        title = f"Image: {Path(image).name}\nSlice boundaries from borders: {Path(input_borders).name}"
-    else:
-        title = f"Image: {Path(image).name}\nSlice boundaries from polynomials: {Path(input_polynomial).name}"
+    title = f"Image: {Path(image).name}"
+    if input_poly is not None:
+        title += f"\nSlice boundary polynomials: {Path(input_poly).name}"
+    elif input_traces is not None:
+        title += f"\nSlice trace polynomials: {Path(input_traces).name}"
     tea.imshow(
         fig,
         ax,
@@ -192,11 +228,15 @@ def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, 
     xmin, xmax = ax.get_xlim()
     ymin, ymax = ax.get_ylim()
 
-    # Read the polynomial coefficients from the input FITS file
-    if input_polynomial is not None:
-        list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(input_polynomial)
+    # Read the boundary polynomial coefficients from the input FITS file
+    if input_poly is not None or input_traces is not None:
+        if input_poly is not None:
+            list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(input_poly)
+        else:
+            list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(input_traces)
         plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset, sliceid)
 
+    # Read the boundary borders from the input file and overplot them on the image
     if input_borders is not None:
         array_left_border, array_right_border, ibad, uuid_borders, islice_ok = read_slice_boundary_borders(
             input_borders
@@ -206,9 +246,19 @@ def overplot_slice_boundary_polynomials(input_polynomial, input_borders, image, 
         )
 
         sliceid_ = sliceid
-        if input_polynomial is not None:
+        if input_poly is not None:
             sliceid_ = False  # Avoid overplotting slice IDs twice
         plot_borders(ax, array_left_border, array_right_border, ibad, sliceid=sliceid_)
+
+    # Read the slice trace polynomials from the input file and overplot them on the image
+    if input_traces is not None:
+        list_poly_traces_all_slices = read_slice_trace_polynomials(input_traces)
+        logger.info(
+            f"Read {len(list_poly_traces_all_slices)} slices with {len(list_poly_traces_all_slices[0])} traces per slice from {input_traces}."
+        )
+
+        plot_traces(ax, list_poly_traces_all_slices)
+        
 
     # reset the x and y limits to the original values after plotting the boundaries (and borders if provided)
     ax.set_xlim(xmin, xmax)
@@ -294,7 +344,7 @@ def main(args=None):
     datetime_ini = datetime.now()
 
     parser = argparse.ArgumentParser(
-        description="Overplot the slice boundaries (borders and/or polynomials) on image",
+        description="Overplot the slice boundaries (borders and/or polynomials) and/or traces on image",
         formatter_class=RichHelpFormatter,
     )
     parser.add_argument(
@@ -302,6 +352,9 @@ def main(args=None):
     )
     parser.add_argument(
         "--borders", help="Path to the file with the boundary borders (optional)", type=str, required=False
+    )
+    parser.add_argument(
+        "--traces", help="Path to the file with the slice trace polynomials (optional)", type=str, required=False
     )
     parser.add_argument("--image", help="Image to display boundaries on", type=str, required=True)
     parser.add_argument(
@@ -324,10 +377,14 @@ def main(args=None):
     # Initialize the script with the provided arguments
     console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
 
-    # Check input polynomials file is defined
-    if args.poly is None and args.borders is None:
+    # Check input files are defined
+    if args.poly is None and args.borders is None and args.traces is None:
         raise ValueError(
-            "At least one of the input files (--poly or --borders) must be defined to overplot the slice boundaries."
+            "At least one of the input files (--poly or --borders or --traces) must be defined to overplot the slice boundaries."
+        )
+    if args.poly is not None and args.traces is not None:
+        raise ValueError(
+            "Both --poly and --traces are defined. Please define only one of them to overplot the slice boundaries."
         )
 
     # Check the input image file is defined if the user wants to overplot the boundaries
@@ -336,8 +393,9 @@ def main(args=None):
 
     # Overplot the slice boundary polynomials
     overplot_slice_boundary_polynomials(
-        input_polynomial=args.poly,
+        input_poly=args.poly,
         input_borders=args.borders,
+        input_traces=args.traces,
         image=args.image,
         voffset=args.voffset,
         sliceid=args.sliceid,

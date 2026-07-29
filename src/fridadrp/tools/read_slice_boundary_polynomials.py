@@ -7,7 +7,7 @@
 # License-Filename: LICENSE.txt
 #
 
-"""Overplot the slice boundary polynomials on image"""
+"""Read the slice boundary polynomials from a FITS file"""
 
 from astropy.io import fits
 import logging
@@ -34,9 +34,10 @@ def check_is_a_valid_slice_boundary_polynomial_file(hdul):
     for keyword in list_required_keywords:
         if keyword not in hdul[0].header:
             raise ValueError(f"Input file does not contain a {keyword} header keyword.")
-    if hdul[0].header["KEYCODE"] != "SLICE_BOUNDARY_POLYNOMIALS":
+    expected_keycode_values = ["SLICE_BOUNDARY_POLYNOMIALS", "SLICE_TRACES_POLYNOMIALS"]
+    if hdul[0].header["KEYCODE"] not in expected_keycode_values:
         raise ValueError(
-            f"Invalid KEYCODE={hdul[0].header['KEYCODE']}.\nExpected value is 'SLICE_BOUNDARY_POLYNOMIALS'."
+            f"Invalid KEYCODE={hdul[0].header['KEYCODE']}.\nExpected value is one of {expected_keycode_values}."
         )
     list_required_extensions = ["L-BORDER", "R-BORDER"]
     for extname in list_required_extensions:
@@ -51,11 +52,6 @@ def read_slice_boundary_polynomials(input_polynomial):
     the array index along the NAXIS1 axis, which ranges from 0 to FRIDA_NAXIS1_HAWAII-1,
     and as dependent variable the array index along the NAXIS2 axis,
     which ranges from 0 to FRIDA_NAXIS2_HAWAII-1.
-
-    The keywords SLICEINI and SLICEEND in the primary header of the input FITS file
-    indicate the range of slices to be analyzed (1-based index). For the slices
-    outside this range, the polynomial coefficients are expected to be NaN, and
-    the returned list of Polynomial objects will contain None for those slices.
 
     Parameters
     ----------
