@@ -662,6 +662,9 @@ def main(args=None):
     primary_hdu.header["UUID-POL"] = fits.getheader(args.poly, extension=0)["UUID"]
     primary_hdu.header["POLYFILE"] = Path(args.poly).name
     primary_hdu.header["IMAGFILE"] = Path(args.image).name
+    primary_hdu.header["OUTFILE"] = Path(output_fname).name
+    primary_hdu.header["POLDEG"] = (poldeg, "Degree of the slice boundary polynomials")
+    primary_hdu.header["TRACDEG"] = (args.deg, "Degree of the trace polynomials")
     primary_hdu.header["TRACESLC"] = (args.ntraces, "Number of traces per slice")
     primary_hdu.header["SLCNUMT"] = (FRIDA_NSLICES, "Number of slices with traces")
     for i in range(1, FRIDA_NSLICES + 1):
@@ -691,8 +694,8 @@ def main(args=None):
         hdu.header.comments["NAXIS2"] = "Number of traces per slice"
         hdu.header["EXTNAME"] = f"SLCNUM{islice+1:02d}"
         hdu.header["SLICEID"] = (sliceid, "Slice ID")
-        hdu.header["POLYDEG"] = (len(array2d_coeffs[itrace]) - 1, "Degree of the polynomial")
-        hdu.header["COMMENT"] = "Polynomial coefficients for traces in SLCTNUM{islice+1:02d}"
+        hdu.header["TRACEDEG"] = (len(array2d_coeffs[itrace]) - 1, "Degree of the polynomial")
+        hdu.header["COMMENT"] = f"Polynomial coefficients for traces in SLCTNUM{islice+1:02d}"
         hdul.append(hdu)
     hdul = fits.HDUList(hdul)
     hdul.writeto(output_fname, overwrite=args.overwrite)
