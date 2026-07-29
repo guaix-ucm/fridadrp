@@ -630,7 +630,32 @@ def main(args=None):
         plotsliceid=args.plotsliceid,
     )
 
-    # Save output_fname with the results
+    # Save output_fname with the results, including:
+    # - polynomial coefficients for the two boundaries of each slice (from the input file)
+    # - slice widths for each slice (computed from the two previous boundaries)
+    # - polynomial coefficients for the traces of each slice (from the output of this function)
+    list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(args.poly)
+    array_coefs_left = np.full((FRIDA_NSLICES, poldeg + 1), np.nan, dtype=float)
+    for islice in range(FRIDA_NSLICES):
+        array_coefs_left[islice, :] = list_poly_left[islice].convert().coef
+    array_coefs_right = np.full((FRIDA_NSLICES, poldeg + 1), np.nan, dtype=float)
+    for islice in range(FRIDA_NSLICES):
+        array_coefs_right[islice, :] = list_poly_right[islice].convert().coef
+    array_widths = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
+    xdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
+    for islice in range(FRIDA_NSLICES):
+        y_left = list_poly_left[islice](xdum)
+        y_right = list_poly_right[islice](xdum)
+        array_widths[islice, :] = y_right - y_left
+    header1 = fits.Header()
+    header1["EXTNAME"] = "L-BORDER"
+    hdu1 = fits.ImageHDU(data=array_coefs_left, header=header1)
+    header2 = fits.Header()
+    header2["EXTNAME"] = "R-BORDER"
+    hdu2 = fits.ImageHDU(data=array_coefs_right, header=header2)
+    header3 = fits.Header()
+    header3["EXTNAME"] = "SLIWIDTH"
+    hdu3 = fits.ImageHDU(data=array_widths, header=header3)
     primary_hdu = fits.PrimaryHDU()
     primary_hdu.header["KEYCODE"] = "SLICE_TRACES_POLYNOMIALS"
     primary_hdu.header["UUID"] = str(uuid.uuid4())
@@ -640,7 +665,7 @@ def main(args=None):
     primary_hdu.header["SLCNUMT"] = (FRIDA_NSLICES, "Number of slices with traces")
     primary_hdu.header["NTRACSLC"] = (args.ntraces, "Number of traces per slice")
     add_script_info_to_fits_history(primary_hdu.header, args, title="Traces within slice boundary polynomials")
-    hdul = [primary_hdu]
+    hdul = [primary_hdu, hdu1, hdu2, hdu3]
     # Generate an extension SLCNUMXX for each slice with the polynomial coefficients of the traces
     for islice in range(FRIDA_NSLICES):
         sliceid = sliceid_from_sliceindex(islice)
