@@ -630,7 +630,43 @@ def main(args=None):
         plotsliceid=args.plotsliceid,
     )
 
-    # TODO: save output_fname with the results
+    # Save output_fname with the results
+    primary_hdu = fits.PrimaryHDU()
+    primary_hdu.header["KEYCODE"] = "SLICE_TRACES_POLYNOMIALS"
+    primary_hdu.header["UUID"] = str(uuid.uuid4())
+    primary_hdu.header["UUID-POL"] = fits.getheader(args.poly, extension=0)["UUID"]
+    primary_hdu.header["POLYFILE"] = Path(args.poly).name
+    primary_hdu.header["IMAGFILE"] = Path(args.image).name
+    primary_hdu.header["SLCNUMT"] = (FRIDA_NSLICES, "Number of slices with traces")
+    primary_hdu.header["NTRACSLC"] = (args.ntraces, "Number of traces per slice")
+    add_script_info_to_fits_history(primary_hdu.header, args, title="Traces within slice boundary polynomials")
+    hdul = [primary_hdu]
+    # Generate an extension SLCNUMXX for each slice with the polynomial coefficients of the traces
+    for islice in range(FRIDA_NSLICES):
+        sliceid = sliceid_from_sliceindex(islice)
+        if list_poly_traces_all_slices[islice] is None:
+            raise ValueError(f"Slice {islice+1} (ID {sliceid}) has no traces. This should not happen.")
+        if len(list_poly_traces_all_slices[islice]) != args.ntraces:
+            raise ValueError(
+                f"Slice {islice+1} (ID {sliceid}) has {len(list_poly_traces_all_slices[islice])} traces, "
+                f"but {args.ntraces} traces were expected."
+            )
+        array2d_coeffs = np.full((args.ntraces, args.deg + 1), np.nan, dtype=float)
+        for itrace in range(args.ntraces):
+            poly_trace = list_poly_traces_all_slices[islice][itrace]
+            # convert to standard polynomial representation and get coefficients
+            array2d_coeffs[itrace] = poly_trace.convert().coef
+        hdu = fits.ImageHDU(data=array2d_coeffs)
+        hdu.header.comments["NAXIS1"] = "Degree of the polynomial + 1"
+        hdu.header.comments["NAXIS2"] = "Number of traces per slice"
+        hdu.header["EXTNAME"] = f"SLCNUM{islice+1:02d}"
+        hdu.header["SLICEID"] = (sliceid, "Slice ID")
+        hdu.header["POLYDEG"] = (len(array2d_coeffs[itrace]) - 1, "Degree of the polynomial")
+        hdu.header["COMMENT"] = "Polynomial coefficients for traces in SLCTNUM{islice+1:02d}"
+        hdul.append(hdu)
+    hdul = fits.HDUList(hdul)
+    hdul.writeto(output_fname, overwrite=args.overwrite)
+    logger.info(f"Traces within slice boundary polynomials saved to [green]{output_fname}[/green]")
 
     # Execution time
     datetime_end = datetime.now()
