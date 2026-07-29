@@ -662,8 +662,13 @@ def main(args=None):
     primary_hdu.header["UUID-POL"] = fits.getheader(args.poly, extension=0)["UUID"]
     primary_hdu.header["POLYFILE"] = Path(args.poly).name
     primary_hdu.header["IMAGFILE"] = Path(args.image).name
+    primary_hdu.header["TRACESLC"] = (args.ntraces, "Number of traces per slice")
     primary_hdu.header["SLCNUMT"] = (FRIDA_NSLICES, "Number of slices with traces")
-    primary_hdu.header["NTRACSLC"] = (args.ntraces, "Number of traces per slice")
+    for i in range(1, FRIDA_NSLICES + 1):
+        primary_hdu.header[f"SLCNUM{i:02d}"] = (
+            True,
+            f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is included",
+        )
     add_script_info_to_fits_history(primary_hdu.header, args, title="Traces within slice boundary polynomials")
     hdul = [primary_hdu, hdu1, hdu2, hdu3]
     # Generate an extension SLCNUMXX for each slice with the polynomial coefficients of the traces
