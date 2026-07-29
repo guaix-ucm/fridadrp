@@ -489,7 +489,7 @@ def find_traces_within_slice_boundary_polynomials(
                 plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
                 plt.show()
 
-            # update the list of polynomial traces for all slices with the extrapolated 
+            # update the list of polynomial traces for all slices with the extrapolated
             # (and refined when requested) traces for the skipped slice
             list_poly_traces_all_slices[islice] = list_poly_traces_slice_refined
 
