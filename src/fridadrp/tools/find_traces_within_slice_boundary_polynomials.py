@@ -23,7 +23,7 @@ from scipy.ndimage import median_filter, generic_filter
 import teareduce as tea
 import uuid
 
-from numina.array.display.polfit_residuals import polfit_residuals, polfit_residuals_with_sigma_rejection
+from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, refine_peaks_spectrum
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
 from numina.tools.progressbarlines import ProgressBarLines
@@ -63,11 +63,11 @@ def find_traces_within_slice_boundary_polynomials(
     and as dependent variable the array index along NAXIS2 (0-based).
 
     The traces are fitted using only the columns specified in `columns_to_analyze`.
-    If this parameter is None, all columns are employed. The columns
-    are specified as a list of tuples, where each tuple contains the minimum and
-    maximum column (1-based index) to analyze. For example,
-    `columns_to_analyze=[(1, 100), (200, 300)]` will analyze
-    columns 1 to 100 and 200 to 300.
+    If this parameter is None, all columns within the useful image region are employed.
+    The columns are specified as a list of tuples (1-based indices along NAXIS1),
+    where each tuple contains the minimum and maximum column (1-based index)
+    to analyze. For example, `columns_to_analyze=[(1, 100), (200, 300)]`
+    will analyze columns 1 to 100 and 200 to 300.
 
     When any of the two boundaries of a particular slice are out
     of the useful pixel range, the traces for that slice are
@@ -94,6 +94,7 @@ def find_traces_within_slice_boundary_polynomials(
         to remove bad pixels.
     columns_to_analyze : list of tuple, optional
         List of column ranges to analyze. Each tuple contains (min_col, max_col).
+        This numbers are 1-based indices along NAXIS1.
     yborder : int, optional
         Additional distance to the border to avoid edge effects. Default is 1.
     degslice : int, optional
@@ -152,14 +153,14 @@ def find_traces_within_slice_boundary_polynomials(
 
     # Apply offset to the slice boundary polynomials
     if voffset != 0.0:
-        logger.info(f"Applying vertical offset of {voffset} to slice boundary polynomials.")
+        logger.info(f"Applying vertical offset of {voffset} pixels to slice boundary polynomials.")
         for islice in range(FRIDA_NSLICES):
             list_poly_left[islice] += voffset
             list_poly_right[islice] += voffset
 
     # Plot the filtered image with the slice polynomial boundaries overplotted
     if plotsliceid is not None:
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(10, 8))
         vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
         tea.imshow(
             fig,
@@ -183,6 +184,19 @@ def find_traces_within_slice_boundary_polynomials(
 
     # Main loop to find and fit traces within slice boundary polynomials
     icolumns_to_analyze = np.array(columns_to_analyze) - 1  # array indices (0-based)
+    ncolumns_to_analyze = len(icolumns_to_analyze)
+    if ncolumns_to_analyze == 0:
+        raise ValueError("No columns to analyze. Please specify valid column ranges with --colrange.")
+    elif ncolumns_to_analyze == 1:
+        icolumns_to_plot = icolumns_to_analyze[0]
+    elif ncolumns_to_analyze == 2:
+        icolumns_to_plot = [icolumns_to_analyze[0], icolumns_to_analyze[1]]
+    else:
+        icolumns_to_plot = [
+            icolumns_to_analyze[0],
+            icolumns_to_analyze[len(icolumns_to_analyze) // 2],
+            icolumns_to_analyze[-1],
+        ]
     islice_skipped = (
         []
     )  # (0-based index) list to store the indices of slices that are skipped due to out-of-bounds boundaries
@@ -197,8 +211,10 @@ def find_traces_within_slice_boundary_polynomials(
         poly_right = list_poly_right[islice]
 
         # Compute the minimum and maximum y-values of the left and right polynomials over the specified column range
-        ymin_left = int(np.min(poly_left(icolumns_to_analyze) + 0.5) + 1)  # (1-based index)
-        ymax_right = int(np.max(poly_right(icolumns_to_analyze) + 0.5) + 1)  # (1-based index)
+        ymin_left = int(np.min(poly_left(icolumns_to_analyze) + 0.5))  # (0-based index)
+        ymin_left += 1  # (1-based index)
+        ymax_right = int(np.max(poly_right(icolumns_to_analyze) + 0.5))  # (0-based index)
+        ymax_right += 1  # (1-based index)
         # Check if the computed y-values are within the useful pixel range
         if ymin_left < FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value + yborder:
             logger.warning(f"Slice #{islice+1} (ID {sliceid}) left boundary is out of the useful pixel range.")
@@ -263,6 +279,7 @@ def find_traces_within_slice_boundary_polynomials(
                     y=yfit,
                     deg=deg,
                     times_sigma_reject=3.0,
+                    ylimres_with_rejected=True,
                     xlabel="array index along NAXIS1",
                     ylabel="array index along NAXIS2",
                     title=f"Slice {islice+1} (ID {sliceid}), Trace {itrace+1} / {ntraces}",
@@ -270,7 +287,7 @@ def find_traces_within_slice_boundary_polynomials(
                 )
                 list_poly_traces_slice.append(poly_trace)
             if plotsliceid is not None and sliceid in plotsliceid:
-                fig, ax = plt.subplots(figsize=(10, 6))
+                fig, ax = plt.subplots(figsize=(10, 8))
                 vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
                 tea.imshow(
                     fig,
@@ -348,12 +365,12 @@ def find_traces_within_slice_boundary_polynomials(
             xpredicted = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
             list_poly_traces_slice = []
             for itrace in range(ntraces):
-                ypredicted = np.zeros(FRIDA_NAXIS1_HAWAII.value, dtype=float)
+                ypredicted = np.full(FRIDA_NAXIS1_HAWAII.value, fill_value=np.nan, dtype=float)
                 logger.info(f"Fitting trace {itrace+1}/{ntraces} of slice ID {sliceid} along NAXIS1...")
-                for icolumn in range(FRIDA_NAXIS1_HAWAII.value):
+                for icolumn in icolumns_to_analyze:
                     debugplot = 0
                     if plots:
-                        if icolumn in [0, FRIDA_NAXIS1_HAWAII.value // 2, FRIDA_NAXIS1_HAWAII.value - 1]:
+                        if icolumn in icolumns_to_plot:
                             debugplot = 2
                     yfit = np.array(
                         [
@@ -361,10 +378,12 @@ def find_traces_within_slice_boundary_polynomials(
                             for sid in list_slicesid_to_fit
                         ]
                     )
-                    poly_trace_across_slices, _ = polfit_residuals(
+                    poly_trace_across_slices, _, _ = polfit_residuals_with_sigma_rejection(
                         x=xfit,
                         y=yfit,
                         deg=degslice,
+                        times_sigma_reject=3.0,
+                        ylimres_with_rejected=True,
                         xlabel="slice index",
                         ylabel="array index along NAXIS2",
                         title=f"Slice ID {sliceid}, Trace {itrace+1} / {ntraces}, Column {icolumn+1}",
@@ -372,13 +391,16 @@ def find_traces_within_slice_boundary_polynomials(
                     )
                     ypredicted[icolumn] = poly_trace_across_slices(sliceindex_from_sliceid(sliceid))
                 # fit a polynomial of degree `deg` to determine the trace
-                poly_trace, _ = polfit_residuals(
-                    x=xpredicted,
-                    y=ypredicted,
+                iok = ~np.isnan(ypredicted)
+                poly_trace, _, _ = polfit_residuals_with_sigma_rejection(
+                    x=xpredicted[iok],
+                    y=ypredicted[iok],
                     deg=deg,
+                    times_sigma_reject=3.0,
+                    ylimres_with_rejected=True,
                     xlabel="array index along NAXIS1",
                     ylabel="array index along NAXIS2",
-                    title=f"Slice ID {sliceid}, Trace {itrace+1} / {ntraces}",
+                    title=f"Slice ID {sliceid}, Predicted trace {itrace+1} / {ntraces}",
                     debugplot=debugplot,
                 )
                 list_poly_traces_slice.append(poly_trace)
@@ -404,7 +426,20 @@ def find_traces_within_slice_boundary_polynomials(
                     if trace_is_within_bounds:
                         logger.info(f"Refining trace {itrace+1}/{ntraces} of slice ID {sliceid}...")
                         for icol in icolumns_to_analyze:
+                            debugplot = 0
+                            if plots:
+                                if icol in icolumns_to_plot:
+                                    debugplot = 0  # change to 2 for debugging
+                            # predict the peak position using the polynomial trace
                             ipeak = (poly_trace(icol) + 0.5).astype(int)  # (0-based) rounded integer
+                            # find the peak position in the smoothed image data around the predicted position
+                            naround_peak = 11  # number of pixels around the peak to use for refinement
+                            ipeak_local = np.nanargmax(
+                                image_data_filtered[:, icol][ipeak - naround_peak // 2 : ipeak + naround_peak // 2 + 1]
+                            )  # (0-based) index of the peak in the local window
+                            # refine the peak position using the last 11 pixels around the predicted position
+                            ipeak = ipeak - naround_peak // 2 + ipeak_local  # (0-based)
+                            # refine the peak position to sub-pixel accuracy using a polynomial fit
                             naround_peak = 5  # number of pixels around the peak to use for refinement
                             fxpeaks, _ = refine_peaks_spectrum(
                                 sx=image_data_filtered[:, icol][
@@ -414,7 +449,7 @@ def find_traces_within_slice_boundary_polynomials(
                                 nwinwidth=3,
                                 method="poly2",
                                 title=f"Slice ID {sliceid}, Trace {itrace+1} / {ntraces}, Column {icol+1} (Refinement)",
-                                debugplot=0,
+                                debugplot=debugplot,
                             )
                             deltay_refined[itrace, icol] = (fxpeaks[0] + ipeak - naround_peak // 2) - poly_trace(icol)
                         # fit a polynomial of degree 1 to the refinement
@@ -422,12 +457,14 @@ def find_traces_within_slice_boundary_polynomials(
                             debugplot = 2
                         else:
                             debugplot = 0
-                        poly_refinement, _ = polfit_residuals(
+                        poly_refinement, _, _ = polfit_residuals_with_sigma_rejection(
                             x=icolumns_to_analyze,
                             y=deltay_refined[itrace][icolumns_to_analyze],
                             deg=1,
+                            times_sigma_reject=3.0,
+                            ylimres_with_rejected=True,
                             xlabel="array index along NAXIS1",
-                            ylabel="array index along NAXIS2",
+                            ylabel="delta array index along NAXIS2",
                             title=f"Slice ID {sliceid}, Refinement of trace {itrace+1} / {ntraces}",
                             debugplot=debugplot,
                         )
@@ -453,12 +490,14 @@ def find_traces_within_slice_boundary_polynomials(
                         debugplot = 2
                     else:
                         debugplot = 0
-                    poly_refinement_mean, _ = polfit_residuals(
+                    poly_refinement_mean, _, _ = polfit_residuals_with_sigma_rejection(
                         x=icolumns_to_analyze,
                         y=deltay_refined_mean[icolumns_to_analyze],
                         deg=1,
+                        times_sigma_reject=3.0,
+                        ylimres_with_rejected=True,
                         xlabel="array index along NAXIS1",
-                        ylabel="array index along NAXIS2",
+                        ylabel="delta array index along NAXIS2",
                         title=f"Slice ID {sliceid}, Average Refinement of all traces",
                         debugplot=debugplot,
                     )
@@ -472,7 +511,7 @@ def find_traces_within_slice_boundary_polynomials(
 
             # show extrapolated (and when required refined) traces over the smoothed image data
             if plots:
-                fig, ax = plt.subplots(figsize=(10, 6))
+                fig, ax = plt.subplots(figsize=(10, 8))
                 vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
                 tea.imshow(
                     fig,
@@ -546,7 +585,12 @@ def main(args=None):
     )
     parser.add_argument("--image", help="Path to the input image file (FITS format)", type=str, required=True)
     parser.add_argument("--poly", help="Path to the input file with the boundary polynomials", type=str, required=True)
-    parser.add_argument("--voffset", help="Vertical offset to apply to the slice boundaries (default: 0.0)", type=float, default=0.0)
+    parser.add_argument(
+        "--voffset",
+        help="Vertical offset to apply to the slice boundaries (default: 0.0 pixels; + upward, - downward)",
+        type=float,
+        default=0.0,
+    )
     parser.add_argument("--ntraces", help="Number of traces per slice to find", type=int, required=True)
     parser.add_argument("--deg", help="Degree of the polynomial to fit each trace", type=int, required=True)
     parser.add_argument(
