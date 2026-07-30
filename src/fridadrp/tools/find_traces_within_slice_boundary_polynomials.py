@@ -42,8 +42,9 @@ from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_p
 def find_traces_within_slice_boundary_polynomials(
     image_path,
     poly_path,
-    ntraces,
-    deg,
+    voffset=0.0,
+    ntraces=None,
+    deg=None,
     xmedian=21,
     columns_to_analyze=None,
     yborder=1,
@@ -82,9 +83,11 @@ def find_traces_within_slice_boundary_polynomials(
         Path to the input image file (FITS format).
     poly_path : str
         Path to the input file with the boundary polynomials.
-    ntraces : int
+    voffset : float, optional
+        Vertical offset to apply to the slice boundaries. Default is 0.0.
+    ntraces : int or None
         Number of traces per slice to find.
-    deg : int
+    deg : int or None
         Degree of the polynomial to fit.
     xmedian : int, optional
         Size of the median filter to apply to the flat data along NAXIS1
@@ -103,6 +106,12 @@ def find_traces_within_slice_boundary_polynomials(
 
     Returns
     -------
+    list_poly_left : list of Polynomial
+        List of Polynomial objects for the left slice boundaries.
+        Important: this polynomials are updated after applying voffset.
+    list_poly_right : list of Polynomial
+        List of Polynomial objects for the right slice boundaries.
+        Important: this polynomials are updated after applying voffset.
     list_poly_traces_all_slices : list
         List of polynomial coefficients for traces in all slices.
         Each element in this list is another list containing ntraces polynomials
@@ -110,6 +119,11 @@ def find_traces_within_slice_boundary_polynomials(
         boundaries, the corresponding element will be None.
     """
     logger = logging.getLogger(__name__)
+
+    if ntraces is None:
+        raise ValueError("The number of traces per slice (ntraces) must be specified.")
+    if deg is None:
+        raise ValueError("The degree of the polynomial to fit each trace (deg) must be specified.")
 
     # Read the input image
     logger.debug(f"Reading input image from {image_path}")
@@ -136,6 +150,13 @@ def find_traces_within_slice_boundary_polynomials(
     # Read the slice boundary polynomials
     list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(poly_path)
 
+    # Apply offset to the slice boundary polynomials
+    if voffset != 0.0:
+        logger.info(f"Applying vertical offset of {voffset} to slice boundary polynomials.")
+        for islice in range(FRIDA_NSLICES):
+            list_poly_left[islice] += voffset
+            list_poly_right[islice] += voffset
+
     # Plot the filtered image with the slice polynomial boundaries overplotted
     if plotsliceid is not None:
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -153,7 +174,7 @@ def find_traces_within_slice_boundary_polynomials(
         xmin, xmax = ax.get_xlim()
         ymin, ymax = ax.get_ylim()
         plot_fitted_boundary_polynomials(
-            ax=ax, list_poly_left=list_poly_left, list_poly_right=list_poly_right, voffset=1.0, sliceid=True
+            ax=ax, list_poly_left=list_poly_left, list_poly_right=list_poly_right, sliceid=True
         )
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
@@ -513,7 +534,7 @@ def find_traces_within_slice_boundary_polynomials(
                 raise ValueError(f"Trace {itrace+1} of slice {islice+1} (ID {sliceid}) could not be fitted.")
 
     # return the list of polynomial traces for all slices
-    return list_poly_traces_all_slices
+    return list_poly_left, list_poly_right, list_poly_traces_all_slices
 
 
 def main(args=None):
@@ -525,6 +546,7 @@ def main(args=None):
     )
     parser.add_argument("--image", help="Path to the input image file (FITS format)", type=str, required=True)
     parser.add_argument("--poly", help="Path to the input file with the boundary polynomials", type=str, required=True)
+    parser.add_argument("--voffset", help="Vertical offset to apply to the slice boundaries (default: 0.0)", type=float, default=0.0)
     parser.add_argument("--ntraces", help="Number of traces per slice to find", type=int, required=True)
     parser.add_argument("--deg", help="Degree of the polynomial to fit each trace", type=int, required=True)
     parser.add_argument(
@@ -618,9 +640,10 @@ def main(args=None):
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
 
     # Call the function to find traces within slice boundary polynomials
-    list_poly_traces_all_slices = find_traces_within_slice_boundary_polynomials(
+    list_poly_left, list_poly_right, list_poly_traces_all_slices = find_traces_within_slice_boundary_polynomials(
         image_path=args.image,
         poly_path=args.poly,
+        voffset=args.voffset,
         ntraces=args.ntraces,
         deg=args.deg,
         xmedian=args.xmedian,
@@ -634,7 +657,7 @@ def main(args=None):
     # - polynomial coefficients for the two boundaries of each slice (from the input file)
     # - slice widths for each slice (computed from the two previous boundaries)
     # - polynomial coefficients for the traces of each slice (from the output of this function)
-    list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(args.poly)
+    poldeg = len(list_poly_left[0].convert().coef) - 1
     array_coefs_left = np.full((FRIDA_NSLICES, poldeg + 1), np.nan, dtype=float)
     for islice in range(FRIDA_NSLICES):
         array_coefs_left[islice, :] = list_poly_left[islice].convert().coef
