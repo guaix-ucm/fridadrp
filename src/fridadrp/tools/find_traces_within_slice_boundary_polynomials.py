@@ -24,7 +24,7 @@ from scipy.ndimage import median_filter, generic_filter
 import teareduce as tea
 import uuid
 
-from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
+from numina.array.display.polfit_residuals import polfit_residuals, polfit_residuals_with_sigma_rejection
 from numina.array.robustfit import fit_theil_sen
 from numina.array.stats import robust_std
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, refine_peaks_spectrum
@@ -34,6 +34,7 @@ from numina.tools.progressbarlines import ProgressBarLines
 from fridadrp.core import DEF_SLICEID_FROM_SLICEINDEX
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
+from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex, sliceindex_from_sliceid
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
@@ -45,7 +46,7 @@ from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_p
 def find_traces_within_slice_boundary_polynomials(
     image_path,
     poly_path,
-    voffset=0.0,
+    voffset=[0.0],
     ntraces=None,
     nextend=2,
     nclean_around_peaks=-1,
@@ -92,8 +93,10 @@ def find_traces_within_slice_boundary_polynomials(
         Path to the input image file (FITS format).
     poly_path : str
         Path to the input file with the boundary polynomials.
-    voffset : float, optional
-        Vertical offset to apply to the slice boundaries. Default is 0.0.
+    voffset : list of float, optional
+        Vertical offsets to apply to the slice boundaries. Default is [0.0].
+        If more than one value is provided, a polynomial of degree len(voffset)-1 
+        will be fitted to the offsets and applied to the slice boundaries.
     ntraces : int or None
         Number of traces per slice to find.
     nextend : int, optional
@@ -177,11 +180,31 @@ def find_traces_within_slice_boundary_polynomials(
     list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(poly_path)
 
     # Apply offset to the slice boundary polynomials
-    if voffset != 0.0:
-        logger.info(f"Applying vertical offset of {voffset} pixels to slice boundary polynomials.")
+    if len(voffset) < 1:
+        raise ValueError("The list of vertical offsets (voffset) must contain at least one value.")
+    elif len(voffset) == 1:
+        logger.info(f"Applying constant vertical offset of {voffset[0]} pixels to slice boundary polynomials.")
         for islice in range(FRIDA_NSLICES):
-            list_poly_left[islice] += voffset
-            list_poly_right[islice] += voffset
+            list_poly_left[islice] += voffset[0]
+            list_poly_right[islice] += voffset[0]
+    else:
+        logger.info(
+            f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets and applying it to slice boundary polynomials."
+        )
+        nvoffets = len(voffset)
+        x_offsets = np.linspace(FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value, nvoffets)
+        poly_voffset, _= polfit_residuals(
+            x=x_offsets,
+            y=np.array(voffset),
+            deg=len(voffset)-1,
+            xlabel="array index along NAXIS1",
+            ylabel="array index along NAXIS2",
+            title=f"Vertical offset to be applied to all the slice boundary polynomials",
+            debugplot=2,
+        )
+        for islice in range(FRIDA_NSLICES):
+            list_poly_left[islice] += poly_voffset
+            list_poly_right[islice] += poly_voffset
 
     # Plot the filtered image with the slice polynomial boundaries overplotted
     if plotsliceid is not None:
@@ -753,9 +776,11 @@ def main(args=None):
     parser.add_argument("--poly", help="Path to the input file with the boundary polynomials", type=str, required=True)
     parser.add_argument(
         "--voffset",
-        help="Vertical offset to apply to the slice boundaries (default: 0.0 pixels; + upward, - downward)",
+        help="Vertical offset to apply to the slice boundaries (default: 0.0 pixels; + upward, - downward). "
+        "If more than one value is provided, a polynomial of degree len(voffset)-1 will be fitted to the offsets and applied to the slice boundaries.",
         type=float,
-        default=0.0,
+        nargs="+",
+        default=[0.0],
     )
     parser.add_argument("--ntraces", help="Number of traces per slice to find", type=int, required=True)
     parser.add_argument(
