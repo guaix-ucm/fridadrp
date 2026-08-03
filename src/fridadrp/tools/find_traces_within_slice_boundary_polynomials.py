@@ -59,7 +59,7 @@ def find_traces_within_slice_boundary_polynomials(
     refine=True,
     plotsliceid=None,
     pdf_out=None,
-    output_dir=None
+    output_dir=None,
 ):
     """
     Find and fit traces within slice boundary polynomials.
@@ -108,7 +108,7 @@ def find_traces_within_slice_boundary_polynomials(
         Size of the median filter to apply to the flat data along NAXIS1
         to remove bad pixels.
     theilsen : bool, optional
-        If True, use initial Theil-Sen regression to reject outliers in the 
+        If True, use initial Theil-Sen regression to reject outliers in the
         polynomial fitting.
     columns_to_analyze : list of tuple, optional
         List of column ranges to analyze. Each tuple contains (min_col, max_col).
@@ -303,7 +303,9 @@ def find_traces_within_slice_boundary_polynomials(
                         fypeaks_slice  # Store the refined peak positions in the array for the current slice
                     )
                     if debugplot == 2:
-                        logger.info(f"Slice {islice+1} (ID {sliceid}), Column {icolumn+1}: Found peaks at\n{fypeaks_slice}")
+                        logger.info(
+                            f"Slice {islice+1} (ID {sliceid}), Column {icolumn+1}: Found peaks at\n{fypeaks_slice}"
+                        )
             # Fit polynomials to the traces found in the current slice
             collapsed_array2d_peaks_slice = np.sum(array2d_peaks_slice, axis=0)
             ibad_array2d_peaks_slice = np.isnan(collapsed_array2d_peaks_slice)
@@ -327,13 +329,33 @@ def find_traces_within_slice_boundary_polynomials(
                         xplot_theilsen = np.array([np.min(xfit_filtered), np.max(xfit_filtered)])
                         if debugplot == 2:
                             fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
-                            ax1.scatter(xfit_filtered, yfit_filtered, marker="o", color="b", edgecolor='k', s=75, label=f"fitted data ({len(xfit_filtered)})")
-                            ax1.plot(xplot_theilsen, coef_theilsen[0] + coef_theilsen[1] * xplot_theilsen, "c-", label="Theil-Sen fit")
-                            ax1.scatter(xfit[outliers_theilsen], yfit[outliers_theilsen], marker="x", color="r", s=75, label=f"rejected ({len(xfit[outliers_theilsen])})")
+                            ax1.scatter(
+                                xfit_filtered,
+                                yfit_filtered,
+                                marker="o",
+                                color="b",
+                                edgecolor="k",
+                                s=75,
+                                label=f"fitted data ({len(xfit_filtered)})",
+                            )
+                            ax1.plot(
+                                xplot_theilsen,
+                                coef_theilsen[0] + coef_theilsen[1] * xplot_theilsen,
+                                "c-",
+                                label="Theil-Sen fit",
+                            )
+                            ax1.scatter(
+                                xfit[outliers_theilsen],
+                                yfit[outliers_theilsen],
+                                marker="x",
+                                color="r",
+                                s=75,
+                                label=f"rejected ({len(xfit[outliers_theilsen])})",
+                            )
                             ax1.set_ylabel("array index along NAXIS2")
                             ax1.legend()
                             ax1.set_title(f"Slice {islice+1} (ID {sliceid}), Trace {itrace+1} / {ntraces}")
-                            ax2.scatter(xfit, residuals_theilsen, marker="o", color="b", edgecolor='k', s=75)
+                            ax2.scatter(xfit, residuals_theilsen, marker="o", color="b", edgecolor="k", s=75)
                             ax2.axhline(0, color="k", linestyle="--")
                             ax2.set_xlabel("array index along NAXIS1")
                             ax2.set_ylabel("residuals")
@@ -386,8 +408,20 @@ def find_traces_within_slice_boundary_polynomials(
                         yfit = array2d_peaks_slice[itrace][~ibad_array2d_peaks_slice]
                         ax.plot(xfit, yfit, f"C{itrace}.", markersize=0.5)
                     ax.set_ylim(ymin, ymax)
-                    plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
+                    logger.info("Press 'q' to close the plot or 'x' to close the plot and exit the program.")
+
+                    def on_key(event):
+                        if event.key == "q":
+                            plt.close(fig)
+                        elif event.key == "x":
+                            logger.info("Exiting the program as requested by the user.")
+                            plt.close(fig)
+                            sys.exit(0)
+
+                    fig.canvas.mpl_connect("key_press_event", on_key)
+                    plt.tight_layout()
                     plt.show()
+
                 list_poly_traces_all_slices.append(list_poly_traces_slice)
             else:
                 logger.warning(
@@ -749,7 +783,11 @@ def main(args=None):
     parser.add_argument(
         "--xmedian", help="Size of the median filter along NAXIS1 axis (odd; default: 21)", type=int, default=21
     )
-    parser.add_argument("--theilsen", help="Use initial Theil-Sen regression to reject outliers in the polynomial fitting", action="store_true")
+    parser.add_argument(
+        "--theilsen",
+        help="Use initial Theil-Sen regression to reject outliers in the polynomial fitting",
+        action="store_true",
+    )
     parser.add_argument(
         "--degslice", help="Degree of the polynomial to fit traces across slices (default: 2)", type=int, default=2
     )
