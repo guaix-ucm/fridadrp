@@ -56,6 +56,7 @@ def find_traces_within_slice_boundary_polynomials(
     refine=True,
     plotsliceid=None,
     pdf_out=None,
+    output_dir=None
 ):
     """
     Find and fit traces within slice boundary polynomials.
@@ -120,6 +121,8 @@ def find_traces_within_slice_boundary_polynomials(
     pdf_out : str, optional
         Output PDF file for final plots with traces for every slice.
         Default is None.
+    output_dir : str, optional
+        Directory where output files will be saved. Default is None.
 
     Returns
     -------
@@ -632,7 +635,10 @@ def find_traces_within_slice_boundary_polynomials(
     # save PDF file with the final plots of traces for every slice
     if pdf_out is not None:
         logger.info(f"Saving final plots of traces for every slice in PDF file: {pdf_out}")
-        pdf_output = PdfPages(pdf_out)
+        if output_dir is not None:
+            pdf_output = PdfPages(Path(output_dir) / pdf_out)
+        else:
+            pdf_output = PdfPages(pdf_out)
         vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
         for islice in range(
             FRIDA_NSLICES - 1, -1, -1
@@ -817,6 +823,7 @@ def main(args=None):
         refine=not args.norefine,
         plotsliceid=args.plotsliceid,
         pdf_out=args.pdf_out,
+        output_dir=args.output_dir,
     )
 
     # Save output_fname with the results, including:
