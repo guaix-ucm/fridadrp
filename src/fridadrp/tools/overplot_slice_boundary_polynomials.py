@@ -73,13 +73,14 @@ def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffse
                 ax.text(
                     xcenter,
                     ycenter,
-                    f"#{sliceid_from_sliceindex(islice)}",
+                    f"id#{sliceid_from_sliceindex(islice)}",
                     color="white",
-                    fontsize=12,
+                    fontsize=10,
                     ha="center",
                     va="center",
                     fontweight="bold",
                     alpha=1.0,
+                    bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5")
                 )
 
 
@@ -138,13 +139,14 @@ def plot_borders(
             ax.text(
                 xcenter,
                 ycenter,
-                f"#{sliceid_from_sliceindex(islice)}",
+                f"id#{sliceid_from_sliceindex(islice)}",
                 color=color,
-                fontsize=12,
+                fontsize=10,
                 ha="center",
                 va="center",
                 fontweight="bold",
                 alpha=1.0,
+                bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5")
             )
 
 

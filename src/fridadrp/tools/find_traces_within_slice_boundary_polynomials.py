@@ -95,7 +95,7 @@ def find_traces_within_slice_boundary_polynomials(
         Path to the input file with the boundary polynomials.
     voffset : list of float, optional
         Vertical offsets to apply to the slice boundaries. Default is [0.0].
-        If more than one value is provided, a polynomial of degree len(voffset)-1 
+        If more than one value is provided, a polynomial of degree len(voffset)-1
         will be fitted to the offsets and applied to the slice boundaries.
     ntraces : int or None
         Number of traces per slice to find.
@@ -192,15 +192,21 @@ def find_traces_within_slice_boundary_polynomials(
             f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets and applying it to slice boundary polynomials."
         )
         nvoffets = len(voffset)
-        x_offsets = np.linspace(FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value, nvoffets)
-        poly_voffset, _= polfit_residuals(
+        x_offsets = np.linspace(
+            FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value, nvoffets
+        )
+        if plotsliceid is not None:
+            debugplot = 2
+        else:
+            debugplot = 0
+        poly_voffset, _ = polfit_residuals(
             x=x_offsets,
             y=np.array(voffset),
-            deg=len(voffset)-1,
+            deg=len(voffset) - 1,
             xlabel="array index along NAXIS1",
             ylabel="array index along NAXIS2",
             title=f"Vertical offset to be applied to all the slice boundary polynomials",
-            debugplot=2,
+            debugplot=debugplot,
         )
         for islice in range(FRIDA_NSLICES):
             list_poly_left[islice] += poly_voffset
@@ -678,6 +684,7 @@ def find_traces_within_slice_boundary_polynomials(
                 ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
                 ymin = np.min(list_poly_left[islice](ixdum)) - 10
                 ymax = np.max(list_poly_right[islice](ixdum)) + 10
+                xcenter = np.mean(icolumns_to_analyze)
                 for itrace in range(ntraces):
                     if itrace == 0:
                         label1 = f"extrapolated trace"
@@ -692,6 +699,19 @@ def find_traces_within_slice_boundary_polynomials(
                         poly_trace_refined = list_poly_traces_slice_refined[itrace]
                         ytrace_refined = poly_trace_refined(ixdum)
                         ax.plot(ixdum, ytrace_refined, color="cyan", lw=1.5, ls="-", label=label2)
+                        ycenter = poly_trace_refined(xcenter)
+                        ax.text(
+                            xcenter,
+                            ycenter,
+                            f"Trace {itrace+1}",
+                            color="white",
+                            fontsize=8,
+                            ha="center",
+                            va="center",
+                            fontweight="bold",
+                            alpha=1.0,
+                            bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
+                        )
                 ax.set_ylim(ymin, ymax)
                 ax.legend()
                 plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
@@ -752,10 +772,24 @@ def find_traces_within_slice_boundary_polynomials(
             ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
             ymin = np.min(list_poly_left[islice](ixdum)) - 10
             ymax = np.max(list_poly_right[islice](ixdum)) + 10
+            xcenter = np.mean(icolumns_to_analyze)
             for itrace in range(ntraces):
                 poly_trace = list_poly_traces_all_slices[islice][itrace]
                 ytrace = poly_trace(ixdum)
                 ax.plot(ixdum, ytrace, color="cyan", lw=1.5, label=f"Trace {itrace+1}")
+                ycenter = poly_trace(xcenter)
+                ax.text(
+                    xcenter,
+                    ycenter,
+                    f"Trace {itrace+1}",
+                    color="white",
+                    fontsize=8,
+                    ha="center",
+                    va="center",
+                    fontweight="bold",
+                    alpha=1.0,
+                    bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
+                )
             ax.set_ylim(ymin, ymax)
             plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
             pdf_output.savefig(fig, bbox_inches="tight")
