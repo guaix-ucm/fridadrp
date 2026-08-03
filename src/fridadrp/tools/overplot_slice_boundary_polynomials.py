@@ -150,7 +150,7 @@ def plot_borders(
             )
 
 
-def plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, color="cyan", alpha=1.0):
+def plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, traceid=False, color="cyan", alpha=1.0):
     """Plot the slice trace polynomials on the given axes
 
     The polynomials are assumed to be fitted using as independent variable
@@ -168,6 +168,8 @@ def plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, color="cyan", alph
         Vertical constant offset (pixels) to apply. A positive value
         shifts the displayed objects upwards, while a negative value
         shifts them downwards.
+    traceid : bool, optional
+        If True, overplot the trace ID at the center of each trace.
     color : str, optional
         Color of the lines for the traces.
     alpha : float, optional
@@ -175,7 +177,7 @@ def plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, color="cyan", alph
     """
     xdum = np.arange(FRIDA_NAXIS1_HAWAII.value)
     for islice in range(FRIDA_NSLICES):
-        for poly in list_poly_traces_all_slices[islice]:
+        for itrace, poly in enumerate(list_poly_traces_all_slices[islice]):
             ax.plot(
                 xdum,
                 poly(xdum) + voffset,
@@ -183,9 +185,24 @@ def plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, color="cyan", alph
                 lw=1.0,
                 alpha=alpha,
             )
+            if traceid:
+                xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
+                ycenter = poly(xcenter) + voffset
+                ax.text(
+                    xcenter,
+                    ycenter,
+                    f"id#{sliceid_from_sliceindex(islice)}, trace {itrace+1}",
+                    color="white",
+                    fontsize=10,
+                    ha="center",
+                    va="center",
+                    fontweight="bold",
+                    alpha=1.0,
+                    bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5")
+                )
 
 
-def overplot_slice_boundary_polynomials(input_poly, input_borders, input_traces, image, voffset=0.0, sliceid=False):
+def overplot_slice_boundary_polynomials(input_poly, input_borders, input_traces, image, voffset=0.0, sliceid=False, traceid=False):
     """Overplot the slice boundary borders and/or polynomials on an image
 
     The slice boundary borders are given as 2D arrays of shape
@@ -221,6 +238,8 @@ def overplot_slice_boundary_polynomials(input_poly, input_borders, input_traces,
         value shifts them downwards.
     sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
+    traceid : bool, optional
+        If True, overplot the trace ID at the center of each trace.
     """
     logger = logging.getLogger(__name__)
 
@@ -276,7 +295,7 @@ def overplot_slice_boundary_polynomials(input_poly, input_borders, input_traces,
             f"Read {len(list_poly_traces_all_slices)} slices with {len(list_poly_traces_all_slices[0])} traces per slice from {input_traces}."
         )
 
-        plot_traces(ax, list_poly_traces_all_slices, voffset=voffset)
+        plot_traces(ax, list_poly_traces_all_slices, voffset=voffset, traceid=traceid)
 
     # reset the x and y limits to the original values after plotting the boundaries (and borders if provided)
     ax.set_xlim(xmin, xmax)
@@ -377,6 +396,7 @@ def main(args=None):
     parser.add_argument("--image", help="Image to display boundaries on", type=str, required=True)
     parser.add_argument("--voffset", help="Vertical constant offset (pixels) to apply", type=float, default=0.0)
     parser.add_argument("--sliceid", help="Overplot slice ID", action="store_true")
+    parser.add_argument("--traceid", help="Overplot trace ID", action="store_true")
     parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
@@ -407,6 +427,14 @@ def main(args=None):
     if args.image is None:
         logger.warning("No input image file defined. The slice boundaries will not be overplotted on an image.")
 
+    # Check that both sliceid and traceid are not defined at the same time
+    if args.sliceid and args.traceid:
+        raise ValueError("Both --sliceid and --traceid are defined. Please define only one of them to overplot the IDs.")
+
+    # Check that if traceid is defined, traces file must be provided
+    if args.traceid and args.traces is None:
+        raise ValueError("The --traceid option is defined, but no slice trace polynomials file is provided. Please provide a valid --traces file.")
+
     # Overplot the slice boundary polynomials
     overplot_slice_boundary_polynomials(
         input_poly=args.poly,
@@ -415,6 +443,7 @@ def main(args=None):
         image=args.image,
         voffset=args.voffset,
         sliceid=args.sliceid,
+        traceid=args.traceid,
     )
 
     # Execution time
