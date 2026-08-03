@@ -25,6 +25,8 @@ import teareduce as tea
 import uuid
 
 from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
+from numina.array.robustfit import fit_theil_sen
+from numina.array.stats import robust_std
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, refine_peaks_spectrum
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
 from numina.tools.progressbarlines import ProgressBarLines
@@ -49,6 +51,7 @@ def find_traces_within_slice_boundary_polynomials(
     nclean_around_peaks=-1,
     deg=None,
     xmedian=21,
+    theilsen=False,
     columns_to_analyze=None,
     yborder=1,
     degslice=2,
@@ -104,6 +107,9 @@ def find_traces_within_slice_boundary_polynomials(
     xmedian : int, optional
         Size of the median filter to apply to the flat data along NAXIS1
         to remove bad pixels.
+    theilsen : bool, optional
+        If True, use initial Theil-Sen regression to reject outliers in the 
+        polynomial fitting.
     columns_to_analyze : list of tuple, optional
         List of column ranges to analyze. Each tuple contains (min_col, max_col).
         This numbers are 1-based indices along NAXIS1.
@@ -311,9 +317,34 @@ def find_traces_within_slice_boundary_polynomials(
                 for itrace in range(ntraces):
                     xfit = ixdum[~ibad_array2d_peaks_slice]
                     yfit = array2d_peaks_slice[itrace][~ibad_array2d_peaks_slice]
+                    if theilsen:
+                        coef_theilsen = fit_theil_sen(xfit, yfit)
+                        residuals_theilsen = yfit - (coef_theilsen[0] + coef_theilsen[1] * xfit)
+                        rms_residuals_theilsen = robust_std(residuals_theilsen)
+                        outliers_theilsen = np.abs(residuals_theilsen) > 3 * rms_residuals_theilsen
+                        xfit_filtered = xfit[~outliers_theilsen]
+                        yfit_filtered = yfit[~outliers_theilsen]
+                        xplot_theilsen = np.array([np.min(xfit_filtered), np.max(xfit_filtered)])
+                        if debugplot == 2:
+                            fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
+                            ax1.scatter(xfit_filtered, yfit_filtered, marker="o", color="b", edgecolor='k', s=75, label=f"fitted data ({len(xfit_filtered)})")
+                            ax1.plot(xplot_theilsen, coef_theilsen[0] + coef_theilsen[1] * xplot_theilsen, "c-", label="Theil-Sen fit")
+                            ax1.scatter(xfit[outliers_theilsen], yfit[outliers_theilsen], marker="x", color="r", s=75, label=f"rejected ({len(xfit[outliers_theilsen])})")
+                            ax1.set_ylabel("array index along NAXIS2")
+                            ax1.legend()
+                            ax1.set_title(f"Slice {islice+1} (ID {sliceid}), Trace {itrace+1} / {ntraces}")
+                            ax2.scatter(xfit, residuals_theilsen, marker="o", color="b", edgecolor='k', s=75)
+                            ax2.axhline(0, color="k", linestyle="--")
+                            ax2.set_xlabel("array index along NAXIS1")
+                            ax2.set_ylabel("residuals")
+                            plt.tight_layout()
+                            plt.show()
+                    else:
+                        xfit_filtered = xfit
+                        yfit_filtered = yfit
                     poly_trace, _, _ = polfit_residuals_with_sigma_rejection(
-                        x=xfit,
-                        y=yfit,
+                        x=xfit_filtered,
+                        y=yfit_filtered,
                         deg=deg,
                         times_sigma_reject=3.0,
                         ylimres_with_rejected=True,
@@ -718,6 +749,7 @@ def main(args=None):
     parser.add_argument(
         "--xmedian", help="Size of the median filter along NAXIS1 axis (odd; default: 21)", type=int, default=21
     )
+    parser.add_argument("--theilsen", help="Use initial Theil-Sen regression to reject outliers in the polynomial fitting", action="store_true")
     parser.add_argument(
         "--degslice", help="Degree of the polynomial to fit traces across slices (default: 2)", type=int, default=2
     )
@@ -817,6 +849,7 @@ def main(args=None):
         nclean_around_peaks=args.nclean_around_peaks,
         deg=args.deg,
         xmedian=args.xmedian,
+        theilsen=args.theilsen,
         columns_to_analyze=columns_to_analyze,
         degslice=args.degslice,
         degrefine=args.degrefine,
