@@ -793,6 +793,7 @@ def find_traces_within_slice_boundary_polynomials(
             ax.set_ylim(ymin, ymax)
             plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
             pdf_output.savefig(fig, bbox_inches="tight")
+            plt.close(fig)
         pdf_output.close()
 
     # return the list of polynomial traces for all slices
