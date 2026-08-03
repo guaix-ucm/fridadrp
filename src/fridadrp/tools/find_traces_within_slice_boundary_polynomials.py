@@ -14,6 +14,7 @@ from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 from datetime import datetime
 import logging
+from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
@@ -44,13 +45,17 @@ def find_traces_within_slice_boundary_polynomials(
     poly_path,
     voffset=0.0,
     ntraces=None,
+    nextend=2,
+    nclean_around_peaks=-1,
     deg=None,
     xmedian=21,
     columns_to_analyze=None,
     yborder=1,
     degslice=2,
+    degrefine=2,
     refine=True,
     plotsliceid=None,
+    pdf_out=None,
 ):
     """
     Find and fit traces within slice boundary polynomials.
@@ -87,6 +92,12 @@ def find_traces_within_slice_boundary_polynomials(
         Vertical offset to apply to the slice boundaries. Default is 0.0.
     ntraces : int or None
         Number of traces per slice to find.
+    nextend : int, optional
+        Number of pixels to extend the search for traces beyond the slice boundaries.
+    nclean_around_peaks : int, optional
+        Number of pixels to clean around each peak when searching for
+        the highest peaks. If -1, set to zero pixels moving outward from the
+        peak while the signal keeps decreasing.
     deg : int or None
         Degree of the polynomial to fit.
     xmedian : int, optional
@@ -99,11 +110,16 @@ def find_traces_within_slice_boundary_polynomials(
         Additional distance to the border to avoid edge effects. Default is 1.
     degslice : int, optional
         Degree of the polynomial to fit traces across slices. Default is 2.
+    degrefine : int, optional
+        Degree of the polynomial to refine the trace positions. Default is 2.
     refine : bool, optional
         If True, refine extrapolated traces using the smoothed image data.
         Default is True.
     plotsliceid : list of int, optional
         Slice ids for which to display plots. Default is None.
+    pdf_out : str, optional
+        Output PDF file for final plots with traces for every slice.
+        Default is None.
 
     Returns
     -------
@@ -179,6 +195,17 @@ def find_traces_within_slice_boundary_polynomials(
         )
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
+        logger.info("Press 'q' to close the plot or 'x' to close the plot and exit the program.")
+
+        def on_key(event):
+            if event.key == "q":
+                plt.close(fig)
+            elif event.key == "x":
+                logger.info("Exiting the program as requested by the user.")
+                plt.close(fig)
+                sys.exit(0)
+
+        fig.canvas.mpl_connect("key_press_event", on_key)
         plt.tight_layout()
         plt.show()
 
@@ -212,8 +239,10 @@ def find_traces_within_slice_boundary_polynomials(
 
         # Compute the minimum and maximum y-values of the left and right polynomials over the specified column range
         ymin_left = int(np.min(poly_left(icolumns_to_analyze) + 0.5))  # (0-based index)
+        ymin_left -= nextend  # extend the search for traces beyond the slice boundaries
         ymin_left += 1  # (1-based index)
         ymax_right = int(np.max(poly_right(icolumns_to_analyze) + 0.5))  # (0-based index)
+        ymax_right += nextend  # extend the search for traces beyond the slice boundaries
         ymax_right += 1  # (1-based index)
         # Check if the computed y-values are within the useful pixel range
         if ymin_left < FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value + yborder:
@@ -236,85 +265,110 @@ def find_traces_within_slice_boundary_polynomials(
                     debugplot = 2
                 else:
                     debugplot = 0
+                # Recompute ymin_left and ymax_right for the current column to avoid making use
+                # of data from neighboring slices when the slice boundaries are not parallel to the NAXIS1 axis
+                ymin_left = int(poly_left(icolumn) + 0.5) - nextend + 1  # (1-based index)
+                ymax_right = int(poly_right(icolumn) + 0.5) + nextend + 1  # (1-based index)
                 # Find the highest peaks in the spectrum (y-data)
                 iypeaks = find_highest_peaks_spectrum(
                     sx=image_data_filtered[:, icolumn][ymin_left - 1 : ymax_right],
                     nmaxpeaks=ntraces,
-                    nclean_around_peak=4,
+                    nclean_around_peak=nclean_around_peaks,
                     nwinwidth=5,
                     title=f"Slice {islice+1} (ID {sliceid}), Column {icolumn+1}",
                     debugplot=debugplot,
                 )
-                # Refine the peak positions to sub-pixel accuracy
-                fypeaks, _ = refine_peaks_spectrum(
-                    sx=image_data_filtered[:, icolumn][ymin_left - 1 : ymax_right],
-                    ixpeaks=iypeaks,
-                    nwinwidth=3,
-                    method="poly2",
-                    title=f"Slice {islice+1} (ID {sliceid}), Column {icolumn+1}",
-                    debugplot=debugplot,
-                )
-                fypeaks_slice = fypeaks + ymin_left - 1  # Adjust the peak positions to the original y-data range
-                array2d_peaks_slice[:, icolumn] = (
-                    fypeaks_slice  # Store the refined peak positions in the array for the current slice
-                )
+                # Ignore all the peaks when the first peak is at the first pixel of the y-data range, as it may be an artifact
+                if iypeaks[0] != 0:
+                    # Refine the peak positions to sub-pixel accuracy
+                    fypeaks, _ = refine_peaks_spectrum(
+                        sx=image_data_filtered[:, icolumn][ymin_left - 1 : ymax_right],
+                        ixpeaks=iypeaks,
+                        nwinwidth=3,
+                        method="poly2",
+                        title=f"Slice {islice+1} (ID {sliceid}), Column {icolumn+1}",
+                        debugplot=debugplot,
+                    )
+                    fypeaks_slice = fypeaks + ymin_left - 1  # Adjust the peak positions to the original y-data range
+                    array2d_peaks_slice[:, icolumn] = (
+                        fypeaks_slice  # Store the refined peak positions in the array for the current slice
+                    )
+                    if debugplot == 2:
+                        logger.info(f"Slice {islice+1} (ID {sliceid}), Column {icolumn+1}: Found peaks at\n{fypeaks_slice}")
             # Fit polynomials to the traces found in the current slice
             collapsed_array2d_peaks_slice = np.sum(array2d_peaks_slice, axis=0)
             ibad_array2d_peaks_slice = np.isnan(collapsed_array2d_peaks_slice)
             list_poly_traces_slice = []
             ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
-            if len(ixdum[~ibad_array2d_peaks_slice]) < deg + 1:
-                raise ValueError(
+            if len(ixdum[~ibad_array2d_peaks_slice]) >= deg + 1:
+                if plotsliceid is not None and sliceid in plotsliceid:
+                    debugplot = 2
+                else:
+                    debugplot = 0
+                for itrace in range(ntraces):
+                    xfit = ixdum[~ibad_array2d_peaks_slice]
+                    yfit = array2d_peaks_slice[itrace][~ibad_array2d_peaks_slice]
+                    poly_trace, _, _ = polfit_residuals_with_sigma_rejection(
+                        x=xfit,
+                        y=yfit,
+                        deg=deg,
+                        times_sigma_reject=3.0,
+                        ylimres_with_rejected=True,
+                        xlabel="array index along NAXIS1",
+                        ylabel="array index along NAXIS2",
+                        title=f"Slice {islice+1} (ID {sliceid}), Trace {itrace+1} / {ntraces}",
+                        debugplot=debugplot,
+                    )
+                    list_poly_traces_slice.append(poly_trace)
+                if plotsliceid is not None and sliceid in plotsliceid:
+                    fig, ax = plt.subplots(figsize=(10, 8))
+                    vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
+                    tea.imshow(
+                        fig,
+                        ax,
+                        image_data_filtered,
+                        vmin=vmin,
+                        vmax=vmax,
+                        aspect="auto",
+                        ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
+                        title=f"Slice {islice+1} (ID {sliceid}), Traces Found",
+                    )
+                    # set sliceid=False in plot_fitted_boundary_polynomials to avoid a problem
+                    # in plt.tight_layout() when sliceid=True (it fails to compute the layout properly)
+                    plot_fitted_boundary_polynomials(
+                        ax=ax,
+                        list_poly_left=list_poly_left,
+                        list_poly_right=list_poly_right,
+                        voffset=0.0,
+                        sliceid=False,
+                    )
+                    ymin = np.min(list_poly_left[islice](ixdum)) - 10
+                    ymax = np.max(list_poly_right[islice](ixdum)) + 10
+                    for itrace in range(ntraces):
+                        poly_trace = list_poly_traces_slice[itrace]
+                        ytrace = poly_trace(ixdum)
+                        ax.plot(ixdum, ytrace, color="cyan", lw=1.5, label=f"Trace {itrace+1}")
+                        xfit = ixdum[~ibad_array2d_peaks_slice]
+                        yfit = array2d_peaks_slice[itrace][~ibad_array2d_peaks_slice]
+                        ax.plot(xfit, yfit, f"C{itrace}.", markersize=0.5)
+                    ax.set_ylim(ymin, ymax)
+                    plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
+                    plt.show()
+                list_poly_traces_all_slices.append(list_poly_traces_slice)
+            else:
+                logger.warning(
                     f"Slice {islice+1} (ID {sliceid}) has too few valid data points ({len(ixdum[~ibad_array2d_peaks_slice])}) to fit a polynomial of degree {deg}. At least {deg + 1} valid data points are required."
                 )
-            if plotsliceid is not None and sliceid in plotsliceid:
-                debugplot = 2
-            else:
-                debugplot = 0
-            for itrace in range(ntraces):
-                xfit = ixdum[~ibad_array2d_peaks_slice]
-                yfit = array2d_peaks_slice[itrace][~ibad_array2d_peaks_slice]
-                poly_trace, _, _ = polfit_residuals_with_sigma_rejection(
-                    x=xfit,
-                    y=yfit,
-                    deg=deg,
-                    times_sigma_reject=3.0,
-                    ylimres_with_rejected=True,
-                    xlabel="array index along NAXIS1",
-                    ylabel="array index along NAXIS2",
-                    title=f"Slice {islice+1} (ID {sliceid}), Trace {itrace+1} / {ntraces}",
-                    debugplot=debugplot,
-                )
-                list_poly_traces_slice.append(poly_trace)
-            if plotsliceid is not None and sliceid in plotsliceid:
-                fig, ax = plt.subplots(figsize=(10, 8))
-                vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
-                tea.imshow(
-                    fig,
-                    ax,
-                    image_data_filtered,
-                    vmin=vmin,
-                    vmax=vmax,
-                    aspect="auto",
-                    ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
-                    title=f"Slice {islice+1} (ID {sliceid}), Traces Found",
-                )
-                # set sliceid=False in plot_fitted_boundary_polynomials to avoid a problem
-                # in plt.tight_layout() when sliceid=True (it fails to compute the layout properly)
-                plot_fitted_boundary_polynomials(
-                    ax=ax, list_poly_left=list_poly_left, list_poly_right=list_poly_right, voffset=0.0, sliceid=False
-                )
-                ymin = np.min(list_poly_left[islice](ixdum)) - 10
-                ymax = np.max(list_poly_right[islice](ixdum)) + 10
-                for itrace in range(ntraces):
-                    poly_trace = list_poly_traces_slice[itrace]
-                    ytrace = poly_trace(ixdum)
-                    ax.plot(ixdum, ytrace, color="cyan", lw=1.5, label=f"Trace {itrace+1}")
-                ax.set_ylim(ymin, ymax)
-                plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
-                plt.show()
-            list_poly_traces_all_slices.append(list_poly_traces_slice)
         pbar.update()
+    if len(icolumns_to_analyze) == 1:
+        logger.info("Only one column was analyzed. No extrapolation is needed. Exiting the program.")
+        sys.exit(0)  # Exit the program if only one column was analyzed, as no extrapolation is needed
+    if len(list_poly_traces_all_slices) != FRIDA_NSLICES:
+        logger.warning(
+            f"Expected {FRIDA_NSLICES} slices, but found {len(list_poly_traces_all_slices)} slices in the list of polynomial traces."
+        )
+        logger.info("Exiting the program due to the mismatch in the number of slices.")
+        sys.exit(0)
 
     # Check if any of the skipped slices is not in the allowed list of skipped slices
     allowed_islice_skipped = [
@@ -433,18 +487,20 @@ def find_traces_within_slice_boundary_polynomials(
                             # predict the peak position using the polynomial trace
                             ipeak = (poly_trace(icol) + 0.5).astype(int)  # (0-based) rounded integer
                             # find the peak position in the smoothed image data around the predicted position
-                            naround_peak = 11  # number of pixels around the peak to use for refinement
-                            ipeak_local = np.nanargmax(
-                                image_data_filtered[:, icol][ipeak - naround_peak // 2 : ipeak + naround_peak // 2 + 1]
-                            )  # (0-based) index of the peak in the local window
-                            # refine the peak position using the last 11 pixels around the predicted position
+                            naround_peak = 7  # number of pixels around the peak to use for refinement
+                            ycut_refinement = image_data_filtered[:, icol][
+                                ipeak - naround_peak // 2 : ipeak + naround_peak // 2 + 1
+                            ]
+                            ipeak_local = np.nanargmax(ycut_refinement)
+                            # refine the peak position
                             ipeak = ipeak - naround_peak // 2 + ipeak_local  # (0-based)
                             # refine the peak position to sub-pixel accuracy using a polynomial fit
                             naround_peak = 5  # number of pixels around the peak to use for refinement
+                            ycut_refinement = image_data_filtered[:, icol][
+                                ipeak - naround_peak // 2 : ipeak + naround_peak // 2 + 1
+                            ]
                             fxpeaks, _ = refine_peaks_spectrum(
-                                sx=image_data_filtered[:, icol][
-                                    ipeak - naround_peak // 2 : ipeak + naround_peak // 2 + 1
-                                ],
+                                sx=ycut_refinement,
                                 ixpeaks=np.array([naround_peak // 2]),  # peak is at the center of the window
                                 nwinwidth=3,
                                 method="poly2",
@@ -452,7 +508,7 @@ def find_traces_within_slice_boundary_polynomials(
                                 debugplot=debugplot,
                             )
                             deltay_refined[itrace, icol] = (fxpeaks[0] + ipeak - naround_peak // 2) - poly_trace(icol)
-                        # fit a polynomial of degree 1 to the refinement
+                        # fit a polynomial of degree degrefine to the refinement
                         if plots:
                             debugplot = 2
                         else:
@@ -460,7 +516,7 @@ def find_traces_within_slice_boundary_polynomials(
                         poly_refinement, _, _ = polfit_residuals_with_sigma_rejection(
                             x=icolumns_to_analyze,
                             y=deltay_refined[itrace][icolumns_to_analyze],
-                            deg=1,
+                            deg=degrefine,
                             times_sigma_reject=3.0,
                             ylimres_with_rejected=True,
                             xlabel="array index along NAXIS1",
@@ -485,7 +541,7 @@ def find_traces_within_slice_boundary_polynomials(
                     ivalid_cols = ~np.all(np.isnan(deltay_refined), axis=0)
                     deltay_refined_mean = np.full(deltay_refined.shape[1], np.nan, dtype=float)
                     deltay_refined_mean[ivalid_cols] = np.nanmean(deltay_refined[:, ivalid_cols], axis=0)
-                    # fit a polynomial of degree 1 to the average refinement
+                    # fit a polynomial of degree degrefine to the average refinement
                     if plots:
                         debugplot = 2
                     else:
@@ -493,7 +549,7 @@ def find_traces_within_slice_boundary_polynomials(
                     poly_refinement_mean, _, _ = polfit_residuals_with_sigma_rejection(
                         x=icolumns_to_analyze,
                         y=deltay_refined_mean[icolumns_to_analyze],
-                        deg=1,
+                        deg=degrefine,
                         times_sigma_reject=3.0,
                         ylimres_with_rejected=True,
                         xlabel="array index along NAXIS1",
@@ -528,6 +584,7 @@ def find_traces_within_slice_boundary_polynomials(
                 plot_fitted_boundary_polynomials(
                     ax=ax, list_poly_left=list_poly_left, list_poly_right=list_poly_right, voffset=0.0, sliceid=False
                 )
+                ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
                 ymin = np.min(list_poly_left[islice](ixdum)) - 10
                 ymax = np.max(list_poly_right[islice](ixdum)) + 10
                 for itrace in range(ntraces):
@@ -572,6 +629,44 @@ def find_traces_within_slice_boundary_polynomials(
                 sliceid = sliceid_from_sliceindex(islice)
                 raise ValueError(f"Trace {itrace+1} of slice {islice+1} (ID {sliceid}) could not be fitted.")
 
+    # save PDF file with the final plots of traces for every slice
+    if pdf_out is not None:
+        logger.info(f"Saving final plots of traces for every slice in PDF file: {pdf_out}")
+        pdf_output = PdfPages(pdf_out)
+        vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
+        for islice in range(
+            FRIDA_NSLICES - 1, -1, -1
+        ):  # (0-based index) loop in reverse order to have the first slice on top of the PDF
+            sliceid = sliceid_from_sliceindex(islice)
+            fig, ax = plt.subplots(figsize=(10, 6))
+            tea.imshow(
+                fig,
+                ax,
+                image_data_filtered,
+                vmin=vmin,
+                vmax=vmax,
+                aspect="auto",
+                ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
+                title=f"{Path(image_path).name} - xmedian={xmedian}\n"
+                f"Final Traces for Slice {islice+1} (ID {sliceid})",
+            )
+            # set sliceid=False in plot_fitted_boundary_polynomials to avoid a problem
+            # in plt.tight_layout() when sliceid=True (it fails to compute the layout properly)
+            plot_fitted_boundary_polynomials(
+                ax=ax, list_poly_left=list_poly_left, list_poly_right=list_poly_right, voffset=0.0, sliceid=False
+            )
+            ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
+            ymin = np.min(list_poly_left[islice](ixdum)) - 10
+            ymax = np.max(list_poly_right[islice](ixdum)) + 10
+            for itrace in range(ntraces):
+                poly_trace = list_poly_traces_all_slices[islice][itrace]
+                ytrace = poly_trace(ixdum)
+                ax.plot(ixdum, ytrace, color="cyan", lw=1.5, label=f"Trace {itrace+1}")
+            ax.set_ylim(ymin, ymax)
+            plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
+            pdf_output.savefig(fig, bbox_inches="tight")
+        pdf_output.close()
+
     # return the list of polynomial traces for all slices
     return list_poly_left, list_poly_right, list_poly_traces_all_slices
 
@@ -592,6 +687,18 @@ def main(args=None):
         default=0.0,
     )
     parser.add_argument("--ntraces", help="Number of traces per slice to find", type=int, required=True)
+    parser.add_argument(
+        "--nextend",
+        help="Number of pixels to extend the slice boundaries for trace finding (default: 2)",
+        type=int,
+        default=2,
+    )
+    parser.add_argument(
+        "--nclean-around-peaks",
+        help="Number of pixels to clean at both sides of each peak (default: -1; set to zero pixels moving outward from the peak while the signal keeps decreasing)",
+        type=int,
+        default=-1,
+    )
     parser.add_argument("--deg", help="Degree of the polynomial to fit each trace", type=int, required=True)
     parser.add_argument(
         "--colrange",
@@ -605,7 +712,12 @@ def main(args=None):
     parser.add_argument(
         "--xmedian", help="Size of the median filter along NAXIS1 axis (odd; default: 21)", type=int, default=21
     )
-    parser.add_argument("--degslice", help="Degree of the polynomial to fit traces across slices", type=int, default=2)
+    parser.add_argument(
+        "--degslice", help="Degree of the polynomial to fit traces across slices (default: 2)", type=int, default=2
+    )
+    parser.add_argument(
+        "--degrefine", help="Degree of the polynomial to refine the trace positions (default: 2)", type=int, default=2
+    )
     parser.add_argument("--norefine", help="Do not refine the extrapolated traces", action="store_true")
     parser.add_argument("--output", help="Output file name for the predicted polynomials", type=str, required=True)
     parser.add_argument("--overwrite", help="Overwrite existing output file", action="store_true")
@@ -614,6 +726,12 @@ def main(args=None):
         help="Display plots for slice id (this option can be specified multiple times)",
         type=int,
         action="append",
+        default=None,
+    )
+    parser.add_argument(
+        "--pdf-out",
+        help="Output PDF file for final plots with traces for every slice (default: None, no output)",
+        type=str,
         default=None,
     )
     parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
@@ -689,12 +807,16 @@ def main(args=None):
         poly_path=args.poly,
         voffset=args.voffset,
         ntraces=args.ntraces,
+        nextend=args.nextend,
+        nclean_around_peaks=args.nclean_around_peaks,
         deg=args.deg,
         xmedian=args.xmedian,
         columns_to_analyze=columns_to_analyze,
         degslice=args.degslice,
+        degrefine=args.degrefine,
         refine=not args.norefine,
         plotsliceid=args.plotsliceid,
+        pdf_out=args.pdf_out,
     )
 
     # Save output_fname with the results, including:
