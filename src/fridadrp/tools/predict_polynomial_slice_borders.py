@@ -236,7 +236,7 @@ def main(args=None):
 
     # Save the predicted polynomials to the output FITS file
     # Copy the input polynomials file to the output file
-    shutil.copyfile(args.poly, output_fname)  # This always overwrites the output file if it exists
+    shutil.copyfile(args.poly, output_fname)  # This always overwrites the output file if it exists, but we have already checked for overwrite permission
     logger.info(f"Copied input polynomials file [blue]{args.poly}[/blue] to output file [green]{output_fname}[/green].")
     logger.info(
         f"Updating the output FITS file with the predicted polynomials for slice number {args.slicenum} (slice ID {sliceid_from_sliceindex(args.slicenum - 1):02d})."
