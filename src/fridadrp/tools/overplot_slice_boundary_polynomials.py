@@ -406,7 +406,7 @@ def overplot_slice_boundary_polynomials(
             input_borders
         )
         logger.info(
-            f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from {input_borders}."
+            f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from\n[blue]{input_borders}[/blue]."
         )
     else:
         array_left_border, array_right_border, ibad, uuid_borders, islice_ok = None, None, None, None, None
@@ -415,7 +415,7 @@ def overplot_slice_boundary_polynomials(
     if input_traces is not None:
         list_poly_traces_all_slices = read_slice_trace_polynomials(input_traces)
         logger.info(
-            f"Read {len(list_poly_traces_all_slices)} slices with {len(list_poly_traces_all_slices[0])} traces per slice from {input_traces}."
+            f"Read {len(list_poly_traces_all_slices)} slices with {len(list_poly_traces_all_slices[0])} traces per slice from\n[blue]{input_traces}[/blue]."
         )
     else:
         list_poly_traces_all_slices = [None] * FRIDA_NSLICES

@@ -72,6 +72,7 @@ def read_slice_boundary_borders(input_file):
     """
     logger = logging.getLogger(__name__)
 
+    logger.info(f"Reading slice boundary borders from\n[blue]{input_file}[/blue]")
     # Check input file corresponds to the expected FITS file
     with fits.open(input_file) as hdul:
         check_is_a_valid_slice_boundary_border_file(hdul)

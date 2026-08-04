@@ -69,6 +69,7 @@ def read_slice_boundary_polynomials(input_polynomial):
     """
     logger = logging.getLogger(__name__)
 
+    logger.info(f"Reading slice boundary polynomials from\n[blue]{input_polynomial}[/blue]")
     with fits.open(input_polynomial) as hdul:
         check_is_a_valid_slice_boundary_polynomial_file(hdul)
         poldeg = hdul[0].header["POLDEG"]
