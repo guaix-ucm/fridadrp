@@ -14,7 +14,6 @@ from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 from datetime import datetime
 import logging
-from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
