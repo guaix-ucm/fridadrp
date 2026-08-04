@@ -371,6 +371,7 @@ def interpolate_traces_within_slices(
     for sliceid in sliceids:
         islice = sliceindex_from_sliceid(sliceid)
         ntraces = len(list_poly_traces_all_slices[islice])
+        logger.info("---")
         logger.info(f"Processing slice {islice + 1} (ID {sliceid}) with {ntraces} traces...")
         # Determine slice group
         slicesid_group1 = DEF_SLICEID_FROM_SLICEINDEX[0::2].tolist()
@@ -379,7 +380,7 @@ def interpolate_traces_within_slices(
             slicesid_group = slicesid_group1
         else:
             slicesid_group = slicesid_group2
-        logger.info(f"Slice {sliceid} belongs to group with slice IDs:\n{slicesid_group}")
+        logger.info(f"Slice ID {sliceid} belongs to group with slice IDs:\n{slicesid_group}")
         # Remove from slicesid_group the slices remaining
         for sid in sliceids_remaining:
             if sid in slicesid_group:
