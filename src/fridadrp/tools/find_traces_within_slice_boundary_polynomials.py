@@ -174,8 +174,12 @@ def find_traces_within_slice_boundary_polynomials(
         if ymedian >= 3:
             logger.info(f"Applying median filtering along NAXIS2 with size {ymedian}.")
             if np.isnan(image_data).any():
-                logger.debug("NaN values found in image data. Using generic_filter with np.nanmedian to ignore NaN values.")
-                image_data_filtered = image_data - generic_filter(image_data, np.nanmedian, size=(ymedian, 1), mode="nearest")
+                logger.debug(
+                    "NaN values found in image data. Using generic_filter with np.nanmedian to ignore NaN values."
+                )
+                image_data_filtered = image_data - generic_filter(
+                    image_data, np.nanmedian, size=(ymedian, 1), mode="nearest"
+                )
             else:
                 logger.debug("No NaN values found in image data. Using median_filter directly.")
                 image_data_filtered = image_data - median_filter(image_data, size=(ymedian, 1), mode="nearest")
@@ -242,8 +246,6 @@ def find_traces_within_slice_boundary_polynomials(
     if plotsliceid is not None:
         fig, ax = plt.subplots(figsize=(10, 8))
         vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
-        print(vmin, type(vmin))
-        print(vmax, type(vmax))
         tea.imshow(
             fig,
             ax,
@@ -552,7 +554,7 @@ def find_traces_within_slice_boundary_polynomials(
                 degrefine=degrefine,
                 image_data=image_data_filtered,
                 icolumns_to_plot=icolumns_to_plot,
-                plots=plots
+                plots=plots,
             )
 
             # show extrapolated (and when required refined) traces over the smoothed image data
@@ -693,7 +695,10 @@ def main(args=None):
         default=None,
     )
     parser.add_argument(
-        "--ymedian", help="Size of the median filter along NAXIS2 axis to be subtracted (odd; default: 0 -> no filtering)", type=int, default=0
+        "--ymedian",
+        help="Size of the median filter along NAXIS2 axis to be subtracted (odd; default: 0 -> no filtering)",
+        type=int,
+        default=0,
     )
     parser.add_argument(
         "--xmedian", help="Size of the median filter along NAXIS1 axis (odd; default: 21)", type=int, default=21

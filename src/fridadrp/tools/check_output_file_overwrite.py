@@ -15,12 +15,12 @@ from pathlib import Path
 
 def check_output_file_overwrite(output_file, output_dir, overwrite):
     """Check if the output file already exists and handle overwriting.
-    
-    If the output directory does not exist, it will be created. 
-    If the output file already exists and overwrite is False, 
+
+    If the output directory does not exist, it will be created.
+    If the output file already exists and overwrite is False,
     an exception will be raised.
 
-    This function returns the full path to the output file, 
+    This function returns the full path to the output file,
     combining the output directory and output file name if necessary.
 
     Parameters
@@ -31,7 +31,7 @@ def check_output_file_overwrite(output_file, output_dir, overwrite):
         Output directory path.
     overwrite : bool
         Whether to overwrite existing files.
-    
+
     Returns
     -------
     output_fname : str

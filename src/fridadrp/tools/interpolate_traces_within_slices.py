@@ -335,8 +335,8 @@ def interpolate_traces_within_slices(
 
     # Check that the slice IDs are valid
     for sliceid in sliceids:
-        if sliceid < 0 or sliceid >= FRIDA_NSLICES:
-            logger.error(f"Invalid slice ID {sliceid}. Must be between 0 and {FRIDA_NSLICES - 1}.")
+        if sliceid <= 0 or sliceid > FRIDA_NSLICES:
+            logger.error(f"Invalid slice ID {sliceid}. Must be between 1 and {FRIDA_NSLICES}.")
             sys.exit(1)
 
     # Read first the boundary polynomials

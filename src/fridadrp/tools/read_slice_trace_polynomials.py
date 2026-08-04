@@ -69,13 +69,11 @@ def read_slice_trace_polynomials(input_polynomial):
 
     with fits.open(input_polynomial) as hdul:
         check_is_a_valid_slice_trace_polynomial_file(hdul)
-    
+
         ntraces_per_slice = hdul[0].header["TRACESLC"]
         tracdeg = hdul[0].header["TRACDEG"]
         if hdul[0].header["SLCNUMT"] != FRIDA_NSLICES:
-            raise ValueError(
-                f"Invalid SLCNUMT={hdul[0].header['SLCNUMT']}.\nExpected value is {FRIDA_NSLICES}."
-            )
+            raise ValueError(f"Invalid SLCNUMT={hdul[0].header['SLCNUMT']}.\nExpected value is {FRIDA_NSLICES}.")
 
         list_poly_traces_all_slices = []
         for islice in range(FRIDA_NSLICES):
