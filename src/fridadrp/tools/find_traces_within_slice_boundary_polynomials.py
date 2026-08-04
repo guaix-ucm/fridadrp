@@ -53,6 +53,7 @@ def find_traces_within_slice_boundary_polynomials(
     nextend=2,
     nclean_around_peaks=-1,
     deg=None,
+    ymedian=0,
     xmedian=21,
     theilsen=False,
     columns_to_analyze=None,
@@ -109,6 +110,9 @@ def find_traces_within_slice_boundary_polynomials(
         peak while the signal keeps decreasing.
     deg : int or None
         Degree of the polynomial to fit.
+    ymedian : int, optional
+        Size of the median filter to apply to the flat data along NAXIS2
+        to remove bad columns. If 0, no median filtering is applied.
     xmedian : int, optional
         Size of the median filter to apply to the flat data along NAXIS1
         to remove bad pixels.
@@ -159,8 +163,28 @@ def find_traces_within_slice_boundary_polynomials(
     # Read the input image
     logger.debug(f"Reading input image from {image_path}")
     with fits.open(image_path) as hdul:
-        image_data = hdul[0].data
+        image_data = hdul[0].data.astype(float)  # Convert to float for processing
 
+    # Median filter the data along NAXIS2 to find a vertical pattern; this pattern
+    # is subtracted to remove bad columns.
+    if ymedian != 0:
+        if ymedian % 2 == 0:
+            ymedian += 1  # Ensure the median filter size is odd
+            logger.warning(f"Median filter size along NAXIS2 adjusted to {ymedian} to ensure it is odd.")
+        if ymedian >= 3:
+            logger.info(f"Applying median filtering along NAXIS2 with size {ymedian}.")
+            if np.isnan(image_data).any():
+                logger.debug("NaN values found in image data. Using generic_filter with np.nanmedian to ignore NaN values.")
+                image_data_filtered = image_data - generic_filter(image_data, np.nanmedian, size=(ymedian, 1), mode="nearest")
+            else:
+                logger.debug("No NaN values found in image data. Using median_filter directly.")
+                image_data_filtered = image_data - median_filter(image_data, size=(ymedian, 1), mode="nearest")
+        else:
+            logger.warning(f"Median filter size along NAXIS2 {ymedian} is less than 3. Skipping median filtering.")
+            image_data_filtered = image_data.copy()
+    else:
+        logger.info("No median filtering along NAXIS2 will be applied (ymedian=0).")
+        image_data_filtered = image_data.copy()
     # Median filter the data to remove bad pixels. If there are NaN values,
     # use generic_filter with np.nanmedian to ignore NaN values.
     # Otherwise, use median_filter directly, which is faster.
@@ -168,15 +192,15 @@ def find_traces_within_slice_boundary_polynomials(
         xmedian += 1  # Ensure the median filter size is odd
         logger.warning(f"Median filter size adjusted to {xmedian} to ensure it is odd.")
     if xmedian >= 3:
-        if np.isnan(image_data).any():
+        logger.info(f"Applying median filtering along NAXIS1 with size {xmedian}.")
+        if np.isnan(image_data_filtered).any():
             logger.debug("NaN values found in image data. Using generic_filter with np.nanmedian to ignore NaN values.")
-            image_data_filtered = generic_filter(image_data, np.nanmedian, size=(1, xmedian), mode="nearest")
+            image_data_filtered = generic_filter(image_data_filtered, np.nanmedian, size=(1, xmedian), mode="nearest")
         else:
             logger.debug("No NaN values found in image data. Using median_filter directly.")
-            image_data_filtered = median_filter(image_data, size=(1, xmedian), mode="nearest")
+            image_data_filtered = median_filter(image_data_filtered, size=(1, xmedian), mode="nearest")
     else:
         logger.warning(f"Median filter size {xmedian} is less than 3. Skipping median filtering.")
-        image_data_filtered = image_data.copy()
 
     # Read the slice boundary polynomials
     list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(poly_path)
@@ -218,6 +242,8 @@ def find_traces_within_slice_boundary_polynomials(
     if plotsliceid is not None:
         fig, ax = plt.subplots(figsize=(10, 8))
         vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
+        print(vmin, type(vmin))
+        print(vmax, type(vmax))
         tea.imshow(
             fig,
             ax,
@@ -616,8 +642,7 @@ def find_traces_within_slice_boundary_polynomials(
         plot_traces_within_slice_boundary_polynomials_mosaic(
             pdf_output=pdf_output,
             image_data=image_data_filtered,
-            title=f"{Path(image_path).name} - xmedian={xmedian}\n"
-            f"Final Traces for Slice {islice+1} (ID {sliceid})",
+            title=f"{Path(image_path).name} - xmedian={xmedian}",
             list_poly_left=list_poly_left,
             list_poly_right=list_poly_right,
             list_poly_traces_all_slices=list_poly_traces_all_slices,
@@ -666,6 +691,9 @@ def main(args=None):
         action="append",
         metavar=("MIN", "MAX"),
         default=None,
+    )
+    parser.add_argument(
+        "--ymedian", help="Size of the median filter along NAXIS2 axis to be subtracted (odd; default: 0 -> no filtering)", type=int, default=0
     )
     parser.add_argument(
         "--xmedian", help="Size of the median filter along NAXIS1 axis (odd; default: 21)", type=int, default=21
@@ -733,9 +761,12 @@ def main(args=None):
     if args.deg is None:
         raise ValueError("Polynomial degree is not defined. Use --deg to specify it.")
 
-    # Check median filter size
-    if args.xmedian < 0:
-        raise ValueError("Median filter size must be a non-negative integer.")
+    # Check median filter sizes
+    if args.ymedian < 0:
+        raise ValueError("Median filter size must be a non-negative integer or zero.")
+
+    if args.xmedian < 1:
+        raise ValueError("Median filter size must be a positive integer.")
 
     # Check output file
     output_fname = check_output_file_overwrite(args.output, args.output_dir, args.overwrite)
@@ -758,6 +789,7 @@ def main(args=None):
         nextend=args.nextend,
         nclean_around_peaks=args.nclean_around_peaks,
         deg=args.deg,
+        ymedian=args.ymedian,
         xmedian=args.xmedian,
         theilsen=args.theilsen,
         columns_to_analyze=columns_to_analyze,
