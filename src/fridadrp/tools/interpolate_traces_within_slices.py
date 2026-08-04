@@ -26,9 +26,12 @@ import uuid
 
 from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
+from numina.array.wavecalib.peaks_spectrum import refine_peaks_spectrum
 
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
+from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL
+from fridadrp.core import FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import DEF_SLICEID_FROM_SLICEINDEX
 from fridadrp.core import sliceindex_from_sliceid
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
@@ -40,7 +43,228 @@ from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynom
 from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 
 
-def interpolate_traces_within_slices(image_path, input_traces, sliceids, skip_sliceids, columns_to_analyze, xmedian=21, degslice=2, plots=False):
+def interpolate_traces_in_single_slice(
+    list_poly_traces_all_slices,
+    sliceid,
+    list_slicesid_to_fit,
+    degslice,
+    deg,
+    ntraces,
+    icolumns_to_analyze,
+    refine,
+    degrefine=2,
+    image_data=None,
+    yborder=1,
+    icolumns_to_plot=None,
+    plots=False,
+):
+    """Interpolate/extrapolate traces within a single slice.
+
+    Parameters
+    ----------
+    list_poly_traces_all_slices : list of list of numpy.poly1d
+        List of lists containing the trace polynomials for all slices.
+    sliceid : int
+        Slice ID to process.
+    list_slicesid_to_fit : list of int
+        List of slice IDs to use for fitting the traces.
+    degslice : int
+        Degree of the polynomial to fit traces across slices.
+    deg : int
+        Degree of the trace polynomials.
+    ntraces : int
+        Number of traces in the slice.
+    icolumns_to_analyze : list of int
+        List of column indices to analyze (0-based).
+    refine : bool
+        Whether to refine the fitted traces using the smoothed image data.
+    degrefine : int
+        Degree of the polynomial to refine the trace positions.
+    image_data : numpy.ndarray
+        Image data used for refinement.
+    yborder : int
+        Number of pixels to ignore at the top and bottom of the image when refining traces.
+    icolumns_to_plot : list of int
+        List of column indices to plot (0-based).
+    plots : bool
+        Whether to display intermediate plots.
+
+    Returns
+    -------
+    list_poly_traces_slice : list of numpy.poly1d
+        List of trace polynomials for the specified slice after interpolation/extrapolation.
+    list_poly_traces_slice_refined : list of numpy.poly1d
+        List of refined trace polynomials for the specified slice.
+    """
+    logger = logging.getLogger(__name__)
+
+    islice = sliceindex_from_sliceid(sliceid)
+
+    xfit = np.array([sliceindex_from_sliceid(sid) for sid in list_slicesid_to_fit])  # (0-based)
+    xpredicted = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
+    list_poly_traces_slice = []
+    for itrace in range(ntraces):
+        ypredicted = np.full(FRIDA_NAXIS1_HAWAII.value, fill_value=np.nan, dtype=float)  # Initialize with NaN
+        logger.info(f"Fitting trace {itrace + 1}/{ntraces} of slice ID {sliceid} along NAXIS1...")
+        for icolumn in icolumns_to_analyze:
+            debugplot = 0
+            if icolumn in icolumns_to_plot and plots:
+                debugplot = 2
+            yfit = np.array(
+                [
+                    list_poly_traces_all_slices[sliceindex_from_sliceid(sid)][itrace](icolumn)
+                    for sid in list_slicesid_to_fit
+                ]
+            )
+            poly_trace_across_slices, _, _ = polfit_residuals_with_sigma_rejection(
+                x=xfit,
+                y=yfit,
+                deg=degslice,
+                times_sigma_reject=3.0,
+                ylimres_with_rejected=True,
+                xlabel="slice index",
+                ylabel="array index along NAXIS2",
+                title=f"Slice ID {sliceid}, Trace {itrace+1} / {ntraces}, Column {icolumn+1}",
+                debugplot=debugplot,
+            )
+            ypredicted[icolumn] = poly_trace_across_slices(sliceindex_from_sliceid(sliceid))
+        # fit a polynomial of degree `deg` to determine the trace
+        iok = ~np.isnan(ypredicted)
+        if plots:
+            debugplot = 2
+        else:
+            debugplot = 0
+        poly_trace, _, _ = polfit_residuals_with_sigma_rejection(
+            x=xpredicted[iok],
+            y=ypredicted[iok],
+            deg=deg,
+            times_sigma_reject=3.0,
+            ylimres_with_rejected=True,
+            xlabel="array index along NAXIS1",
+            ylabel="array index along NAXIS2",
+            title=f"Slice ID {sliceid}, Predicted trace {itrace+1} / {ntraces}",
+            debugplot=debugplot,
+        )
+        list_poly_traces_slice.append(poly_trace)
+    if len(list_poly_traces_slice) != ntraces:
+        raise ValueError(
+            f"Slice {islice+1} (ID {sliceid}) has {len(list_poly_traces_slice)} traces, "
+            f"but {ntraces} traces were expected."
+        )
+
+    # refine the polynomial extrapolated for each trace using the smoothed image data
+    list_poly_traces_slice_refined = list_poly_traces_slice.copy()
+    if refine:
+        if image_data is None:
+            raise ValueError("Image data is required for refinement but was not provided.")
+        logger.info(f"Refining the fitted traces for slice ID {sliceid} using the smoothed image data...")
+        deltay_refined = np.full((ntraces, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
+        for itrace in range(ntraces):
+            poly_trace = list_poly_traces_slice[itrace]
+            # check if the predicted trace is within the useful image region
+            ypredicted = (poly_trace(icolumns_to_analyze) + 0.5).astype(int)  # (0-based) rounded integer
+            trace_is_within_bounds = True
+            if np.min(ypredicted) + 1 < FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value + 5 * yborder:
+                trace_is_within_bounds = False
+            if np.max(ypredicted) + 1 > FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value - 5 * yborder:
+                trace_is_within_bounds = False
+            if trace_is_within_bounds:
+                logger.info(f"Refining trace {itrace+1}/{ntraces} of slice ID {sliceid}...")
+                for icol in icolumns_to_analyze:
+                    debugplot = 0
+                    if plots:
+                        if icol in icolumns_to_plot:
+                            debugplot = 0  # change to 2 for debugging
+                    # predict the peak position using the polynomial trace
+                    ipeak = (poly_trace(icol) + 0.5).astype(int)  # (0-based) rounded integer
+                    # find the peak position in the smoothed image data around the predicted position
+                    naround_peak = 7  # number of pixels around the peak to use for refinement
+                    ycut_refinement = image_data[:, icol][ipeak - naround_peak // 2 : ipeak + naround_peak // 2 + 1]
+                    ipeak_local = np.nanargmax(ycut_refinement)
+                    # refine the peak position
+                    ipeak = ipeak - naround_peak // 2 + ipeak_local  # (0-based)
+                    # refine the peak position to sub-pixel accuracy using a polynomial fit
+                    naround_peak = 5  # number of pixels around the peak to use for refinement
+                    ycut_refinement = image_data[:, icol][ipeak - naround_peak // 2 : ipeak + naround_peak // 2 + 1]
+                    fxpeaks, _ = refine_peaks_spectrum(
+                        sx=ycut_refinement,
+                        ixpeaks=np.array([naround_peak // 2]),  # peak is at the center of the window
+                        nwinwidth=3,
+                        method="poly2",
+                        title=f"Slice ID {sliceid}, Trace {itrace+1} / {ntraces}, Column {icol+1} (Refinement)",
+                        debugplot=debugplot,
+                    )
+                    deltay_refined[itrace, icol] = (fxpeaks[0] + ipeak - naround_peak // 2) - poly_trace(icol)
+                # fit a polynomial of degree degrefine to the refinement
+                if plots:
+                    debugplot = 2
+                else:
+                    debugplot = 0
+                poly_refinement, _, _ = polfit_residuals_with_sigma_rejection(
+                    x=icolumns_to_analyze,
+                    y=deltay_refined[itrace][icolumns_to_analyze],
+                    deg=degrefine,
+                    times_sigma_reject=3.0,
+                    ylimres_with_rejected=True,
+                    xlabel="array index along NAXIS1",
+                    ylabel="delta array index along NAXIS2",
+                    title=f"Slice ID {sliceid}, Refinement of trace {itrace+1} / {ntraces}",
+                    debugplot=debugplot,
+                )
+                # update the polynomial trace
+                # (note that instances of the class Polynomial can be added together to produce a new
+                # instance of the class Polynomial that represents the sum of the two polynomials)
+                list_poly_traces_slice_refined[itrace] += poly_refinement
+            else:
+                logger.warning(
+                    f"Trace {itrace+1}/{ntraces} of slice ID {sliceid} is out of bounds. Skipping refinement."
+                )
+        if np.all(np.isnan(deltay_refined)):
+            logger.warning(f"All traces of slice ID {sliceid} are out of bounds. Skipping average refinement.")
+        else:
+            # compute the average refinement across all traces (work only with valid
+            # columns, i.e., those that have at least one valid refinement value,
+            # to avoid a RuntimeWarning when computing the mean of an empty slice)
+            ivalid_cols = ~np.all(np.isnan(deltay_refined), axis=0)
+            deltay_refined_mean = np.full(deltay_refined.shape[1], np.nan, dtype=float)
+            deltay_refined_mean[ivalid_cols] = np.nanmean(deltay_refined[:, ivalid_cols], axis=0)
+            # fit a polynomial of degree degrefine to the average refinement
+            if plots:
+                debugplot = 2
+            else:
+                debugplot = 0
+            poly_refinement_mean, _, _ = polfit_residuals_with_sigma_rejection(
+                x=icolumns_to_analyze,
+                y=deltay_refined_mean[icolumns_to_analyze],
+                deg=degrefine,
+                times_sigma_reject=3.0,
+                ylimres_with_rejected=True,
+                xlabel="array index along NAXIS1",
+                ylabel="delta array index along NAXIS2",
+                title=f"Slice ID {sliceid}, Average Refinement of all traces",
+                debugplot=debugplot,
+            )
+            # update the polynomial trace for each trace out of bounds in the previous refinement step
+            for itrace in range(ntraces):
+                if np.all(np.isnan(deltay_refined[itrace])):
+                    logger.info(f"Applying average refinement to Trace {itrace+1}/{ntraces} of slice ID {sliceid}.")
+                    list_poly_traces_slice_refined[itrace] += poly_refinement_mean
+
+    return list_poly_traces_slice, list_poly_traces_slice_refined
+
+
+def interpolate_traces_within_slices(
+    image_path,
+    input_traces,
+    sliceids,
+    skip_sliceids,
+    columns_to_analyze,
+    xmedian=21,
+    degslice=2,
+    refine=True,
+    degrefine=2,
+    plots=False,
+):
     """Interpolate/extrapolate traces within slices.
 
     Each polynomial is fitted using as independent variable the array index
@@ -54,7 +278,7 @@ def interpolate_traces_within_slices(image_path, input_traces, sliceids, skip_sl
     If this parameter is None, all columns within the useful image region are employed.
     The columns are specified as a list of tuples (1-based indices along NAXIS1),
     where each tuple contains the minimum and maximum column (1-based index)
-    to analyze. For example, [(1, 100), (200, 300)] means that columns 1 to 100 
+    to analyze. For example, [(1, 100), (200, 300)] means that columns 1 to 100
     and 200 to 300 will be used for fitting the traces.
 
     Parameters
@@ -73,6 +297,10 @@ def interpolate_traces_within_slices(image_path, input_traces, sliceids, skip_sl
         Size of the median filter along NAXIS1 axis (odd; default: 21).
     degslice : int, optional
         Degree of the polynomial to fit traces across slices (default: 2).
+    refine : bool, optional
+        Whether to refine the fitted traces using the smoothed image data (default: True).
+    degrefine : int, optional
+        Degree of the polynomial to refine the trace positions (default: 2).
     plots : bool, optional
         Whether to display plots of the interpolated/extrapolated traces (default: False).
 
@@ -162,55 +390,20 @@ def interpolate_traces_within_slices(image_path, input_traces, sliceids, skip_sl
                 slicesid_group.remove(sid)
         logger.info(f"Useful slice IDs to perform interpolation/extrapolation:\n{slicesid_group}")
         # Fit polynomials to each trace across the slices in the group, using only the columns to analyze
-        xfit = np.array([sliceindex_from_sliceid(sid) for sid in slicesid_group])  # (0-based)
-        xpredicted = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
-        list_poly_traces_slice = []
-        for itrace in range(ntraces):
-            ypredicted = np.full(FRIDA_NAXIS1_HAWAII.value, fill_value=np.nan, dtype=float)  # Initialize with NaN
-            logger.info(f"Fitting trace {itrace + 1}/{ntraces} of slice ID {sliceid} along NAXIS1...")
-            for icolumn in icolumns_to_analyze:
-                debugplot = 0
-                if icolumn in icolumns_to_plot and plots:
-                    debugplot = 2
-                yfit = np.array([
-                    list_poly_traces_all_slices[sliceindex_from_sliceid(sid)][itrace](icolumn)
-                    for sid in slicesid_group
-                ])
-                poly_trace_across_slices, _, _ = polfit_residuals_with_sigma_rejection(
-                    x=xfit,
-                    y=yfit,
-                    deg=degslice,
-                    times_sigma_reject=3.0,
-                    ylimres_with_rejected=True,
-                    xlabel="slice index",
-                    ylabel="array index along NAXIS2",
-                    title=f"Slice ID {sliceid}, Trace {itrace+1} / {ntraces}, Column {icolumn+1}",
-                    debugplot=debugplot,
-                )
-                ypredicted[icolumn] = poly_trace_across_slices(sliceindex_from_sliceid(sliceid))
-            # fit a polynomial of degree `deg` to determine the trace
-            iok = ~np.isnan(ypredicted)
-            if plots:
-                debugplot = 2
-            else:
-                debugplot = 0
-            poly_trace, _, _ = polfit_residuals_with_sigma_rejection(
-                x=xpredicted[iok],
-                y=ypredicted[iok],
-                deg=deg,
-                times_sigma_reject=3.0,
-                ylimres_with_rejected=True,
-                xlabel="array index along NAXIS1",
-                ylabel="array index along NAXIS2",
-                title=f"Slice ID {sliceid}, Predicted trace {itrace+1} / {ntraces}",
-                debugplot=debugplot,
-            )
-            list_poly_traces_slice.append(poly_trace)
-        if len(list_poly_traces_slice) != ntraces:
-            raise ValueError(
-                f"Slice {islice+1} (ID {sliceid}) has {len(list_poly_traces_slice)} traces, "
-                f"but {ntraces} traces were expected."
-            )
+        list_poly_traces_slice, list_poly_traces_slice_refined = interpolate_traces_in_single_slice(
+            list_poly_traces_all_slices=list_poly_traces_all_slices,
+            sliceid=sliceid,
+            list_slicesid_to_fit=slicesid_group,
+            degslice=degslice,
+            deg=deg,
+            ntraces=ntraces,
+            icolumns_to_analyze=icolumns_to_analyze,
+            refine=refine,
+            degrefine=degrefine,
+            image_data=image_data_filtered,
+            icolumns_to_plot=icolumns_to_plot,
+            plots=plots,
+        )
         # plot results for this slice
         if plots:
             vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
@@ -226,26 +419,46 @@ def interpolate_traces_within_slices(image_path, input_traces, sliceids, skip_sl
                 ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
                 title=f"Slice {islice + 1} (ID {sliceid}) - Interpolating/Extrapolating Traces",
             )
-            plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset=0.0,sliceid=False, isliceplot=islice)
+            plot_fitted_boundary_polynomials(
+                ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False, isliceplot=islice
+            )
             plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, traceid=False, isliceplot=islice)
             ntraces = len(list_poly_traces_all_slices[islice])
-            xcenter1 = np.percentile(icolumns_to_analyze, 20)  # Center of the columns to analyze
-            xcenter2 = np.percentile(icolumns_to_analyze, 80)  # Center of the columns to analyze
+            if refine:
+                kmax = 3
+                xcenter1 = np.percentile(icolumns_to_analyze, 20)  # Center of the columns to analyze
+                xcenter2 = np.percentile(icolumns_to_analyze, 50)  # Center of the columns to analyze
+                xcenter3 = np.percentile(icolumns_to_analyze, 80)  # Center of the columns to analyze
+            else:
+                kmax = 2
+                xcenter1 = np.percentile(icolumns_to_analyze, 30)  # Center of the columns to analyze
+                xcenter2 = np.percentile(icolumns_to_analyze, 70)  # Center of the columns to analyze
             for itrace in range(ntraces):
                 label = None
-                for k in range(2):
+                for k in range(kmax):
                     if k == 0:
                         poly_trace = list_poly_traces_all_slices[islice][itrace]
                         xcenter = xcenter1
                         color = "C1"
                         if itrace == 0:
-                            label = f"Inicial traces"
-                    else:
+                            label = f"Initial traces"
+                    elif k == 1:
                         poly_trace = list_poly_traces_slice[itrace]
                         xcenter = xcenter2
-                        color = "white"
+                        if kmax == 2:
+                            color = "white"
+                        else:
+                            color = "magenta"
                         if itrace == 0:
                             label = f"Interpolated traces"
+                    elif k == 2:
+                        poly_trace = list_poly_traces_slice_refined[itrace]
+                        xcenter = xcenter3
+                        color = "white"
+                        if itrace == 0:
+                            label = f"Refined interpolated traces"
+                    else:
+                        raise ValueError(f"Unexpected value of k: {k}")
                     ytrace = poly_trace(icolumns_to_analyze)
                     ax.plot(icolumns_to_analyze, ytrace, color=color, lw=1.5, label=label)
                     ycenter = poly_trace(xcenter)
@@ -291,14 +504,14 @@ def main(args=None):
         help="Slice ID to process. This option can be specified multiple times",
         type=int,
         action="append",
-        required=True
+        required=True,
     )
     parser.add_argument(
         "--skip-sliceid",
         help="Slice ID to ignore in the interpolation/extrapolation. This option can be specified multiple times",
         type=int,
         action="append",
-        default=[]
+        default=[],
     )
     parser.add_argument(
         "--colrange",
@@ -314,6 +527,14 @@ def main(args=None):
     )
     parser.add_argument(
         "--degslice", help="Degree of the polynomial to fit traces across slices (default: 2)", type=int, default=2
+    )
+    parser.add_argument(
+        "--norefine",
+        help="Do not refine the interpolated/extrapolated traces using the smoothed image data",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--degrefine", help="Degree of the polynomial to refine the trace positions (default: 2)", type=int, default=2
     )
     parser.add_argument("--plots", help="Display plots of the interpolated/extrapolated traces", action="store_true")
     parser.add_argument("--output", help="Output file name for the predicted polynomials", type=str, required=True)
@@ -343,7 +564,7 @@ def main(args=None):
     # Check median filter size
     if args.xmedian < 0:
         raise ValueError("Median filter size must be a non-negative integer.")
-    
+
     # Define the columns to analyze based on the specified column ranges
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
 
@@ -359,12 +580,16 @@ def main(args=None):
         columns_to_analyze=columns_to_analyze,
         xmedian=args.xmedian,
         degslice=args.degslice,
+        refine=not args.norefine,
+        degrefine=args.degrefine,
         plots=args.plots,
     )
 
     # Save the predicted polynomials to the output file
     # Copy the input polynomials file to the output file
-    shutil.copyfile(args.traces, output_fname)  # This always overwrites the output file if it exists, but we have already checked for overwrite permission
+    shutil.copyfile(
+        args.traces, output_fname
+    )  # This always overwrites the output file if it exists, but we have already checked for overwrite permission
     logger.info(f"Copied input traces file [blue]{args.traces}[/blue] to output file [green]{output_fname}[/green].")
     logger.info("Updating the output file with the interpolated/extrapolated traces for the specified slices.")
     with fits.open(output_fname, mode="update") as hdul:
