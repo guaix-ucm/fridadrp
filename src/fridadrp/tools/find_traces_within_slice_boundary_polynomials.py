@@ -609,7 +609,6 @@ def find_traces_within_slice_boundary_polynomials(
 
     # save PDF file with the final plots of traces for every slice
     if pdf_out is not None:
-        logger.info(f"Saving final plots of traces for every slice in PDF file: {pdf_out}")
         if output_dir is not None:
             pdf_output = Path(output_dir) / pdf_out
         else:
