@@ -39,6 +39,7 @@ from fridadrp.core import sliceid_from_sliceindex, sliceindex_from_sliceid
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
+from fridadrp.tools.interpolate_traces_within_slices import interpolate_traces_in_single_slice
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces_within_slice_boundary_polynomials_mosaic
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
@@ -513,155 +514,20 @@ def find_traces_within_slice_boundary_polynomials(
                     list_slicesid_to_fit.append(sid)
             logger.info(f"Fitting traces for the following slices (ID):\n{list_slicesid_to_fit}")
             # Fit polynomials to each trace across the slices in the same group
-            xfit = np.array([sliceindex_from_sliceid(sid) for sid in list_slicesid_to_fit])  # (0-based)
-            xpredicted = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
-            list_poly_traces_slice = []
-            for itrace in range(ntraces):
-                ypredicted = np.full(FRIDA_NAXIS1_HAWAII.value, fill_value=np.nan, dtype=float)
-                logger.info(f"Fitting trace {itrace+1}/{ntraces} of slice ID {sliceid} along NAXIS1...")
-                for icolumn in icolumns_to_analyze:
-                    debugplot = 0
-                    if plots:
-                        if icolumn in icolumns_to_plot:
-                            debugplot = 2
-                    yfit = np.array(
-                        [
-                            list_poly_traces_all_slices[sliceindex_from_sliceid(sid)][itrace](icolumn)
-                            for sid in list_slicesid_to_fit
-                        ]
-                    )
-                    poly_trace_across_slices, _, _ = polfit_residuals_with_sigma_rejection(
-                        x=xfit,
-                        y=yfit,
-                        deg=degslice,
-                        times_sigma_reject=3.0,
-                        ylimres_with_rejected=True,
-                        xlabel="slice index",
-                        ylabel="array index along NAXIS2",
-                        title=f"Slice ID {sliceid}, Trace {itrace+1} / {ntraces}, Column {icolumn+1}",
-                        debugplot=debugplot,
-                    )
-                    ypredicted[icolumn] = poly_trace_across_slices(sliceindex_from_sliceid(sliceid))
-                # fit a polynomial of degree `deg` to determine the trace
-                iok = ~np.isnan(ypredicted)
-                poly_trace, _, _ = polfit_residuals_with_sigma_rejection(
-                    x=xpredicted[iok],
-                    y=ypredicted[iok],
-                    deg=deg,
-                    times_sigma_reject=3.0,
-                    ylimres_with_rejected=True,
-                    xlabel="array index along NAXIS1",
-                    ylabel="array index along NAXIS2",
-                    title=f"Slice ID {sliceid}, Predicted trace {itrace+1} / {ntraces}",
-                    debugplot=debugplot,
-                )
-                list_poly_traces_slice.append(poly_trace)
-            if len(list_poly_traces_slice) != ntraces:
-                raise ValueError(
-                    f"Slice {islice+1} (ID {sliceid}) has {len(list_poly_traces_slice)} traces, "
-                    f"but {ntraces} traces were expected."
-                )
-            # refine the polynomial extrapolated for each trace using the smoothed image data
-            list_poly_traces_slice_refined = list_poly_traces_slice.copy()
-            if refine:
-                logger.info(f"Refining the fitted traces for slice ID {sliceid} using the smoothed image data...")
-                deltay_refined = np.full((ntraces, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
-                for itrace in range(ntraces):
-                    poly_trace = list_poly_traces_slice[itrace]
-                    # check if the predicted trace is within the useful image region
-                    ypredicted = (poly_trace(icolumns_to_analyze) + 0.5).astype(int)  # (0-based) rounded integer
-                    trace_is_within_bounds = True
-                    if np.min(ypredicted) + 1 < FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value + 5 * yborder:
-                        trace_is_within_bounds = False
-                    if np.max(ypredicted) + 1 > FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value - 5 * yborder:
-                        trace_is_within_bounds = False
-                    if trace_is_within_bounds:
-                        logger.info(f"Refining trace {itrace+1}/{ntraces} of slice ID {sliceid}...")
-                        for icol in icolumns_to_analyze:
-                            debugplot = 0
-                            if plots:
-                                if icol in icolumns_to_plot:
-                                    debugplot = 0  # change to 2 for debugging
-                            # predict the peak position using the polynomial trace
-                            ipeak = (poly_trace(icol) + 0.5).astype(int)  # (0-based) rounded integer
-                            # find the peak position in the smoothed image data around the predicted position
-                            naround_peak = 7  # number of pixels around the peak to use for refinement
-                            ycut_refinement = image_data_filtered[:, icol][
-                                ipeak - naround_peak // 2 : ipeak + naround_peak // 2 + 1
-                            ]
-                            ipeak_local = np.nanargmax(ycut_refinement)
-                            # refine the peak position
-                            ipeak = ipeak - naround_peak // 2 + ipeak_local  # (0-based)
-                            # refine the peak position to sub-pixel accuracy using a polynomial fit
-                            naround_peak = 5  # number of pixels around the peak to use for refinement
-                            ycut_refinement = image_data_filtered[:, icol][
-                                ipeak - naround_peak // 2 : ipeak + naround_peak // 2 + 1
-                            ]
-                            fxpeaks, _ = refine_peaks_spectrum(
-                                sx=ycut_refinement,
-                                ixpeaks=np.array([naround_peak // 2]),  # peak is at the center of the window
-                                nwinwidth=3,
-                                method="poly2",
-                                title=f"Slice ID {sliceid}, Trace {itrace+1} / {ntraces}, Column {icol+1} (Refinement)",
-                                debugplot=debugplot,
-                            )
-                            deltay_refined[itrace, icol] = (fxpeaks[0] + ipeak - naround_peak // 2) - poly_trace(icol)
-                        # fit a polynomial of degree degrefine to the refinement
-                        if plots:
-                            debugplot = 2
-                        else:
-                            debugplot = 0
-                        poly_refinement, _, _ = polfit_residuals_with_sigma_rejection(
-                            x=icolumns_to_analyze,
-                            y=deltay_refined[itrace][icolumns_to_analyze],
-                            deg=degrefine,
-                            times_sigma_reject=3.0,
-                            ylimres_with_rejected=True,
-                            xlabel="array index along NAXIS1",
-                            ylabel="delta array index along NAXIS2",
-                            title=f"Slice ID {sliceid}, Refinement of trace {itrace+1} / {ntraces}",
-                            debugplot=debugplot,
-                        )
-                        # update the polynomial trace
-                        # (note that instances of the class Polynomial can be added together to produce a new
-                        # instance of the class Polynomial that represents the sum of the two polynomials)
-                        list_poly_traces_slice_refined[itrace] += poly_refinement
-                    else:
-                        logger.warning(
-                            f"Trace {itrace+1}/{ntraces} of slice ID {sliceid} is out of bounds. Skipping refinement."
-                        )
-                if np.all(np.isnan(deltay_refined)):
-                    logger.warning(f"All traces of slice ID {sliceid} are out of bounds. Skipping average refinement.")
-                else:
-                    # compute the average refinement across all traces (work only with valid
-                    # columns, i.e., those that have at least one valid refinement value,
-                    # to avoid a RuntimeWarning when computing the mean of an empty slice)
-                    ivalid_cols = ~np.all(np.isnan(deltay_refined), axis=0)
-                    deltay_refined_mean = np.full(deltay_refined.shape[1], np.nan, dtype=float)
-                    deltay_refined_mean[ivalid_cols] = np.nanmean(deltay_refined[:, ivalid_cols], axis=0)
-                    # fit a polynomial of degree degrefine to the average refinement
-                    if plots:
-                        debugplot = 2
-                    else:
-                        debugplot = 0
-                    poly_refinement_mean, _, _ = polfit_residuals_with_sigma_rejection(
-                        x=icolumns_to_analyze,
-                        y=deltay_refined_mean[icolumns_to_analyze],
-                        deg=degrefine,
-                        times_sigma_reject=3.0,
-                        ylimres_with_rejected=True,
-                        xlabel="array index along NAXIS1",
-                        ylabel="delta array index along NAXIS2",
-                        title=f"Slice ID {sliceid}, Average Refinement of all traces",
-                        debugplot=debugplot,
-                    )
-                    # update the polynomial trace for each trace out of bounds in the previous refinement step
-                    for itrace in range(ntraces):
-                        if np.all(np.isnan(deltay_refined[itrace])):
-                            logger.info(
-                                f"Applying average refinement to Trace {itrace+1}/{ntraces} of slice ID {sliceid}."
-                            )
-                            list_poly_traces_slice_refined[itrace] += poly_refinement_mean
+            list_poly_traces_slice, list_poly_traces_slice_refined = interpolate_traces_in_single_slice(
+                list_poly_traces_all_slices=list_poly_traces_all_slices,
+                sliceid=sliceid,
+                list_slicesid_to_fit=list_slicesid_to_fit,
+                degslice=degslice,
+                deg=deg,
+                ntraces=ntraces,
+                icolumns_to_analyze=icolumns_to_analyze,
+                refine=refine,
+                degrefine=degrefine,
+                image_data=image_data_filtered,
+                icolumns_to_plot=icolumns_to_plot,
+                plots=plots
+            )
 
             # show extrapolated (and when required refined) traces over the smoothed image data
             if plots:
