@@ -571,6 +571,18 @@ def main(args=None):
     # Check output file
     output_fname = check_output_file_overwrite(args.output, args.output_dir, args.overwrite)
 
+    # Initial checks for the slice IDs
+    if len(args.sliceid) != len(set(args.sliceid)):
+        raise ValueError("Duplicate slice IDs specified in --sliceid.")
+    if len(args.skip_sliceid) != len(set(args.skip_sliceid)):
+        raise ValueError("Duplicate slice IDs specified in --skip-sliceid.")
+    for sid in args.sliceid:
+        if sid < 1 or sid > FRIDA_NSLICES:
+            raise ValueError(f"Invalid slice ID {sid}. Must be between 1 and {FRIDA_NSLICES}.")
+    for sid in args.skip_sliceid:
+        if sid < 1 or sid > FRIDA_NSLICES:
+            raise ValueError(f"Invalid slice ID {sid}. Must be between 1 and {FRIDA_NSLICES}.")
+
     # Interpolate/extrapolate traces within slices
     list_poly_traces_all_slices = interpolate_traces_within_slices(
         image_path=args.image,
