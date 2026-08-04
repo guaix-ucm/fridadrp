@@ -36,6 +36,7 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
+from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 
@@ -781,22 +782,8 @@ def main(args=None):
     if len(columns_to_analyze) > 1:
         if args.output is None:
             args.output = f"slice_boundary_borders_from_flat_{args.slice_ini}-{args.slice_end}.fits"
-        # if output directory does not exist, create it
-        output_dir_path = Path(args.output_dir)
-        if not output_dir_path.exists():
-            output_dir_path.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Output directory {output_dir_path} created.")
-        # if output file is not an absolute path, prepend the output directory path
-        if not Path(args.output).is_absolute():
-            output_fname = str(output_dir_path / args.output)
-        else:
-            output_fname = args.output
-        # check if the output file already exists and handle overwrite option
-        output_path = Path(output_fname)
-        if output_path.exists() and not args.overwrite:
-            raise FileExistsError(f"Output file {output_fname} already exists. Use --overwrite to overwrite it.")
-        if Path(output_fname).is_dir():
-            raise IsADirectoryError(f"Output file {output_fname} is a directory. Please specify a valid file name.")
+        # Check and set the output file path, creating the output directory if necessary
+        output_fname = check_output_file_overwrite(args.output, args.output_dir, args.overwrite)
 
     # Compute the slice boundaries from the flat file
     array_left_border, array_right_border = find_slice_boundary_borders_from_flat(

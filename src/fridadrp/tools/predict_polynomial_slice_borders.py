@@ -29,6 +29,7 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import DEF_SLICEID_FROM_SLICEINDEX
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.core import sliceindex_from_sliceid
+from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
@@ -225,24 +226,8 @@ def main(args=None):
     if args.poly is None:
         raise ValueError("Input file is not defined. Use --poly to specify the input file with polynomials.")
 
-    # If output directory does not exist, create it
-    output_dir_path = Path(args.output_dir)
-    if not output_dir_path.exists():
-        output_dir_path.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Output directory {output_dir_path} created.")
-    # if output file ist not an absolute path, prepend the output directory path
-    if not Path(args.output).is_absolute():
-        output_fname = str(output_dir_path / args.output)
-    else:
-        output_fname = args.output
-    # Check output file
-    if Path(output_fname).exists():
-        if Path(output_fname).is_dir():
-            raise IsADirectoryError(
-                f"Output file {output_fname} is a directory. Please specify a valid output file name."
-            )
-        if not args.overwrite:
-            raise FileExistsError(f"Output file {output_fname} already exists. Use --overwrite to overwrite it.")
+    # Check and set the output file path, creating the output directory if necessary
+    output_fname = check_output_file_overwrite(args.output, args.output_dir, args.overwrite)
 
     # Predict the polynomial slice borders for the specified slice
     predicted_poly_left, predicted_poly_right = predict_polynomial_slice_borders(
@@ -252,7 +237,7 @@ def main(args=None):
     # Save the predicted polynomials to the output FITS file
     # Copy the input polynomials file to the output file
     shutil.copyfile(args.poly, output_fname)  # This always overwrites the output file if it exists
-    logger.info(f"Copied input polynomials file {args.poly} to output file {output_fname}.")
+    logger.info(f"Copied input polynomials file [blue]{args.poly}[/blue] to output file [green]{output_fname}[/green].")
     logger.info(
         f"Updating the output FITS file with the predicted polynomials for slice number {args.slicenum} (slice ID {sliceid_from_sliceindex(args.slicenum - 1):02d})."
     )

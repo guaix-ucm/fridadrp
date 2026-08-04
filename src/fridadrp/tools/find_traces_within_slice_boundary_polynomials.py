@@ -36,6 +36,7 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex, sliceindex_from_sliceid
+from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
@@ -871,23 +872,8 @@ def main(args=None):
     if args.xmedian < 0:
         raise ValueError("Median filter size must be a non-negative integer.")
 
-    # If output directory does not exist, create it
-    if not Path(args.output_dir).exists():
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-        logger.info(f"Output directory {args.output_dir} created.")
-    # If output file is not an absolute path, prepend the output directory
-    if not Path(args.output).is_absolute():
-        output_fname = str(Path(args.output_dir) / args.output)
-    else:
-        output_fname = args.output
     # Check output file
-    if Path(output_fname).exists():
-        if Path(output_fname).is_dir():
-            raise IsADirectoryError(
-                f"Output file {output_fname} is a directory. Please specify a valid output file name."
-            )
-        if not args.overwrite:
-            raise FileExistsError(f"Output file {output_fname} already exists. Use --overwrite to overwrite it.")
+    output_fname = check_output_file_overwrite(args.output, args.output_dir, args.overwrite)
 
     # Check plotsliceid
     if args.plotsliceid is not None:
