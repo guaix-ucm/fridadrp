@@ -314,7 +314,7 @@ def interpolate_traces_within_slices(
     # Read the input image
     logger.debug(f"Reading input image from {image_path}")
     with fits.open(image_path) as hdul:
-        image_data = hdul[0].data
+        image_data = hdul[0].data.astype(float)  # Convert to float for processing
 
     # Median filter the data to remove bad pixels. If there are NaN values,
     # use generic_filter with np.nanmedian to ignore NaN values.

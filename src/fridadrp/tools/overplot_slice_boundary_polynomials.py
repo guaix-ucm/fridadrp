@@ -389,7 +389,7 @@ def overplot_slice_boundary_polynomials(
 
     # Read the image data from the input FITS file
     with fits.open(image) as hdul:
-        image_data = hdul[0].data
+        image_data = hdul[0].data.astype(float)  # Convert to float for processing
 
     # Read the boundary polynomial coefficients from the input FITS file
     if input_poly is not None or input_traces is not None:
