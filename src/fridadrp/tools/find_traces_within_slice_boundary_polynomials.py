@@ -40,6 +40,7 @@ from fridadrp.core import sliceid_from_sliceindex, sliceindex_from_sliceid
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
+from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces_within_slice_boundary_polynomials_mosaic
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
 
@@ -744,58 +745,19 @@ def find_traces_within_slice_boundary_polynomials(
     if pdf_out is not None:
         logger.info(f"Saving final plots of traces for every slice in PDF file: {pdf_out}")
         if output_dir is not None:
-            pdf_output = PdfPages(Path(output_dir) / pdf_out)
+            pdf_output = Path(output_dir) / pdf_out
         else:
-            pdf_output = PdfPages(pdf_out)
-        vmin, vmax = ZScaleInterval().get_limits(image_data_filtered)
-        for islice in range(
-            FRIDA_NSLICES - 1, -1, -1
-        ):  # (0-based index) loop in reverse order to have the first slice on top of the PDF
-            sliceid = sliceid_from_sliceindex(islice)
-            fig, ax = plt.subplots(figsize=(10, 6))
-            tea.imshow(
-                fig,
-                ax,
-                image_data_filtered,
-                vmin=vmin,
-                vmax=vmax,
-                aspect="auto",
-                ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
-                title=f"{Path(image_path).name} - xmedian={xmedian}\n"
-                f"Final Traces for Slice {islice+1} (ID {sliceid})",
-            )
-            # set sliceid=False in plot_fitted_boundary_polynomials to avoid a problem
-            # in plt.tight_layout() when sliceid=True (it fails to compute the layout properly)
-            plot_fitted_boundary_polynomials(
-                ax=ax, list_poly_left=list_poly_left, list_poly_right=list_poly_right, voffset=0.0, sliceid=False
-            )
-            ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
-            ymin = np.min(list_poly_left[islice](ixdum)) - 10
-            ymax = np.max(list_poly_right[islice](ixdum)) + 10
-            xcenter = np.mean(icolumns_to_analyze)
-            for itrace in range(ntraces):
-                poly_trace = list_poly_traces_all_slices[islice][itrace]
-                ytrace = poly_trace(ixdum)
-                ax.plot(ixdum, ytrace, color="cyan", lw=1.5, label=f"Trace {itrace+1}")
-                ycenter = poly_trace(xcenter)
-                ax.text(
-                    xcenter,
-                    ycenter,
-                    f"Trace {itrace+1}",
-                    color="white",
-                    fontsize=8,
-                    ha="center",
-                    va="center",
-                    fontweight="bold",
-                    alpha=1.0,
-                    bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
-                )
-            ax.set_ylim(ymin, ymax)
-            plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
-            pdf_output.savefig(fig, bbox_inches="tight")
-            plt.close(fig)
-        pdf_output.close()
-
+            pdf_output = pdf_out
+        plot_traces_within_slice_boundary_polynomials_mosaic(
+            pdf_output=pdf_output,
+            image_data=image_data_filtered,
+            title=f"{Path(image_path).name} - xmedian={xmedian}\n"
+            f"Final Traces for Slice {islice+1} (ID {sliceid})",
+            list_poly_left=list_poly_left,
+            list_poly_right=list_poly_right,
+            list_poly_traces_all_slices=list_poly_traces_all_slices,
+            traceid=True,
+        )
     # return the list of polynomial traces for all slices
     return list_poly_left, list_poly_right, list_poly_traces_all_slices
 

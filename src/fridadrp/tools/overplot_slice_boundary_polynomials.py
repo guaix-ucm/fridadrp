@@ -10,7 +10,6 @@
 """Overplot the slice boundary polynomials, borders and/or traces on image"""
 
 import argparse
-from astropy import logger
 from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 from datetime import datetime
@@ -34,6 +33,114 @@ from fridadrp.tools.initialize_script_with_args import initialize_script_with_ar
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynomials
+
+
+def plot_traces_within_slice_boundary_polynomials_mosaic(
+    pdf_output,
+    image_data,
+    title,
+    list_poly_left=None,
+    list_poly_right=None,
+    array_left_border=None,
+    array_right_border=None,
+    ibad=None,
+    list_poly_traces_all_slices=None,
+    voffset=0.0,
+    traceid=False,
+):
+    """Plot the traces within the slice boundary polynomials for every slice in a PDF mosaic
+
+    Parameters
+    ----------
+    pdf_output : str or Path
+        The path to the output PDF file where the mosaic will be saved.
+    image_data : numpy.ndarray
+        The image data to be displayed.
+    title : str
+        The title for the plot.
+    list_poly_left : list of numpy.polynomial.Polynomial, optional
+        The list of left slice boundary polynomials.
+    list_poly_right : list of numpy.polynomial.Polynomial, optional
+        The list of right slice boundary polynomials.
+    array_left_border : numpy.ndarray, optional
+        The array of left slice boundary borders (0-based indices).
+    array_right_border : numpy.ndarray, optional
+        The array of right slice boundary borders (0-based indices).
+    ibad : list of int, optional
+        List of indices of bad columns (to be ignored).
+    list_poly_traces_all_slices : list of list of numpy.polynomial.Polynomial, optional
+        The list of polynomials for each slice.
+    voffset : float, optional
+        Vertical constant offset (pixels) to apply. A positive value
+        shifts the displayed objects upwards, while a negative value
+        shifts them downwards.
+    traceid : bool, optional
+        If True, overplot the trace ID at the center of each trace.
+    """
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"Saving final plots of traces for every slice in PDF file:\n[green]{pdf_output}[/green]")
+    pdf_out = PdfPages(pdf_output)
+
+    vmin, vmax = ZScaleInterval().get_limits(image_data)
+
+    for islice in range(
+        FRIDA_NSLICES - 1, -1, -1
+    ):  # (0-based index) loop in reverse order to have the first slice on top of the PDF
+        sliceid = sliceid_from_sliceindex(islice)
+        fig, ax = plt.subplots(figsize=(10, 6))
+        tea.imshow(
+            fig,
+            ax,
+            image_data,
+            vmin=vmin,
+            vmax=vmax,
+            aspect="auto",
+            ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
+            title=title + f"\nSlice {islice + 1} (ID {sliceid})",
+        )
+        # Plot the boundary polynomials
+        if list_poly_left is not None and list_poly_right is not None:
+            plot_fitted_boundary_polynomials(
+                ax, list_poly_left, list_poly_right, voffset, sliceid=False, isliceplot=islice
+            )
+        # Overplot the boundary borders
+        if array_left_border is not None and array_right_border is not None and ibad is not None:
+            plot_borders(
+                ax, array_left_border, array_right_border, ibad, voffset=voffset, sliceid=False, isliceplot=islice
+            )
+        # Overplot the slice traces
+        ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
+        if list_poly_traces_all_slices is not None:
+            plot_traces(ax, list_poly_traces_all_slices, voffset=voffset, traceid=False, isliceplot=islice)
+            if traceid:
+                ntraces = len(list_poly_traces_all_slices[islice])
+                xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
+                for itrace in range(ntraces):
+                    poly_trace = list_poly_traces_all_slices[islice][itrace]
+                    ytrace = poly_trace(ixdum)
+                    ax.plot(ixdum, ytrace, color="cyan", lw=1.5, label=f"Trace {itrace+1}")
+                    ycenter = poly_trace(xcenter)
+                    ax.text(
+                        xcenter,
+                        ycenter,
+                        f"Trace {itrace+1}",
+                        color="white",
+                        fontsize=8,
+                        ha="center",
+                        va="center",
+                        fontweight="bold",
+                        alpha=1.0,
+                        bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
+                    )
+        #
+        ymin = np.min(list_poly_left[islice](ixdum)) - 10
+        ymax = np.max(list_poly_right[islice](ixdum)) + 10
+        ax.set_ylim(ymin, ymax)
+        plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
+        pdf_out.savefig(fig, bbox_inches="tight")
+        plt.close(fig)
+    pdf_out.close()
 
 
 def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False, isliceplot=None):
@@ -283,7 +390,6 @@ def overplot_slice_boundary_polynomials(
     # Read the image data from the input FITS file
     with fits.open(image) as hdul:
         image_data = hdul[0].data
-    vmin, vmax = ZScaleInterval().get_limits(image_data)
 
     # Read the boundary polynomial coefficients from the input FITS file
     if input_poly is not None or input_traces is not None:
@@ -324,70 +430,25 @@ def overplot_slice_boundary_polynomials(
     # If the user requested to save the plots in a PDF mosaic,
     # create a PdfPages object and save each slice's plot in reverse order
     if pdf_mosaic is not None:
-        logger.info(f"Saving final plots of traces for every slice in PDF file: {pdf_mosaic}")
         if output_dir is not None:
-            pdf_output = PdfPages(Path(output_dir) / pdf_mosaic)
+            pdf_output = Path(output_dir) / pdf_mosaic
         else:
-            pdf_output = PdfPages(pdf_mosaic)
-        for islice in range(
-            FRIDA_NSLICES - 1, -1, -1
-        ):  # (0-based index) loop in reverse order to have the first slice on top of the PDF
-            sliceid = sliceid_from_sliceindex(islice)
-            fig, ax = plt.subplots(figsize=(10, 6))
-            tea.imshow(
-                fig,
-                ax,
-                image_data,
-                vmin=vmin,
-                vmax=vmax,
-                aspect="auto",
-                ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
-                title=title + f"\nSlice {islice + 1} (ID {sliceid})",
-            )
-            # Plot the boundary polynomials
-            if input_poly is not None or input_traces is not None:
-                plot_fitted_boundary_polynomials(
-                    ax, list_poly_left, list_poly_right, voffset, sliceid=False, isliceplot=islice
-                )
-            # Overplot the boundary borders
-            if input_borders is not None:
-                plot_borders(
-                    ax, array_left_border, array_right_border, ibad, voffset=voffset, sliceid=False, isliceplot=islice
-                )
-            # Overplot the slice traces
-            if input_traces is not None:
-                plot_traces(ax, list_poly_traces_all_slices, voffset=voffset, traceid=False, isliceplot=islice)
-                if traceid:
-                    ntraces = len(list_poly_traces_all_slices[islice])
-                    xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
-                    ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
-                    for itrace in range(ntraces):
-                        poly_trace = list_poly_traces_all_slices[islice][itrace]
-                        ytrace = poly_trace(ixdum)
-                        ax.plot(ixdum, ytrace, color="cyan", lw=1.5, label=f"Trace {itrace+1}")
-                        ycenter = poly_trace(xcenter)
-                        ax.text(
-                            xcenter,
-                            ycenter,
-                            f"Trace {itrace+1}",
-                            color="white",
-                            fontsize=8,
-                            ha="center",
-                            va="center",
-                            fontweight="bold",
-                            alpha=1.0,
-                            bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
-                        )
-            #
-            ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
-            ymin = np.min(list_poly_left[islice](ixdum)) - 10
-            ymax = np.max(list_poly_right[islice](ixdum)) + 10
-            ax.set_ylim(ymin, ymax)
-            plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
-            pdf_output.savefig(fig, bbox_inches="tight")
-            plt.close(fig)
-        pdf_output.close()
+            pdf_output = pdf_mosaic
+        plot_traces_within_slice_boundary_polynomials_mosaic(
+            pdf_output=pdf_output,
+            image_data=image_data,
+            title=title,
+            list_poly_left=list_poly_left,
+            list_poly_right=list_poly_right,
+            array_left_border=array_left_border,
+            array_right_border=array_right_border,
+            ibad=ibad,
+            list_poly_traces_all_slices=list_poly_traces_all_slices,
+            voffset=voffset,
+            traceid=traceid,
+        )
     else:
+        vmin, vmax = ZScaleInterval().get_limits(image_data)
         fig, ax = plt.subplots(figsize=(10, 8))
         tea.imshow(
             fig,
