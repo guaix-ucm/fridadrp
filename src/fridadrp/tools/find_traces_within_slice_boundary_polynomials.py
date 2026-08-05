@@ -875,7 +875,7 @@ def main(args=None):
         hdul.append(hdu)
     hdul = fits.HDUList(hdul)
     hdul.writeto(output_fname, overwrite=args.overwrite)
-    logger.info(f"Traces within slice boundary polynomials saved to [green]{output_fname}[/green]")
+    logger.info(f"Traces within slice boundary polynomials saved to [green]{Path(output_fname).name}[/green]")
 
     # Execution time
     datetime_end = datetime.now()
