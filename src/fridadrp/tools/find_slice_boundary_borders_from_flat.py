@@ -570,7 +570,9 @@ def find_slice_boundary_borders_from_flat(
                 if plots_extra:
                     fig, ax = plt.subplots()
                     ax.plot(xdum, ydum, ".")
-                    ax.set_title(f"{Path(flatfile).name}\nLeft border of slice #{sliceid_from_sliceindex(slice_ini - 1)}")
+                    ax.set_title(
+                        f"{Path(flatfile).name}\nLeft border of slice #{sliceid_from_sliceindex(slice_ini - 1)}"
+                    )
                     ax.set_xlabel("array index along NAXIS2 axis")
                     ax.set_ylabel("data")
                     ax.plot(x2, ydata_smoothed[x2], "C3.")
@@ -605,7 +607,9 @@ def find_slice_boundary_borders_from_flat(
                 if plots_extra:
                     fig, ax = plt.subplots()
                     ax.plot(xdum, ydum, ".")
-                    ax.set_title(f"{Path(flatfile).name}\nRight border of slice #{sliceid_from_sliceindex(slice_end - 1)}")
+                    ax.set_title(
+                        f"{Path(flatfile).name}\nRight border of slice #{sliceid_from_sliceindex(slice_end - 1)}"
+                    )
                     ax.set_xlabel("array index along NAXIS2 axis")
                     ax.set_ylabel("data")
                     ax.plot(x1, ydata_smoothed[x1], "C3.")
