@@ -338,6 +338,8 @@ def overplot_slice_boundary_polynomials(
     input_traces,
     image,
     voffset=0.0,
+    xlim=None,
+    ylim=None,
     sliceid=False,
     traceid=False,
     pdf_mosaic=False,
@@ -372,6 +374,10 @@ def overplot_slice_boundary_polynomials(
     image : str
         Path to the FITS file containing the image on which to overplot
         the slice boundaries.
+    xlim : tuple of float, optional
+        X-axis limits for the plot (xmin, xmax); array indices (0-based).
+    ylim : tuple of float, optional
+        Y-axis limits for the plot (ymin, ymax); array indices (0-based).
     voffset : float, optional
         Vertical constant offset (pixels) to apply to the polynomials.
         A positive value shifts the polynomials upwards, while a negative
@@ -459,8 +465,16 @@ def overplot_slice_boundary_polynomials(
             aspect="auto",
             title=title,
         )
-        xmin, xmax = ax.get_xlim()
-        ymin, ymax = ax.get_ylim()
+        if xlim is None:
+            xlim = [-0.5, FRIDA_NAXIS1_HAWAII.value - 0.5]
+        else:
+            xlim[0] -= 1  # (0-based)
+            xlim[1] -= 1  # (0-based)
+        if ylim is None:
+            ylim = [-0.5, FRIDA_NAXIS2_HAWAII.value - 0.5]
+        else:
+            ylim[0] -= 1  # (0-based)
+            ylim[1] -= 1  # (0-based)
         # Plot the boundary polynomials
         if input_poly is not None or input_traces is not None:
             plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset, sliceid)
@@ -475,8 +489,8 @@ def overplot_slice_boundary_polynomials(
             plot_traces(ax, list_poly_traces_all_slices, voffset=voffset, traceid=traceid)
 
         # reset the x and y limits to the original values after plotting the boundaries (and borders if provided)
-        ax.set_xlim(xmin, xmax)
-        ax.set_ylim(ymin, ymax)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
 
         mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
         mpl.rcParams["keymap.back"] = []  # disable 'c'
@@ -575,6 +589,20 @@ def main(args=None):
     parser.add_argument("--sliceid", help="Overplot slice ID", action="store_true")
     parser.add_argument("--traceid", help="Overplot trace ID", action="store_true")
     parser.add_argument(
+        "--xlim",
+        help="X-axis limits for the plot (xmin, xmax); array indices (1-based along NAXIS1 axis)",
+        type=float,
+        nargs=2,
+        default=None,
+    )
+    parser.add_argument(
+        "--ylim",
+        help="Y-axis limits for the plot (ymin, ymax); array indices (1-based along NAXIS2 axis)",
+        type=float,
+        nargs=2,
+        default=None,
+    )
+    parser.add_argument(
         "--pdf-mosaic", help="Output PDF file to save zoomed images of all the slices", type=str, required=False
     )
     parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
@@ -619,12 +647,20 @@ def main(args=None):
             "The --traceid option is defined, but no slice trace polynomials file is provided. Please provide a valid --traces file."
         )
 
+    #
+    if args.pdf_mosaic is not None and (args.xlim is not None or args.ylim is not None):
+        logger.warning(
+            "Both --pdf-mosaic and --xlim/--ylim are defined. The --xlim/--ylim options will be ignored when generating the PDF mosaic."
+        )
+
     # Overplot the slice boundary polynomials
     overplot_slice_boundary_polynomials(
         input_poly=args.poly,
         input_borders=args.borders,
         input_traces=args.traces,
         image=args.image,
+        xlim=args.xlim,
+        ylim=args.ylim,
         voffset=args.voffset,
         sliceid=args.sliceid,
         traceid=args.traceid,
