@@ -79,7 +79,7 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
     """
     logger = logging.getLogger(__name__)
 
-    logger.info(f"Saving final plots of traces for every slice in PDF file:\n[green]{pdf_output}[/green]")
+    logger.info(f"Saving final plots of traces for every slice in PDF file:\n[green]{Path(pdf_output).name}[/green]")
     pdf_out = PdfPages(pdf_output)
 
     vmin, vmax = ZScaleInterval().get_limits(image_data)
@@ -109,11 +109,11 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
             plot_borders(
                 ax, array_left_border, array_right_border, ibad, voffset=voffset, sliceid=False, isliceplot=islice
             )
+        ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
         ymin = np.min(list_poly_left[islice](ixdum)) - 10
         ymax = np.max(list_poly_right[islice](ixdum)) + 10
         ax.set_ylim(ymin, ymax)
         # Overplot the slice traces
-        ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
         if list_poly_traces_all_slices is not None:
             plot_traces(ax, list_poly_traces_all_slices, voffset=voffset, traceid=False, isliceplot=islice)
             if traceid:
