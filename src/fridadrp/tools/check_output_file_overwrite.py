@@ -46,6 +46,11 @@ def check_output_file_overwrite(output_file, output_dir, overwrite):
     else:
         logger.debug(f"Output directory [green]{output_dir}[/green] already exists.")
 
+    # If output file is None, return
+    if output_file is None:
+        logger.warning("Output file name is None. No output file will be created.")
+        return None
+
     # If output file is not an absolute path, prepend the output directory
     if not Path(output_file).is_absolute():
         output_fname = str(Path(output_dir) / output_file)
