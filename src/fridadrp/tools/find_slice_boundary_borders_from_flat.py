@@ -570,7 +570,7 @@ def find_slice_boundary_borders_from_flat(
                 if plots_extra:
                     fig, ax = plt.subplots()
                     ax.plot(xdum, ydum, ".")
-                    ax.set_title(f"Left border of slice #{sliceid_from_sliceindex(slice_ini - 1)}")
+                    ax.set_title(f"{Path(flatfile).name}\nLeft border of slice #{sliceid_from_sliceindex(slice_ini - 1)}")
                     ax.set_xlabel("array index along NAXIS2 axis")
                     ax.set_ylabel("data")
                     ax.plot(x2, ydata_smoothed[x2], "C3.")
@@ -605,7 +605,7 @@ def find_slice_boundary_borders_from_flat(
                 if plots_extra:
                     fig, ax = plt.subplots()
                     ax.plot(xdum, ydum, ".")
-                    ax.set_title(f"Right border of slice #{sliceid_from_sliceindex(slice_end - 1)}")
+                    ax.set_title(f"{Path(flatfile).name}\nRight border of slice #{sliceid_from_sliceindex(slice_end - 1)}")
                     ax.set_xlabel("array index along NAXIS2 axis")
                     ax.set_ylabel("data")
                     ax.plot(x1, ydata_smoothed[x1], "C3.")
@@ -679,7 +679,7 @@ def main(args=None):
     parser = argparse.ArgumentParser(
         description="Find the slice boundaries from flat image", formatter_class=RichHelpFormatter
     )
-    parser.add_argument("--flatfile", type=str, help="Path to the flat file", required=True)
+    parser.add_argument("--flatfile", help="Path to the flat file", type=str)
     parser.add_argument("--output", help="Output FITS file name", type=str, default=None)
     parser.add_argument("--overwrite", help="Overwrite output file if it exists", action="store_true")
     parser.add_argument("--slice-ini", help="Initial slice number (1-based index)", type=int, default=1)
@@ -778,12 +778,12 @@ def main(args=None):
     # Define the columns to analyze based on the specified column ranges
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
 
-    # Check if more than one column is specified and set the output file name accordingly
+    # Check the output file name
     if len(columns_to_analyze) > 1:
         if args.output is None:
             args.output = f"slice_boundary_borders_from_flat_{args.slice_ini}-{args.slice_end}.fits"
-        # Check and set the output file path, creating the output directory if necessary
-        output_fname = check_output_file_overwrite(args.output, args.output_dir, args.overwrite)
+    # Check and set the output file path, creating the output directory if necessary
+    output_fname = check_output_file_overwrite(args.output, args.output_dir, args.overwrite)
 
     # Compute the slice boundaries from the flat file
     array_left_border, array_right_border = find_slice_boundary_borders_from_flat(
