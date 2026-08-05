@@ -842,7 +842,7 @@ def main(args=None):
         add_script_info_to_fits_history(primary_hdu.header, args, title="Slice boundary borders from flat image")
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
         hdul.writeto(output_fname, overwrite=args.overwrite)
-        logger.info(f"Slice boundary borders saved to: [green]{output_fname}[/green]")
+        logger.info(f"Slice boundary borders saved to: [green]{Path(output_fname).name}[/green]")
     else:
         logger.info(
             "Slice boundary borders computed for column %d. Not saved to FITS file since a single column is specified.",
