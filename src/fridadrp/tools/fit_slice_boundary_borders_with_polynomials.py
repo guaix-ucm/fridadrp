@@ -278,7 +278,7 @@ def main(args=None):
     add_script_info_to_fits_history(primary_hdu.header, args, title="Boundary polynomials fitted from slice borders")
     hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
     hdul.writeto(output_fname, overwrite=args.overwrite)
-    logger.info(f"Slice boundary polynomials saved to: [green]{output_fname}[/green]")
+    logger.info(f"Slice boundary polynomials saved to: [green]{Path(output_fname).name}[/green]")
 
     # Execution time
     datetime_end = datetime.now()
@@ -290,8 +290,8 @@ def main(args=None):
 
     # Save console log if recording is enabled
     if args.record:
-        log_filename = "terminal_output.txt"
-        with open(Path(args.output_dir) / log_filename, "wt") as f:
+        log_filename = Path(args.output_dir) / "terminal_output.txt"
+        with open(log_filename, "wt") as f:
             f.write(console.export_text(styles=True))
         logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
 

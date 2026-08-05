@@ -640,8 +640,8 @@ def main(args=None):
 
     # Save console log if recording is enabled
     if args.record:
-        log_filename = "terminal_output.txt"
-        with open(Path(args.output_dir) / log_filename, "wt") as f:
+        log_filename = Path(args.output_dir) / "terminal_output.txt"
+        with open(log_filename, "wt") as f:
             f.write(console.export_text(styles=True))
         logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
 
