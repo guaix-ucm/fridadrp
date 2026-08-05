@@ -109,6 +109,9 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
             plot_borders(
                 ax, array_left_border, array_right_border, ibad, voffset=voffset, sliceid=False, isliceplot=islice
             )
+        ymin = np.min(list_poly_left[islice](ixdum)) - 10
+        ymax = np.max(list_poly_right[islice](ixdum)) + 10
+        ax.set_ylim(ymin, ymax)
         # Overplot the slice traces
         ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
         if list_poly_traces_all_slices is not None:
@@ -121,22 +124,20 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
                     ytrace = poly_trace(ixdum)
                     ax.plot(ixdum, ytrace, color="cyan", lw=1.5, label=f"Trace {itrace+1}")
                     ycenter = poly_trace(xcenter)
-                    ax.text(
-                        xcenter,
-                        ycenter,
-                        f"Trace {itrace+1}",
-                        color="white",
-                        fontsize=8,
-                        ha="center",
-                        va="center",
-                        fontweight="bold",
-                        alpha=1.0,
-                        bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
-                    )
+                    if ymin <= ycenter <= ymax:
+                        ax.text(
+                            xcenter,
+                            ycenter,
+                            f"Trace {itrace+1}",
+                            color="white",
+                            fontsize=8,
+                            ha="center",
+                            va="center",
+                            fontweight="bold",
+                            alpha=1.0,
+                            bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
+                        )
         #
-        ymin = np.min(list_poly_left[islice](ixdum)) - 10
-        ymax = np.max(list_poly_right[islice](ixdum)) + 10
-        ax.set_ylim(ymin, ymax)
         plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
         pdf_out.savefig(fig, bbox_inches="tight")
         plt.close(fig)
@@ -170,6 +171,7 @@ def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffse
     """
     xmin, xmax = ax.get_xlim()
     xdum = np.linspace(xmin, xmax, 1000)
+    ymin, ymax = ax.get_ylim()
     if isliceplot is None:
         islice_range = range(FRIDA_NSLICES)
     else:
@@ -185,18 +187,19 @@ def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffse
             if list_poly_left[islice] is not None and list_poly_right[islice] is not None:
                 xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
                 ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2 + voffset
-                ax.text(
-                    xcenter,
-                    ycenter,
-                    f"id#{sliceid_from_sliceindex(islice)}",
-                    color="white",
-                    fontsize=10,
-                    ha="center",
-                    va="center",
-                    fontweight="bold",
-                    alpha=1.0,
-                    bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
-                )
+                if ymin <= ycenter <= ymax:
+                    ax.text(
+                        xcenter,
+                        ycenter,
+                        f"id#{sliceid_from_sliceindex(islice)}",
+                        color="white",
+                        fontsize=10,
+                        ha="center",
+                        va="center",
+                        fontweight="bold",
+                        alpha=1.0,
+                        bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
+                    )
 
 
 def plot_borders(
@@ -475,6 +478,8 @@ def overplot_slice_boundary_polynomials(
         else:
             ylim[0] -= 1  # (0-based)
             ylim[1] -= 1  # (0-based)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
         # Plot the boundary polynomials
         if input_poly is not None or input_traces is not None:
             plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset, sliceid)
@@ -487,10 +492,6 @@ def overplot_slice_boundary_polynomials(
         # Overplot the slice traces
         if input_traces is not None:
             plot_traces(ax, list_poly_traces_all_slices, voffset=voffset, traceid=traceid)
-
-        # reset the x and y limits to the original values after plotting the boundaries (and borders if provided)
-        ax.set_xlim(xlim)
-        ax.set_ylim(ylim)
 
         mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
         mpl.rcParams["keymap.back"] = []  # disable 'c'
