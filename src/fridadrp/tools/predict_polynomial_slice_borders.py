@@ -133,7 +133,7 @@ def predict_polynomial_slice_borders(input_polynomial, slicenum, degslice=2, for
             debugplot=debugplot,
             xlabel="slice index",
             ylabel="array index along NAXIS2",
-            title=f"Fitted right border polynomial for pixel {icol+1} along NAXIS1",
+            title=f"Fitted left border polynomial for pixel {icol+1} along NAXIS1",
         )
         ypredicted_left[icol] = poly(
             sliceindex_from_sliceid(sliceid)
@@ -198,7 +198,7 @@ def main(args=None):
         choices=range(1, FRIDA_NSLICES + 1),
     )
     parser.add_argument(
-        "--degslice", help="Degree of the polynomial to be fitted (slice border vs. slice index)", type=int, default=2
+        "--degslice", help="Degree of the polynomial to be fitted (slice border vs. slice index; default 2)", type=int, default=2
     )
     parser.add_argument("--output", help="Output file name for the predicted polynomials", type=str, required=True)
     parser.add_argument("--overwrite", help="Overwrite existing output file", action="store_true")
@@ -239,7 +239,7 @@ def main(args=None):
     shutil.copyfile(
         args.poly, output_fname
     )  # This always overwrites the output file if it exists, but we have already checked for overwrite permission
-    logger.info(f"Copied input polynomials file [blue]{args.poly}[/blue] to output file [green]{output_fname}[/green].")
+    logger.info(f"Copied input polynomials file [blue]{Path(args.poly).name}[/blue] to output file [green]{Path(output_fname).name}[/green].")
     logger.info(
         f"Updating the output FITS file with the predicted polynomials for slice number {args.slicenum} (slice ID {sliceid_from_sliceindex(args.slicenum - 1):02d})."
     )
