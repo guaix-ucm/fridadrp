@@ -20,6 +20,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 from rich_argparse import RichHelpFormatter
+import shutil
+import subprocess
 import sys
 import teareduce as tea
 import types
@@ -35,8 +37,31 @@ from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_p
 from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynomials
 
 
+def find_imagemagick_montage_executable():
+    """Check if the ImageMagick 'montage' executable is available in the system PATH."""
+    path = shutil.which("montage")
+    if path is None:
+        return None
+
+    try:
+        result = subprocess.run(
+            [path, "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+
+    output = (result.stdout + result.stderr).lower()
+    if "imagemagick" in output:
+        return path
+    return None
+
+
 def plot_traces_within_slice_boundary_polynomials_mosaic(
     pdf_output,
+    montage,
     image_data,
     title,
     list_poly_left=None,
@@ -54,6 +79,9 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
     ----------
     pdf_output : str or Path
         The path to the output PDF file where the mosaic will be saved.
+    montage : str
+        If provided, display a montage of the final plots with traces for every slice.
+        Possible values are "png" or "pdf". Requires ImageMagick's montage.
     image_data : numpy.ndarray
         The image data to be displayed.
     title : str
@@ -142,6 +170,33 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         pdf_out.savefig(fig, bbox_inches="tight")
         plt.close(fig)
     pdf_out.close()
+
+    # Check montage
+    if montage is not None:
+        if montage not in ["png", "pdf"]:
+            raise ValueError("Invalid value for montage. Must be 'png' or 'pdf'.")
+        montage_executable = find_imagemagick_montage_executable()
+        if montage_executable is None:
+            raise ValueError(
+                "The --montage option is defined, but the ImageMagick 'montage' executable is not found in the system PATH. Please install ImageMagick or provide a valid path to the 'montage' executable."
+            )
+        else:
+            logger.info(f"ImageMagick 'montage' executable found at: [green]{montage_executable}[/green]")
+        # Build output filename for montage from pdf_output, inserting "_montage" before the extension
+        pdf_output_path = Path(pdf_output)
+        montage_output = pdf_output_path.with_name(pdf_output_path.stem + "_montage." + montage)
+        logger.info(f"Creating montage of the final plots in file:\n[green]{montage_output}[/green]")
+        montage_command = [
+            montage_executable,
+            "-density", "300",
+            str(pdf_output_path),
+            "-tile", "6x5",
+            "-geometry", "600x375+5+5",
+            "-background", "white",
+            str(montage_output),
+        ]
+        logger.debug(f"Running montage command: {' '.join(montage_command)}")
+        subprocess.run(montage_command, check=True)
 
 
 def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False, isliceplot=None):
@@ -346,6 +401,7 @@ def overplot_slice_boundary_polynomials(
     sliceid=False,
     traceid=False,
     pdf_mosaic=False,
+    montage=None,
     output_dir=".",
 ):
     """Overplot the slice boundary borders and/or polynomials on an image
@@ -391,6 +447,10 @@ def overplot_slice_boundary_polynomials(
         If True, overplot the trace ID at the center of each trace.
     pdf_mosaic : str, optional
         Path to the output PDF file where the mosaic will be saved.
+    montage : str, optional
+        If provided, display a montage of the final plots with traces 
+        for every slice. Possible values are "png" or "pdf". 
+        Requires ImageMagick's montage.
     output_dir : str, optional
         Path to the output directory where the PDF mosaic will be saved.
     """
@@ -445,6 +505,7 @@ def overplot_slice_boundary_polynomials(
             pdf_output = pdf_mosaic
         plot_traces_within_slice_boundary_polynomials_mosaic(
             pdf_output=pdf_output,
+            montage=montage,
             image_data=image_data,
             title=title,
             list_poly_left=list_poly_left,
@@ -606,6 +667,13 @@ def main(args=None):
     parser.add_argument(
         "--pdf-mosaic", help="Output PDF file to save zoomed images of all the slices", type=str, required=False
     )
+    parser.add_argument(
+        "--montage",
+        help="Display a montage of the final plots with traces for every slice (requires ImageMagick's montage)",
+        type=str,
+        choices=["png", "pdf"],
+        default=None,
+    )
     parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
     parser.add_argument("--record", help="Record terminal output", action="store_true")
     parser.add_argument("--echo", help="Display full command line", action="store_true")
@@ -666,6 +734,7 @@ def main(args=None):
         sliceid=args.sliceid,
         traceid=args.traceid,
         pdf_mosaic=args.pdf_mosaic,
+        montage=args.montage,
         output_dir=args.output_dir,
     )
 
