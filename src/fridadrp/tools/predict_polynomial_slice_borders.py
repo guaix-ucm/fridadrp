@@ -22,6 +22,7 @@ import uuid
 
 from numina.array.display.polfit_residuals import polfit_residuals
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
+from numina.tools.initialize_script_with_args import initialize_script_with_args
 from numina.tools.progressbarlines import ProgressBarLines
 
 from fridadrp.core import FRIDA_NSLICES
@@ -30,8 +31,9 @@ from fridadrp.core import DEF_SLICEID_FROM_SLICEINDEX
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.core import sliceindex_from_sliceid
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
-from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
+
+from fridadrp._version import version
 
 
 def predict_polynomial_slice_borders(input_polynomial, slicenum, degslice=2, force=False, plots=False):
@@ -220,7 +222,7 @@ def main(args=None):
     args = parser.parse_args(args)
 
     # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
 
     # Check input polynomials file is defined
     if args.poly is None:

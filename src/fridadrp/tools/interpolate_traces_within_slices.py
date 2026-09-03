@@ -25,8 +25,9 @@ import teareduce as tea
 import uuid
 
 from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
-from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
 from numina.array.wavecalib.peaks_spectrum import refine_peaks_spectrum
+from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
+from numina.tools.initialize_script_with_args import initialize_script_with_args
 
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
@@ -40,7 +41,8 @@ from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_bound
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynomials
-from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
+
+from fridadrp._version import version
 
 
 def interpolate_traces_in_single_slice(
@@ -554,7 +556,7 @@ def main(args=None):
     args = parser.parse_args(args)
 
     # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
 
     # Check input image file is defined
     if args.image is None:

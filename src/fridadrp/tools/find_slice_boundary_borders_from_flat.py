@@ -30,6 +30,7 @@ import uuid
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, find_peaks_spectrum
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
 from numina.tools.progressbarlines import ProgressBarLines
+from numina.tools.initialize_script_with_args import initialize_script_with_args
 from numina.tools.input_number import input_number
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
@@ -38,7 +39,8 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
-from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
+
+from fridadrp._version import version
 
 
 def find_slice_boundary_borders_from_flat(
@@ -736,7 +738,7 @@ def main(args=None):
     args = parser.parse_args(args)
 
     # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
 
     # Check flat file is defined
     if args.flatfile is None:

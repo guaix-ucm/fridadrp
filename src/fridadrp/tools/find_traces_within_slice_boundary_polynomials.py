@@ -28,6 +28,7 @@ from numina.array.robustfit import fit_theil_sen
 from numina.array.stats import robust_std
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, refine_peaks_spectrum
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
+from numina.tools.initialize_script_with_args import initialize_script_with_args
 from numina.tools.progressbarlines import ProgressBarLines
 
 from fridadrp.core import DEF_SLICEID_FROM_SLICEINDEX
@@ -38,11 +39,12 @@ from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_H
 from fridadrp.core import sliceid_from_sliceindex, sliceindex_from_sliceid
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
-from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.interpolate_traces_within_slices import interpolate_traces_in_single_slice
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces_within_slice_boundary_polynomials_mosaic
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
+
+from fridadrp._version import version
 
 
 def find_traces_within_slice_boundary_polynomials(
@@ -744,7 +746,7 @@ def main(args=None):
     args = parser.parse_args(args)
 
     # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
 
     # Check input polynomials file is defined
     if args.poly is None:

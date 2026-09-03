@@ -27,14 +27,16 @@ import teareduce as tea
 import types
 
 from numina.tools.input_number import input_number
+from numina.tools.initialize_script_with_args import initialize_script_with_args
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
-from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynomials
+
+from fridadrp._version import version
 
 
 def find_imagemagick_montage_executable():
@@ -688,7 +690,7 @@ def main(args=None):
     args = parser.parse_args(args)
 
     # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
 
     # Check input files are defined
     if args.poly is None and args.borders is None and args.traces is None:

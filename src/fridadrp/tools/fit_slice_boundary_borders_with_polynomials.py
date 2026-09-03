@@ -21,6 +21,7 @@ import uuid
 
 from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
+from numina.tools.initialize_script_with_args import initialize_script_with_args
 from numina.tools.progressbarlines import ProgressBarLines
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
@@ -28,8 +29,9 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
-from fridadrp.tools.initialize_script_with_args import initialize_script_with_args
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
+
+from fridadrp._version import version
 
 
 def fit_slice_boundary_borders_with_polynomials(
@@ -176,7 +178,7 @@ def main(args=None):
     args = parser.parse_args(args)
 
     # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__)
+    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
 
     # Check input file is defined
     if args.input is None:
