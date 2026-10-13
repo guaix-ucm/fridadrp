@@ -7,18 +7,18 @@ name = "fridadrp"
 dynamic = ["version"]
 description = "FRIDA Data Reduction Pipeline"
 readme = "README.rst"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {text = "GPL-3.0-or-later"}
 authors = [
     {name = "Nicolás Cardiel", email = "cardiel@ucm.es"},
     {name = "Sergio Pascual", email = "sergiopr@fis.ucm.es"}
 ]
 classifiers = [
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Science/Research",
@@ -68,3 +68,20 @@ fridadrp-overplot_slice_boundary_polynomials = "fridadrp.tools.overplot_slice_bo
 # pyproject.toml
 [tool.setuptools_scm]
 write_to = "src/fridadrp/_version.py"
+
+[tool.black]
+line-length = 120
+target-version = ['py310', 'py311', 'py312', 'py313', 'py314']
+skip-string-normalization = false
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.pytest_cache
+  | build
+  | dist
+)/
+'''
+
+[tool.pytest.ini_options]
