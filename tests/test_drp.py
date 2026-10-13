@@ -1,7 +1,7 @@
 
 import numina.core
 
-from ..loader import drp_load
+from fridadrp.loader import drp_load
 
 
 def test_recipes_are_defined():
