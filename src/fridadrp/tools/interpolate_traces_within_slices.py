@@ -12,7 +12,6 @@
 import argparse
 from astropy.io import fits
 from astropy.visualization import ZScaleInterval
-from datetime import datetime
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,7 +26,7 @@ import uuid
 from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
 from numina.array.wavecalib.peaks_spectrum import refine_peaks_spectrum
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
-from numina.tools.initialize_script_with_args import initialize_script_with_args
+from numina.tools.initialize_script_with_args import NuminaScriptDefinition
 
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
@@ -41,8 +40,6 @@ from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_bound
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynomials
-
-from fridadrp._version import version
 
 
 def interpolate_traces_in_single_slice(
@@ -495,8 +492,6 @@ def interpolate_traces_within_slices(
 
 def main(args=None):
 
-    datetime_ini = datetime.now()
-
     parser = argparse.ArgumentParser(
         description="Interpolate/extrapolate traces within slices", formatter_class=RichHelpFormatter
     )
@@ -542,21 +537,11 @@ def main(args=None):
     parser.add_argument("--plots", help="Display plots of the interpolated/extrapolated traces", action="store_true")
     parser.add_argument("--output", help="Output file name for the predicted polynomials", type=str, required=True)
     parser.add_argument("--overwrite", help="Overwrite existing output file", action="store_true")
-    parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
-    parser.add_argument("--record", help="Record terminal output", action="store_true")
-    parser.add_argument("--echo", help="Display full command line", action="store_true")
-    parser.add_argument("--version", help="Display version", action="store_true")
-    parser.add_argument(
-        "--log-level",
-        help="Set the logging level",
-        type=str,
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-    )
-    args = parser.parse_args(args)
 
-    # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
+    # Include default arguments for common actions, and initialize console and logging
+    myscript = NuminaScriptDefinition(parser, argv=args)
+    args = myscript.args
+    logger = myscript.logger
 
     # Check input image file is defined
     if args.image is None:
@@ -632,20 +617,8 @@ def main(args=None):
             logger.info(f"Updated HDU {extname} with the interpolated/extrapolated traces for slice ID {sliceid}.")
         hdul.flush()
 
-    # Execution time
-    datetime_end = datetime.now()
-    time_elapsed = datetime_end - datetime_ini
-    logger.info("Total time elapsed: %s", str(time_elapsed))
-
-    # Goodbye message
-    console.rule("[bold magenta] Goodbye! [/bold magenta]")
-
-    # Save console log if recording is enabled
-    if args.record:
-        log_filename = Path(args.output_dir) / "terminal_output.txt"
-        with open(log_filename, "wt") as f:
-            f.write(console.export_text(styles=True))
-        logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
+    # Display goodbye message and save console log if recording is enabled
+    myscript.goodbye_message_and_save_console()
 
 
 if __name__ == "__main__":

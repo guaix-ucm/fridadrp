@@ -11,18 +11,16 @@
 
 import argparse
 from astropy.io import fits
-from datetime import datetime
 import logging
 import numpy as np
 import shutil
-import sys
 from pathlib import Path
 from rich_argparse import RichHelpFormatter
 import uuid
 
 from numina.array.display.polfit_residuals import polfit_residuals
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
-from numina.tools.initialize_script_with_args import initialize_script_with_args
+from numina.tools.initialize_script_with_args import NuminaScriptDefinition
 from numina.tools.progressbarlines import ProgressBarLines
 
 from fridadrp.core import FRIDA_NSLICES
@@ -32,8 +30,6 @@ from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.core import sliceindex_from_sliceid
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
-
-from fridadrp._version import version
 
 
 def predict_polynomial_slice_borders(input_polynomial, slicenum, degslice=2, force=False, plots=False):
@@ -185,8 +181,6 @@ def predict_polynomial_slice_borders(input_polynomial, slicenum, degslice=2, for
 
 def main(args=None):
 
-    datetime_ini = datetime.now()
-
     parser = argparse.ArgumentParser(
         description="Predict slice boundary polynomials", formatter_class=RichHelpFormatter
     )
@@ -208,21 +202,11 @@ def main(args=None):
         "--force", help="Force recomputation of existing polynomials in chosen slice", action="store_true"
     )
     parser.add_argument("--plots", help="Display plots of the polynomial fitting", action="store_true")
-    parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
-    parser.add_argument("--record", help="Record terminal output", action="store_true")
-    parser.add_argument("--echo", help="Display full command line", action="store_true")
-    parser.add_argument("--version", help="Display version", action="store_true")
-    parser.add_argument(
-        "--log-level",
-        help="Set the logging level",
-        type=str,
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-    )
-    args = parser.parse_args(args)
 
-    # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
+    # Include default arguments for common actions, and initialize console and logging
+    myscript = NuminaScriptDefinition(parser, argv=args)
+    args = myscript.args
+    logger = myscript.logger
 
     # Check input polynomials file is defined
     if args.poly is None:
@@ -270,20 +254,8 @@ def main(args=None):
         hdul["SLIWIDTH"].data[args.slicenum - 1, :] = predicted_poly_right(xdum) - predicted_poly_left(xdum)
         hdul.flush()
 
-    # Execution time
-    datetime_end = datetime.now()
-    time_elapsed = datetime_end - datetime_ini
-    logger.info("Total time elapsed: %s", str(time_elapsed))
-
-    # Goodbye message
-    console.rule("[bold magenta] Goodbye! [/bold magenta]")
-
-    # Save console log if recording is enabled
-    if args.record:
-        log_filename = Path(args.output_dir) / "terminal_output.txt"
-        with open(log_filename, "wt") as f:
-            f.write(console.export_text(styles=True))
-        logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
+    # Display goodbye message and save console log if recording is enabled
+    myscript.goodbye_message_and_save_console()
 
 
 if __name__ == "__main__":

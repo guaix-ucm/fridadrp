@@ -12,7 +12,6 @@
 import argparse
 from astropy.io import fits
 from astropy.visualization import ZScaleInterval
-from datetime import datetime
 import logging
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -22,7 +21,6 @@ from pathlib import Path
 from rich_argparse import RichHelpFormatter
 from scipy.ndimage import median_filter, generic_filter
 from scipy.signal import savgol_filter
-import sys
 import teareduce as tea
 import types
 import uuid
@@ -30,7 +28,7 @@ import uuid
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, find_peaks_spectrum
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
 from numina.tools.progressbarlines import ProgressBarLines
-from numina.tools.initialize_script_with_args import initialize_script_with_args
+from numina.tools.initialize_script_with_args import NuminaScriptDefinition
 from numina.tools.input_number import input_number
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
@@ -39,8 +37,6 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
-
-from fridadrp._version import version
 
 
 def find_slice_boundary_borders_from_flat(
@@ -680,8 +676,6 @@ def find_slice_boundary_borders_from_flat(
 
 def main(args=None):
 
-    datetime_ini = datetime.now()
-
     parser = argparse.ArgumentParser(
         description="Find the slice boundaries from flat image", formatter_class=RichHelpFormatter
     )
@@ -724,21 +718,11 @@ def main(args=None):
         default=2,
     )
     parser.add_argument("--plots", help="Display plots", action="store_true")
-    parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
-    parser.add_argument("--record", help="Record terminal output", action="store_true")
-    parser.add_argument("--echo", help="Display full command line", action="store_true")
-    parser.add_argument("--version", help="Display version", action="store_true")
-    parser.add_argument(
-        "--log-level",
-        help="Set the logging level",
-        type=str,
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-    )
-    args = parser.parse_args(args)
 
-    # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
+    # Include default arguments for common actions, and initialize console and logging
+    myscript = NuminaScriptDefinition(parser, argv=args)
+    args = myscript.args
+    logger = myscript.logger
 
     # Check flat file is defined
     if args.flatfile is None:
@@ -851,20 +835,8 @@ def main(args=None):
             columns_to_analyze[0],
         )
 
-    # Execution time
-    datetime_end = datetime.now()
-    time_elapsed = datetime_end - datetime_ini
-    logger.info("Total time elapsed: %s", str(time_elapsed))
-
-    # Goodbye message
-    console.rule("[bold magenta] Goodbye! [/bold magenta]")
-
-    # Save console log if recording is enabled
-    if args.record:
-        log_filename = Path(args.output_dir) / "terminal_output.txt"
-        with open(log_filename, "wt") as f:
-            f.write(console.export_text(styles=True))
-        logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
+    # Display goodbye message and save console log if recording is enabled
+    myscript.goodbye_message_and_save_console()
 
 
 if __name__ == "__main__":

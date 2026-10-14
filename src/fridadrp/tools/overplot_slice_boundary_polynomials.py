@@ -12,7 +12,6 @@
 import argparse
 from astropy.io import fits
 from astropy.visualization import ZScaleInterval
-from datetime import datetime
 import logging
 import matplotlib as mpl
 from matplotlib.backends.backend_pdf import PdfPages
@@ -22,12 +21,11 @@ from pathlib import Path
 from rich_argparse import RichHelpFormatter
 import shutil
 import subprocess
-import sys
 import teareduce as tea
 import types
 
 from numina.tools.input_number import input_number
-from numina.tools.initialize_script_with_args import initialize_script_with_args
+from numina.tools.initialize_script_with_args import NuminaScriptDefinition
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
@@ -35,8 +33,6 @@ from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynomials
-
-from fridadrp._version import version
 
 
 def find_imagemagick_montage_executable():
@@ -81,9 +77,10 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
     ----------
     pdf_output : str or Path
         The path to the output PDF file where the mosaic will be saved.
-    montage : str
+    montage : str or None
         If provided, display a montage of the final plots with traces for every slice.
         Possible values are "png" or "pdf". Requires ImageMagick's montage.
+        If None, no montage will be created.
     image_data : numpy.ndarray
         The image data to be displayed.
     title : str
@@ -633,8 +630,6 @@ def overplot_slice_boundary_polynomials(
 
 def main(args=None):
 
-    datetime_ini = datetime.now()
-
     parser = argparse.ArgumentParser(
         description="Overplot the slice boundaries (borders and/or polynomials) and/or traces on image",
         formatter_class=RichHelpFormatter,
@@ -648,7 +643,7 @@ def main(args=None):
     parser.add_argument(
         "--traces", help="Path to the file with the slice trace polynomials (optional)", type=str, required=False
     )
-    parser.add_argument("--image", help="Image to display boundaries on", type=str, required=True)
+    parser.add_argument("--image", help="Image to display boundaries on", type=str, required=False)
     parser.add_argument("--voffset", help="Vertical constant offset (pixels) to apply", type=float, default=0.0)
     parser.add_argument("--sliceid", help="Overplot slice ID", action="store_true")
     parser.add_argument("--traceid", help="Overplot trace ID", action="store_true")
@@ -676,21 +671,11 @@ def main(args=None):
         choices=["png", "pdf"],
         default=None,
     )
-    parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
-    parser.add_argument("--record", help="Record terminal output", action="store_true")
-    parser.add_argument("--echo", help="Display full command line", action="store_true")
-    parser.add_argument("--version", help="Display version", action="store_true")
-    parser.add_argument(
-        "--log-level",
-        help="Set the logging level",
-        type=str,
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-    )
-    args = parser.parse_args(args)
 
-    # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
+    # Include default arguments for common actions, and initialize console and logging
+    myscript = NuminaScriptDefinition(parser, argv=args)
+    args = myscript.args
+    logger = myscript.logger
 
     # Check input files are defined
     if args.poly is None and args.borders is None and args.traces is None:
@@ -740,23 +725,8 @@ def main(args=None):
         output_dir=args.output_dir,
     )
 
-    # Execution time
-    datetime_end = datetime.now()
-    time_elapsed = datetime_end - datetime_ini
-    logger.info("Total time elapsed: %s", str(time_elapsed))
-
-    # Goodbye message
-    console.rule("[bold magenta] Goodbye! [/bold magenta]")
-
-    # Save console log if recording is enabled
-    if args.record:
-        output_dir_path = Path(args.output_dir)
-        if not output_dir_path.exists():
-            output_dir_path.mkdir(parents=True, exist_ok=True)
-        log_filename = Path(args.output_dir) / "terminal_output.txt"
-        with open(log_filename, "wt") as f:
-            f.write(console.export_text(styles=True))
-        logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
+    # Display goodbye message and save console if recording is enabled
+    myscript.goodbye_message_and_save_console()
 
 
 if __name__ == "__main__":

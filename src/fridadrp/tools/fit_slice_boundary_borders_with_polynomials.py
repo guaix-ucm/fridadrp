@@ -11,17 +11,15 @@
 
 import argparse
 from astropy.io import fits
-from datetime import datetime
 import logging
 import numpy as np
 from pathlib import Path
 from rich_argparse import RichHelpFormatter
-import sys
 import uuid
 
 from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
-from numina.tools.initialize_script_with_args import initialize_script_with_args
+from numina.tools.initialize_script_with_args import NuminaScriptDefinition
 from numina.tools.progressbarlines import ProgressBarLines
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
@@ -30,8 +28,6 @@ from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
-
-from fridadrp._version import version
 
 
 def fit_slice_boundary_borders_with_polynomials(
@@ -145,8 +141,6 @@ def fit_slice_boundary_borders_with_polynomials(
 
 def main(args=None):
 
-    datetime_ini = datetime.now()
-
     parser = argparse.ArgumentParser(
         description="Fit the slice boundaries determined from flat image", formatter_class=RichHelpFormatter
     )
@@ -164,21 +158,11 @@ def main(args=None):
     parser.add_argument("--output", help="Output FITS file name", type=str, default=None)
     parser.add_argument("--overwrite", help="Overwrite output file if it exists", action="store_true")
     parser.add_argument("--plots", help="Display plots", action="store_true")
-    parser.add_argument("--output-dir", help="Output directory (default: .)", type=str, default=".")
-    parser.add_argument("--record", help="Record terminal output", action="store_true")
-    parser.add_argument("--echo", help="Display full command line", action="store_true")
-    parser.add_argument("--version", help="Display version", action="store_true")
-    parser.add_argument(
-        "--log-level",
-        help="Set the logging level",
-        type=str,
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-    )
-    args = parser.parse_args(args)
 
-    # Initialize the script with the provided arguments
-    console, logger = initialize_script_with_args(sys.argv, parser, args, __name__, version)
+    # Include default arguments for common actions, and initialize console and logging
+    myscript = NuminaScriptDefinition(parser, argv=args)
+    args = myscript.args
+    logger = myscript.logger
 
     # Check input file is defined
     if args.input is None:
@@ -282,20 +266,8 @@ def main(args=None):
     hdul.writeto(output_fname, overwrite=args.overwrite)
     logger.info(f"Slice boundary polynomials saved to: [green]{Path(output_fname).name}[/green]")
 
-    # Execution time
-    datetime_end = datetime.now()
-    time_elapsed = datetime_end - datetime_ini
-    logger.info("Total time elapsed: %s", str(time_elapsed))
-
-    # Goodbye message
-    console.rule("[bold magenta] Goodbye! [/bold magenta]")
-
-    # Save console log if recording is enabled
-    if args.record:
-        log_filename = Path(args.output_dir) / "terminal_output.txt"
-        with open(log_filename, "wt") as f:
-            f.write(console.export_text(styles=True))
-        logger.info(f"terminal output recorded in [green]{log_filename}[/green]")
+    # Display goodbye message and save console log if recording is enabled
+    myscript.goodbye_message_and_save_console()
 
 
 if __name__ == "__main__":
