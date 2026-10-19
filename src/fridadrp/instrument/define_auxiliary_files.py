@@ -12,15 +12,15 @@ import logging
 import pooch
 
 
-def define_auxiliary_files(grating, logger):
+def define_auxiliary_files(grating, logger=None):
     """"Define auxiliary files for requested configuration
 
     Parameters
     ----------
     grating : str
         Grating name.
-    logger : logging.Logger
-        Logger for logging messages.
+    logger : logging.Logger, optional
+        Logger for logging messages, the logger of this module by default.
 
     Returns
     -------

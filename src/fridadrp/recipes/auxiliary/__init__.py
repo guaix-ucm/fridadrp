@@ -199,7 +199,7 @@ class Test2Recipe(BaseRecipe):
             dec=decdeg,
             frame='icrs'
         )
-        faux_dict = define_auxiliary_files(grating=grating, verbose=True)
+        faux_dict = define_auxiliary_files(grating=grating, logger=self.logger)
         dict_ifu2detector = json.loads(open(faux_dict['model_ifu2detector'], mode='rt').read())
         wv_lincal = LinearWaveCalFRIDA(grating=grating)
         self.logger.info(f'wv_lincal: {wv_lincal}')
@@ -210,7 +210,7 @@ class Test2Recipe(BaseRecipe):
             spatial_scale=FRIDA_SPATIAL_SCALE[scale],
             wv_lincal=wv_lincal,
             instrument_pa=instrument_pa,
-            verbose=False
+            logger=self.logger,
         )
 
         # Generate 2D RSS
@@ -221,8 +221,8 @@ class Test2Recipe(BaseRecipe):
             nslices=FRIDA_NSLICES,
             dict_ifu2detector=dict_ifu2detector,
             wcs3d=wcs3d,
-            noparallel_computation=True,
-            verbose=False
+            ncores=1,
+            logger=self.logger,
         )
 
         # Prepare output result
@@ -240,7 +240,7 @@ class Test2Recipe(BaseRecipe):
             naxis2_ifu=FRIDA_NAXIS2_IFU,
             naxis1_ifu=FRIDA_NAXIS1_IFU,
             nslices=FRIDA_NSLICES,
-            verbose=False
+            logger=self.logger,
         )
         # TODO: rethink what information to store in this header
         header = list_of[0][0].header
