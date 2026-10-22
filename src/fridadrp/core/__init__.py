@@ -15,10 +15,18 @@ import numpy as np
 # (otherwise integers are converted to float by default)
 FRIDA_NAXIS1_HAWAII = Quantity(value=2048, unit=u.pix, dtype=int)  # dispersion direction
 FRIDA_NAXIS2_HAWAII = Quantity(value=2048, unit=u.pix, dtype=int)  # spatial direction (slices)
-FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL = Quantity(value=5, unit=u.pix, dtype=int)  # first useful pixel in the dispersion direction
-FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL = Quantity(value=2044, unit=u.pix, dtype=int)  # last useful pixel in the dispersion direction
-FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL = Quantity(value=5, unit=u.pix, dtype=int)  # first useful pixel in the spatial direction
-FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL = Quantity(value=2044, unit=u.pix, dtype=int)  # last useful pixel in the spatial direction
+FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL = Quantity(
+    value=5, unit=u.pix, dtype=int
+)  # first useful pixel in the dispersion direction
+FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL = Quantity(
+    value=2044, unit=u.pix, dtype=int
+)  # last useful pixel in the dispersion direction
+FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL = Quantity(
+    value=5, unit=u.pix, dtype=int
+)  # first useful pixel in the spatial direction
+FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL = Quantity(
+    value=2044, unit=u.pix, dtype=int
+)  # last useful pixel in the spatial direction
 
 FRIDA_NAXIS1_IFU = Quantity(value=64, unit=u.pix, dtype=int)  # parallel to the slices
 FRIDA_NAXIS2_IFU = Quantity(value=60, unit=u.pix, dtype=int)  # perpendicular to the slices
@@ -39,12 +47,13 @@ FRIDA_SPATIAL_SCALE = {
 
 # Define array for slice number from index conversions
 DEF_SLICEID_FROM_SLICEINDEX = np.array(
-    [30, 1, 29, 2, 28, 3, 27, 4, 26, 5, 25, 6, 24, 7, 23, 8, 22, 9, 21, 10, 20, 11, 19, 12, 18, 13, 17, 14, 16, 15],
+    [1, 30, 2, 29, 3, 28, 4, 27, 5, 26, 6, 25, 7, 24, 8, 23, 9, 22, 10, 21, 11, 20, 12, 19, 13, 18, 14, 17, 15, 16],
     dtype=int,
 )  # slice number from index (0-29)
 if len(DEF_SLICEID_FROM_SLICEINDEX) != FRIDA_NSLICES:
     raise ValueError(
-        f"Length of DEF_SLICENUM_FROM_INDEX ({len(DEF_SLICEID_FROM_SLICEINDEX)}) does not match FRIDA_NSLICES ({FRIDA_NSLICES})"
+        f"Length of DEF_SLICENUM_FROM_INDEX ({len(DEF_SLICEID_FROM_SLICEINDEX)}) "
+        f"does not match FRIDA_NSLICES ({FRIDA_NSLICES})"
     )
 
 
@@ -76,14 +85,17 @@ def sliceid_from_sliceindex(slice_index):
 
 
 # Define array for slice index from slice number conversions
-# (note: slice number is 1-30, slice index is 0-29; the first element of the array is a dummy value for non-existent slice number 0)
-DEF_SLICEINDEX_FROM_SLICEID = np.array(
-    [-1, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0],
-    dtype=int,
-)  # slice index (0-29) from slice number (1-30)
+# (note: slice number is 1-30, slice index is 0-29; the first element of the array
+# is a dummy value for non-existent slice number 0)
+# Make use of the sliceid_from_sliceindex function to generate the array
+DEF_SLICEINDEX_FROM_SLICEID = np.full(FRIDA_NSLICES + 1, -1, dtype=int)
+for i in range(FRIDA_NSLICES):
+    slice_number = sliceid_from_sliceindex(i)
+    DEF_SLICEINDEX_FROM_SLICEID[slice_number] = i
 if len(DEF_SLICEINDEX_FROM_SLICEID) != FRIDA_NSLICES + 1:
     raise ValueError(
-        f"Length of DEF_SLICEINDEX_FROM_NUM ({len(DEF_SLICEINDEX_FROM_SLICEID)}) does not match FRIDA_NSLICES + 1 ({FRIDA_NSLICES + 1})"
+        f"Length of DEF_SLICEINDEX_FROM_NUM ({len(DEF_SLICEINDEX_FROM_SLICEID)}) "
+        f"does not match FRIDA_NSLICES + 1 ({FRIDA_NSLICES + 1})"
     )
 
 
