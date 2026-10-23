@@ -119,7 +119,8 @@ def find_slice_boundary_borders_from_flat(
     naxis2, naxis1 = flat_data.shape
     if naxis1 != FRIDA_NAXIS1_HAWAII.value or naxis2 != FRIDA_NAXIS2_HAWAII.value:
         raise ValueError(
-            f"Flat file dimensions ({naxis1}, {naxis2}) do not match expected dimensions ({FRIDA_NAXIS1_HAWAII.value}, {FRIDA_NAXIS2_HAWAII.value})"
+            f"Flat file dimensions ({naxis1}, {naxis2}) do not match expected dimensions "
+            f"({FRIDA_NAXIS1_HAWAII.value}, {FRIDA_NAXIS2_HAWAII.value})"
         )
 
     # Set to zero the pixels outside the specified row range (1-based index along NAXIS2)
@@ -281,7 +282,7 @@ def find_slice_boundary_borders_from_flat(
         # figure was closed, which is not the case)
         while plt.fignum_exists(fig.number):
             plt.pause(0.1)
-        ## plt.show()
+        # plt.show()
 
     # Define arrays to store slice boundaries for all the FRIDA_NSLICES slices
     array_left_border = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
@@ -303,7 +304,8 @@ def find_slice_boundary_borders_from_flat(
         ydata_smoothed = flat_data_filtered[:, col - 1]
         yderiv1 = flat_data_savgol_deriv1[:, col - 1]
         yderiv2 = flat_data_savgol_deriv2[:, col - 1]
-        # Find the highest FRIDA_NSLICES peaks in the 1st derivative (up and down refer to the positive and negative peaks)
+        # Find the highest FRIDA_NSLICES peaks in the 1st derivative
+        # (up and down refer to the positive and negative peaks)
         list_ipeaks_deriv1_up = find_highest_peaks_spectrum(
             sx=yderiv1,
             nmaxpeaks=nslices_eff,
@@ -326,13 +328,15 @@ def find_slice_boundary_borders_from_flat(
             if list_ipeaks_deriv1_up[islice] > list_ipeaks_deriv1_down[islice]:
                 flag_deriv1_ok = False
                 logger.debug(
-                    f"Column {col}: Up peak {list_ipeaks_deriv1_up[islice]} is after down peak {list_ipeaks_deriv1_down[islice]}."
+                    f"Column {col}: Up peak {list_ipeaks_deriv1_up[islice]} "
+                    f"is after down peak {list_ipeaks_deriv1_down[islice]}."
                 )
         for igap in range(nslices_eff - 1):
             if list_ipeaks_deriv1_down[igap] > list_ipeaks_deriv1_up[igap + 1]:
                 flag_deriv1_ok = False
                 logger.debug(
-                    f"Column {col}: Down peak {list_ipeaks_deriv1_down[igap]} is after next up peak {list_ipeaks_deriv1_up[igap + 1]}."
+                    f"Column {col}: Down peak {list_ipeaks_deriv1_down[igap]} "
+                    f"is after next up peak {list_ipeaks_deriv1_up[igap + 1]}."
                 )
         if flag_deriv1_ok:
             # Median signal within each slice
@@ -375,13 +379,15 @@ def find_slice_boundary_borders_from_flat(
                 if list_ipeaks_deriv2_up[islice] > list_ipeaks_deriv2_down[islice]:
                     flag_deriv2_ok = False
                     logger.debug(
-                        f"Column {col}: 2nd derivative up peak {list_ipeaks_deriv2_up[islice]} is after down peak {list_ipeaks_deriv2_down[islice]}."
+                        f"Column {col}: 2nd derivative up peak {list_ipeaks_deriv2_up[islice]} "
+                        f"is after down peak {list_ipeaks_deriv2_down[islice]}."
                     )
             for igap in range(nslices_eff - 1):
                 if list_ipeaks_deriv2_down[igap] > list_ipeaks_deriv2_up[igap + 1]:
                     flag_deriv2_ok = False
                     logger.debug(
-                        f"Column {col}: 2nd derivative down peak {list_ipeaks_deriv2_down[igap]} is after next up peak {list_ipeaks_deriv2_up[igap + 1]}."
+                        f"Column {col}: 2nd derivative down peak {list_ipeaks_deriv2_down[igap]} "
+                        f"is after next up peak {list_ipeaks_deriv2_up[igap + 1]}."
                     )
             for igap in range(nslices_eff - 1):
                 x1 = list_ipeaks_deriv1_down[igap]
@@ -391,7 +397,8 @@ def find_slice_boundary_borders_from_flat(
                 if not (x1 <= xx1 <= xx2 <= x2):
                     flag_deriv2_ok = False
                     logger.debug(
-                        f"Column {col}: 2nd derivative peaks ({xx1}, {xx2}) are not within the 1st derivative peaks ({x1}, {x2})."
+                        f"Column {col}: 2nd derivative peaks ({xx1}, {xx2}) "
+                        f"are not within the 1st derivative peaks ({x1}, {x2})."
                     )
             if flag_deriv2_ok:
                 # Display result for column if plots is enabled
@@ -740,14 +747,16 @@ def main(args=None):
         or args.row_ini > FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value
     ):
         raise ValueError(
-            f"Initial row number must be between {FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value} and {FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value}."
+            f"Initial row number must be between {FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value} "
+            f"and {FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value}."
         )
     if (
         args.row_end < FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value
         or args.row_end > FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value
     ):
         raise ValueError(
-            f"Final row number must be between {FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value} and {FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value}."
+            f"Final row number must be between {FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value} "
+            f"and {FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value}."
         )
     if args.row_ini > args.row_end:
         raise ValueError("Initial row number cannot be greater than final row number.")
@@ -764,6 +773,10 @@ def main(args=None):
         raise ValueError("Savitzky-Golay filter polynomial order is not defined. Use --savgol-polyorder to specify it.")
     if args.savgol_polyorder <= 0:
         raise ValueError("Savitzky-Golay filter polynomial order must be a positive integer.")
+
+    # Show input parameters
+    logger.info(f"Finding slice boundaries from flat file: '{Path(args.flatfile).name}'")
+    logger.info(f"Slice range: {args.slice_ini} to {args.slice_end}")
 
     # Define the columns to analyze based on the specified column ranges
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
@@ -828,7 +841,7 @@ def main(args=None):
         add_script_info_to_fits_history(primary_hdu.header, args, title="Slice boundary borders from flat image")
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])
         hdul.writeto(output_fname, overwrite=args.overwrite)
-        logger.info(f"Slice boundary borders saved to: [green]{Path(output_fname).name}[/green]")
+        logger.info(f"Slice boundary borders saved to: '{Path(output_fname).name}'")
     else:
         logger.info(
             "Slice boundary borders computed for column %d. Not saved to FITS file since a single column is specified.",
