@@ -70,6 +70,7 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
     list_poly_traces_all_slices=None,
     voffset=0.0,
     traceid=False,
+    vlim=None,
 ):
     """Plot the traces within the slice boundary polynomials for every slice in a PDF mosaic
 
@@ -103,13 +104,18 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         shifts them downwards.
     traceid : bool, optional
         If True, overplot the trace ID at the center of each trace.
+    vlim : tuple of float, optional
+        Background and foreground limits for the plot (vmin, vmax).
     """
     logger = logging.getLogger(__name__)
 
     logger.info(f"Saving final plots of traces for every slice in PDF file:\n[green]{Path(pdf_output).name}[/green]")
     pdf_out = PdfPages(pdf_output)
 
-    vmin, vmax = ZScaleInterval().get_limits(image_data)
+    if vlim is not None:
+        vmin, vmax = vlim
+    else:
+        vmin, vmax = ZScaleInterval().get_limits(image_data)
 
     for islice in range(
         FRIDA_NSLICES - 1, -1, -1
@@ -397,6 +403,7 @@ def overplot_slice_boundary_polynomials(
     voffset=0.0,
     xlim=None,
     ylim=None,
+    vlim=None,
     sliceid=False,
     traceid=False,
     pdf_mosaic=False,
@@ -436,6 +443,8 @@ def overplot_slice_boundary_polynomials(
         X-axis limits for the plot (xmin, xmax); array indices (0-based).
     ylim : tuple of float, optional
         Y-axis limits for the plot (ymin, ymax); array indices (0-based).
+    vlim : tuple of float, optional
+        Background and foreground limits for the plot (vmin, vmax).
     voffset : float, optional
         Vertical constant offset (pixels) to apply to the polynomials.
         A positive value shifts the polynomials upwards, while a negative
@@ -515,9 +524,13 @@ def overplot_slice_boundary_polynomials(
             list_poly_traces_all_slices=list_poly_traces_all_slices,
             voffset=voffset,
             traceid=traceid,
+            vlim=vlim,
         )
     else:
-        vmin, vmax = ZScaleInterval().get_limits(image_data)
+        if vlim is not None:
+            vmin, vmax = vlim
+        else:
+            vmin, vmax = ZScaleInterval().get_limits(image_data)
         fig, ax = plt.subplots(figsize=(10, 8))
         tea.imshow(
             fig,
@@ -662,6 +675,13 @@ def main(args=None):
         default=None,
     )
     parser.add_argument(
+        "--vlim",
+        help="Background and foreground limits (vmin, vmax)",
+        type=float,
+        nargs=2,
+        default=None,
+    )
+    parser.add_argument(
         "--pdf-mosaic", help="Output PDF file to save zoomed images of all the slices", type=str, required=False
     )
     parser.add_argument(
@@ -717,6 +737,7 @@ def main(args=None):
         image=args.image,
         xlim=args.xlim,
         ylim=args.ylim,
+        vlim=args.vlim,
         voffset=args.voffset,
         sliceid=args.sliceid,
         traceid=args.traceid,
