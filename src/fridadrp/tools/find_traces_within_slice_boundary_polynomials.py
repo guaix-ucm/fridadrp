@@ -214,22 +214,26 @@ def find_traces_within_slice_boundary_polynomials(
     elif len(voffset) == 1:
         logger.info(f"Applying constant vertical offset of {voffset[0]} pixels to slice boundary polynomials.")
         for islice in range(FRIDA_NSLICES):
-            list_poly_left[islice] += voffset[0]
-            list_poly_right[islice] += voffset[0]
+            if list_poly_left[islice] is not None:
+                list_poly_left[islice] += voffset[0]
+            if list_poly_right[islice] is not None:
+                list_poly_right[islice] += voffset[0]
     else:
         logger.info(
             f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets and applying it to slice boundary polynomials."
         )
-        nvoffets = len(voffset)
-        x_offsets = np.linspace(
-            FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value, nvoffets
-        )
+        nvoffsets = len(voffset)
+        xdum_voffset = np.linspace(
+            FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
+            FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value - 1,
+            nvoffsets,
+        )  # using array indices (0 based)
         if plotsliceid is not None:
             debugplot = 2
         else:
             debugplot = 0
         poly_voffset, _ = polfit_residuals(
-            x=x_offsets,
+            x=xdum_voffset,
             y=np.array(voffset),
             deg=len(voffset) - 1,
             xlabel="array index along NAXIS1",
@@ -238,8 +242,10 @@ def find_traces_within_slice_boundary_polynomials(
             debugplot=debugplot,
         )
         for islice in range(FRIDA_NSLICES):
-            list_poly_left[islice] += poly_voffset
-            list_poly_right[islice] += poly_voffset
+            if list_poly_left[islice] is not None:
+                list_poly_left[islice] += poly_voffset
+            if list_poly_right[islice] is not None:
+                list_poly_right[islice] += poly_voffset
 
     # Plot the filtered image with the slice polynomial boundaries overplotted
     if plotsliceid is not None:
@@ -258,7 +264,10 @@ def find_traces_within_slice_boundary_polynomials(
         xmin, xmax = ax.get_xlim()
         ymin, ymax = ax.get_ylim()
         plot_fitted_boundary_polynomials(
-            ax=ax, list_poly_left=list_poly_left, list_poly_right=list_poly_right, sliceid=True
+            ax=ax,
+            list_poly_left=list_poly_left,
+            list_poly_right=list_poly_right,
+            sliceid=True,
         )
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
@@ -453,7 +462,6 @@ def find_traces_within_slice_boundary_polynomials(
                         ax=ax,
                         list_poly_left=list_poly_left,
                         list_poly_right=list_poly_right,
-                        voffset=0.0,
                         sliceid=False,
                     )
                     ymin = np.min(list_poly_left[islice](ixdum)) - 10
@@ -573,7 +581,10 @@ def find_traces_within_slice_boundary_polynomials(
                 # set sliceid=False in plot_fitted_boundary_polynomials to avoid a problem
                 # in plt.tight_layout() when sliceid=True (it fails to compute the layout properly)
                 plot_fitted_boundary_polynomials(
-                    ax=ax, list_poly_left=list_poly_left, list_poly_right=list_poly_right, voffset=0.0, sliceid=False
+                    ax=ax,
+                    list_poly_left=list_poly_left,
+                    list_poly_right=list_poly_right,
+                    sliceid=False,
                 )
                 ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
                 ymin = np.min(list_poly_left[islice](ixdum)) - 10

@@ -420,9 +420,13 @@ def interpolate_traces_within_slices(
                 title=f"Slice {islice + 1} (ID {sliceid}) - Interpolating/Extrapolating Traces",
             )
             plot_fitted_boundary_polynomials(
-                ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False, isliceplot=islice
+                ax,
+                list_poly_left,
+                list_poly_right,
+                sliceid=False,
+                isliceplot=islice,
             )
-            plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, traceid=False, isliceplot=islice)
+            plot_traces(ax, list_poly_traces_all_slices, traceid=False, isliceplot=islice)
             ntraces = len(list_poly_traces_all_slices[islice])
             if refine:
                 kmax = 3

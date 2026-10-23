@@ -24,11 +24,13 @@ import subprocess
 import teareduce as tea
 import types
 
+from numina.array.display.polfit_residuals import polfit_residuals
 from numina.tools.input_number import input_number
 from numina.tools.initialize_script_with_args import NuminaScriptDefinition
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
+from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
@@ -68,7 +70,6 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
     array_right_border=None,
     ibad=None,
     list_poly_traces_all_slices=None,
-    voffset=0.0,
     traceid=False,
     vlim=None,
 ):
@@ -98,10 +99,6 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         List of indices of bad columns (to be ignored).
     list_poly_traces_all_slices : list of list of numpy.polynomial.Polynomial, optional
         The list of polynomials for each slice.
-    voffset : float, optional
-        Vertical constant offset (pixels) to apply. A positive value
-        shifts the displayed objects upwards, while a negative value
-        shifts them downwards.
     traceid : bool, optional
         If True, overplot the trace ID at the center of each trace.
     vlim : tuple of float, optional
@@ -135,12 +132,16 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         # Plot the boundary polynomials
         if list_poly_left is not None and list_poly_right is not None:
             plot_fitted_boundary_polynomials(
-                ax, list_poly_left, list_poly_right, voffset, sliceid=False, isliceplot=islice
+                ax,
+                list_poly_left,
+                list_poly_right,
+                sliceid=False,
+                isliceplot=islice,
             )
         # Overplot the boundary borders
         if array_left_border is not None and array_right_border is not None and ibad is not None:
             plot_borders(
-                ax, array_left_border, array_right_border, ibad, voffset=voffset, sliceid=False, isliceplot=islice
+                ax, array_left_border, array_right_border, ibad, sliceid=False, isliceplot=islice
             )
         ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
         ymin = np.min(list_poly_left[islice](ixdum)) - 10
@@ -148,7 +149,7 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         ax.set_ylim(ymin, ymax)
         # Overplot the slice traces
         if list_poly_traces_all_slices is not None:
-            plot_traces(ax, list_poly_traces_all_slices, voffset=voffset, traceid=False, isliceplot=islice)
+            plot_traces(ax, list_poly_traces_all_slices, traceid=False, isliceplot=islice)
             if traceid:
                 ntraces = len(list_poly_traces_all_slices[islice])
                 xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
@@ -204,7 +205,7 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         subprocess.run(montage_command, check=True)
 
 
-def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset=0.0, sliceid=False, isliceplot=None):
+def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, sliceid=False, isliceplot=None):
     """Plot the fitted slice boundary polynomials on the given axes
 
     The polynomials are assumed to be fitted using as independent variable
@@ -220,10 +221,6 @@ def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffse
         The list of left slice boundary polynomials.
     list_poly_right : list of numpy.polynomial.Polynomial
         The list of right slice boundary polynomials.
-    voffset : float, optional
-        Vertical constant offset (pixels) to apply. A positive value
-        shifts the displayed objects upwards, while a negative value
-        shifts them downwards.
     sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
     isliceplot : int, optional
@@ -238,15 +235,15 @@ def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffse
         islice_range = [isliceplot]
     for islice in islice_range:
         if list_poly_left[islice] is not None:
-            ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
-            ax.plot(xdum, list_poly_left[islice](xdum) + voffset, color="C0", lw=2.0, alpha=0.7)
+            ax.plot(xdum, list_poly_left[islice](xdum), color="white", lw=5.0, alpha=0.7)
+            ax.plot(xdum, list_poly_left[islice](xdum), color="C0", lw=2.0, alpha=0.7)
         if list_poly_right[islice] is not None:
-            ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="white", lw=5.0, alpha=0.7)
-            ax.plot(xdum, list_poly_right[islice](xdum) + voffset, color="C1", lw=2.0, alpha=0.7)
+            ax.plot(xdum, list_poly_right[islice](xdum), color="white", lw=5.0, alpha=0.7)
+            ax.plot(xdum, list_poly_right[islice](xdum), color="C1", lw=2.0, alpha=0.7)
         if sliceid:
             if list_poly_left[islice] is not None and list_poly_right[islice] is not None:
                 xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
-                ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2 + voffset
+                ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
                 if ymin <= ycenter <= ymax:
                     ax.text(
                         xcenter,
@@ -267,7 +264,6 @@ def plot_borders(
     array_left_border,
     array_right_border,
     ibad,
-    voffset=0.0,
     sliceid=False,
     isliceplot=None,
     color="white",
@@ -287,10 +283,6 @@ def plot_borders(
         The array of right slice boundary borders (0-based indices).
     ibad : list of int
         List of indices of bad columns (to be ignored).
-    voffset : float, optional
-        Vertical constant offset (pixels) to apply. A positive value
-        shifts the displayed objects upwards, while a negative value
-        shifts them downwards.
     sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
     isliceplot : int, optional
@@ -313,15 +305,15 @@ def plot_borders(
         islice_range = [isliceplot]
 
     for islice in islice_range:
-        y_left = array_left_border[islice, ~ibad] + voffset
-        y_right = array_right_border[islice, ~ibad] + voffset
+        y_left = array_left_border[islice, ~ibad]
+        y_right = array_right_border[islice, ~ibad]
         if not np.all(np.isnan(y_left)):
             ax.plot(xplot, y_left, color=color, marker=marker, markersize=markersize, linestyle="None", alpha=alpha)
         if not np.all(np.isnan(y_right)):
             ax.plot(xplot, y_right, color=color, marker=marker, markersize=markersize, linestyle="None", alpha=alpha)
         if not np.all(np.isnan(y_left)) and not np.all(np.isnan(y_right)) and sliceid:
             xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
-            ycenter = (array_left_border[islice, int(xcenter)] + array_right_border[islice, int(xcenter)]) / 2 + voffset
+            ycenter = (array_left_border[islice, int(xcenter)] + array_right_border[islice, int(xcenter)]) / 2
             ax.text(
                 xcenter,
                 ycenter,
@@ -336,7 +328,7 @@ def plot_borders(
             )
 
 
-def plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, traceid=False, color="cyan", alpha=1.0, isliceplot=None):
+def plot_traces(ax, list_poly_traces_all_slices, traceid=False, color="cyan", alpha=1.0, isliceplot=None):
     """Plot the slice trace polynomials on the given axes
 
     The polynomials are assumed to be fitted using as independent variable
@@ -350,10 +342,6 @@ def plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, traceid=False, col
         The axes on which to plot the traces.
     list_poly_traces_all_slices : list of list of numpy.polynomial.Polynomial
         The list of polynomials for each slice.
-    voffset : float, optional
-        Vertical constant offset (pixels) to apply. A positive value
-        shifts the displayed objects upwards, while a negative value
-        shifts them downwards.
     traceid : bool, optional
         If True, overplot the trace ID at the center of each trace.
     color : str, optional
@@ -373,14 +361,14 @@ def plot_traces(ax, list_poly_traces_all_slices, voffset=0.0, traceid=False, col
         for itrace, poly in enumerate(list_poly_traces_all_slices[islice]):
             ax.plot(
                 xdum,
-                poly(xdum) + voffset,
+                poly(xdum),
                 color=color,
                 lw=1.0,
                 alpha=alpha,
             )
             if traceid:
                 xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
-                ycenter = poly(xcenter) + voffset
+                ycenter = poly(xcenter)
                 ax.text(
                     xcenter,
                     ycenter,
@@ -400,7 +388,7 @@ def overplot_slice_boundary_polynomials(
     input_borders,
     input_traces,
     image,
-    voffset=0.0,
+    voffset=[0.0],
     xlim=None,
     ylim=None,
     vlim=None,
@@ -445,10 +433,13 @@ def overplot_slice_boundary_polynomials(
         Y-axis limits for the plot (ymin, ymax); array indices (0-based).
     vlim : tuple of float, optional
         Background and foreground limits for the plot (vmin, vmax).
-    voffset : float, optional
-        Vertical constant offset (pixels) to apply to the polynomials.
-        A positive value shifts the polynomials upwards, while a negative
-        value shifts them downwards.
+    voffset : list of float, optional
+        Vertical offsets to apply to the slice boundaries (pixels).
+        If more than one value is provided, a polynomial of degree len(voffset)-1
+        will be fitted to the offsets and applied to the displayed
+        slice boundaries and polynomials. A positive value shifts the
+        displayed objects upwards (i.e., towards higher array indices
+        along NAXIS2).
     sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
     traceid : bool, optional
@@ -456,7 +447,7 @@ def overplot_slice_boundary_polynomials(
     pdf_mosaic : str, optional
         Path to the output PDF file where the mosaic will be saved.
     montage : str, optional
-        If provided, display a montage of the final plots with traces 
+        If provided, display a montage of the final plots with traces
         for every slice. Possible values are "png" or "pdf". 
         Requires ImageMagick's montage.
     output_dir : str, optional
@@ -468,12 +459,51 @@ def overplot_slice_boundary_polynomials(
     with fits.open(image) as hdul:
         image_data = hdul[0].data.astype(float)  # Convert to float for processing
 
+    # Compute polynomial to take into account voffset when plotting:
+    # - boundary data
+    # - boundary polynomials
+    # - trace polynomials
+    # Note that the voffset is applied to the slice boundaries and polynomials,
+    # but not to the image data.
+    if len(voffset) < 1:
+        raise ValueError("The list of vertical offsets (voffset) must contain at least one value.")
+    else:
+        if voffset != [0.0]:
+            logger.info(
+                f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets"
+            )
+        nvoffsets = len(voffset)
+        xdum_voffsets = np.linspace(
+            FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
+            FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value - 1,
+            nvoffsets,
+        )  # using array indices (0 based)
+        if logger.isEnabledFor(logging.DEBUG):
+            debugplot = 2
+        else:
+            debugplot = 0
+        poly_voffset, _ = polfit_residuals(
+            x=xdum_voffsets,
+            y=np.array(voffset),
+            deg=len(voffset) - 1,
+            xlabel="array index along NAXIS1",
+            ylabel="array index along NAXIS2",
+            title=f"Vertical offset to be applied",
+            debugplot=debugplot,
+        )
+
     # Read the boundary polynomial coefficients from the input FITS file
     if input_poly is not None or input_traces is not None:
         if input_poly is not None:
             list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(input_poly)
         else:
             list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(input_traces)
+        # apply requested voffset
+        for islice in range(FRIDA_NSLICES):
+            if list_poly_left[islice] is not None:
+                list_poly_left[islice] += poly_voffset
+            if list_poly_right[islice] is not None:
+                list_poly_right[islice] += poly_voffset
     else:
         list_poly_left, list_poly_right, poldeg = None, None, None
 
@@ -485,6 +515,10 @@ def overplot_slice_boundary_polynomials(
         logger.info(
             f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from\n[blue]{input_borders}[/blue]."
         )
+        # apply requested voffset
+        xdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
+        array_left_border += poly_voffset(xdum)
+        array_right_border += poly_voffset(xdum)
     else:
         array_left_border, array_right_border, ibad, uuid_borders, islice_ok = None, None, None, None, None
 
@@ -494,6 +528,11 @@ def overplot_slice_boundary_polynomials(
         logger.info(
             f"Read {len(list_poly_traces_all_slices)} slices with {len(list_poly_traces_all_slices[0])} traces per slice from\n[blue]{input_traces}[/blue]."
         )
+        # apply requested voffset
+        for islice in range(FRIDA_NSLICES):
+            for itrace in range(len(list_poly_traces_all_slices[islice])):
+                if list_poly_traces_all_slices[islice][itrace] is not None:
+                    list_poly_traces_all_slices[islice][itrace] += poly_voffset
     else:
         list_poly_traces_all_slices = [None] * FRIDA_NSLICES
 
@@ -522,7 +561,6 @@ def overplot_slice_boundary_polynomials(
             array_right_border=array_right_border,
             ibad=ibad,
             list_poly_traces_all_slices=list_poly_traces_all_slices,
-            voffset=voffset,
             traceid=traceid,
             vlim=vlim,
         )
@@ -555,16 +593,21 @@ def overplot_slice_boundary_polynomials(
         ax.set_ylim(ylim)
         # Plot the boundary polynomials
         if input_poly is not None or input_traces is not None:
-            plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, voffset, sliceid)
+            plot_fitted_boundary_polynomials(
+                ax,
+                list_poly_left,
+                list_poly_right,
+                sliceid,
+            )
         # Overplot the boundary borders
         if input_borders is not None:
             sliceid_ = sliceid
             if input_poly is not None:
                 sliceid_ = False  # Avoid overplotting slice IDs twice
-            plot_borders(ax, array_left_border, array_right_border, ibad, voffset=voffset, sliceid=sliceid_)
+            plot_borders(ax, array_left_border, array_right_border, ibad, sliceid=sliceid_)
         # Overplot the slice traces
         if input_traces is not None:
-            plot_traces(ax, list_poly_traces_all_slices, voffset=voffset, traceid=traceid)
+            plot_traces(ax, list_poly_traces_all_slices, traceid=traceid)
 
         mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
         mpl.rcParams["keymap.back"] = []  # disable 'c'
@@ -657,7 +700,14 @@ def main(args=None):
         "--traces", help="Path to the file with the slice trace polynomials (optional)", type=str, required=False
     )
     parser.add_argument("--image", help="Image to display boundaries on", type=str, required=False)
-    parser.add_argument("--voffset", help="Vertical constant offset (pixels) to apply", type=float, default=0.0)
+    parser.add_argument(
+        "--voffset",
+        help="Vertical offset to apply to the slice boundaries (default: 0.0 pixels; + upward, - downward). "
+        "If more than one value is provided, a polynomial of degree len(voffset)-1 will be fitted to the offsets and applied to the slice boundaries.",
+        type=float,
+        nargs="+",
+        default=[0.0],
+    )
     parser.add_argument("--sliceid", help="Overplot slice ID", action="store_true")
     parser.add_argument("--traceid", help="Overplot trace ID", action="store_true")
     parser.add_argument(
