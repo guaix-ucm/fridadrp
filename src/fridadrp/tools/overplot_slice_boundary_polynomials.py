@@ -15,6 +15,7 @@ from astropy.visualization import ZScaleInterval
 import logging
 import matplotlib as mpl
 from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
@@ -118,7 +119,9 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         FRIDA_NSLICES - 1, -1, -1
     ):  # (0-based index) loop in reverse order to have the first slice on top of the PDF
         sliceid = sliceid_from_sliceindex(islice)
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # the figure is only saved in the PDF file
+        fig = Figure(figsize=(10, 6))
+        ax = fig.subplots()
         tea.imshow(
             fig,
             ax,
@@ -172,9 +175,8 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
                             bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
                         )
         #
-        plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
+        fig.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
         pdf_out.savefig(fig, bbox_inches="tight")
-        plt.close(fig)
     pdf_out.close()
 
     # Check montage
