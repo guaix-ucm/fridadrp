@@ -184,7 +184,8 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         montage_executable = find_imagemagick_montage_executable()
         if montage_executable is None:
             raise ValueError(
-                "The --montage option is defined, but the ImageMagick 'montage' executable is not found in the system PATH. Please install ImageMagick or provide a valid path to the 'montage' executable."
+                "The --montage option is defined, but the ImageMagick 'montage' executable is not found "
+                "in the system PATH. Please install ImageMagick or provide a valid path to the 'montage' executable."
             )
         else:
             logger.info(f"ImageMagick 'montage' executable found at: [green]{montage_executable}[/green]")
@@ -448,7 +449,7 @@ def overplot_slice_boundary_polynomials(
         Path to the output PDF file where the mosaic will be saved.
     montage : str, optional
         If provided, display a montage of the final plots with traces
-        for every slice. Possible values are "png" or "pdf". 
+        for every slice. Possible values are "png" or "pdf".
         Requires ImageMagick's montage.
     output_dir : str, optional
         Path to the output directory where the PDF mosaic will be saved.
@@ -488,16 +489,16 @@ def overplot_slice_boundary_polynomials(
             deg=len(voffset) - 1,
             xlabel="array index along NAXIS1",
             ylabel="array index along NAXIS2",
-            title=f"Vertical offset to be applied",
+            title="Vertical offset to be applied",
             debugplot=debugplot,
         )
 
     # Read the boundary polynomial coefficients from the input FITS file
     if input_poly is not None or input_traces is not None:
         if input_poly is not None:
-            list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(input_poly)
+            list_poly_left, list_poly_right, _ = read_slice_boundary_polynomials(input_poly)
         else:
-            list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(input_traces)
+            list_poly_left, list_poly_right, _ = read_slice_boundary_polynomials(input_traces)
         # apply requested voffset
         for islice in range(FRIDA_NSLICES):
             if list_poly_left[islice] is not None:
@@ -505,28 +506,30 @@ def overplot_slice_boundary_polynomials(
             if list_poly_right[islice] is not None:
                 list_poly_right[islice] += poly_voffset
     else:
-        list_poly_left, list_poly_right, poldeg = None, None, None
+        list_poly_left, list_poly_right = None, None
 
     # Read the boundary borders from the input file and overplot them on the image
     if input_borders is not None:
-        array_left_border, array_right_border, ibad, uuid_borders, islice_ok = read_slice_boundary_borders(
+        array_left_border, array_right_border, ibad, _, _ = read_slice_boundary_borders(
             input_borders
         )
         logger.info(
-            f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders from\n[blue]{input_borders}[/blue]."
+            f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders "
+            f"from\n[blue]{input_borders}[/blue]."
         )
         # apply requested voffset
         xdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
         array_left_border += poly_voffset(xdum)
         array_right_border += poly_voffset(xdum)
     else:
-        array_left_border, array_right_border, ibad, uuid_borders, islice_ok = None, None, None, None, None
+        array_left_border, array_right_border, ibad = None, None, None
 
     # Read the slice trace polynomials from the input file and overplot them on the image
     if input_traces is not None:
         list_poly_traces_all_slices = read_slice_trace_polynomials(input_traces)
         logger.info(
-            f"Read {len(list_poly_traces_all_slices)} slices with {len(list_poly_traces_all_slices[0])} traces per slice from\n[blue]{input_traces}[/blue]."
+            f"Read {len(list_poly_traces_all_slices)} slices with {len(list_poly_traces_all_slices[0])} traces "
+            f"per slice from\n[blue]{input_traces}[/blue]."
         )
         # apply requested voffset
         for islice in range(FRIDA_NSLICES):
@@ -612,11 +615,12 @@ def overplot_slice_boundary_polynomials(
         mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
         mpl.rcParams["keymap.back"] = []  # disable 'c'
         mpl.rcParams["keymap.forward"] = []  # disable 'v' (conflict with 'v' for setting vmin/vmax)
-        init_xylimits = ax.get_xlim(), ax.get_ylim()
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        init_xylimits = xlim, ylim
 
         def on_key(event):
             nonlocal vmin, vmax
-            nonlocal init_xylimits
             if event.key == "?":
                 logger.info("-" * 79)
                 logger.info("'?': show this help message")
@@ -703,7 +707,8 @@ def main(args=None):
     parser.add_argument(
         "--voffset",
         help="Vertical offset to apply to the slice boundaries (default: 0.0 pixels; + upward, - downward). "
-        "If more than one value is provided, a polynomial of degree len(voffset)-1 will be fitted to the offsets and applied to the slice boundaries.",
+        "If more than one value is provided, a polynomial of degree len(voffset)-1 will be fitted "
+        "to the offsets and applied to the slice boundaries.",
         type=float,
         nargs="+",
         default=[0.0],
@@ -750,7 +755,8 @@ def main(args=None):
     # Check input files are defined
     if args.poly is None and args.borders is None and args.traces is None:
         raise ValueError(
-            "At least one of the input files (--poly or --borders or --traces) must be defined to overplot the slice boundaries."
+            "At least one of the input files (--poly or --borders or --traces) must be defined "
+            "to overplot the slice boundaries."
         )
     if args.poly is not None and args.traces is not None:
         raise ValueError(
@@ -770,13 +776,15 @@ def main(args=None):
     # Check that if traceid is defined, traces file must be provided
     if args.traceid and args.traces is None:
         raise ValueError(
-            "The --traceid option is defined, but no slice trace polynomials file is provided. Please provide a valid --traces file."
+            "The --traceid option is defined, but no slice trace polynomials file is provided. "
+            "Please provide a valid --traces file."
         )
 
     #
     if args.pdf_mosaic is not None and (args.xlim is not None or args.ylim is not None):
         logger.warning(
-            "Both --pdf-mosaic and --xlim/--ylim are defined. The --xlim/--ylim options will be ignored when generating the PDF mosaic."
+            "Both --pdf-mosaic and --xlim/--ylim are defined. The --xlim/--ylim options will be ignored "
+            "when generating the PDF mosaic."
         )
 
     # Overplot the slice boundary polynomials
