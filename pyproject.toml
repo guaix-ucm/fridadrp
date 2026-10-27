@@ -14,7 +14,6 @@ authors = [
     {name = "Sergio Pascual", email = "sergiopr@fis.ucm.es"}
 ]
 classifiers = [
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -33,8 +32,10 @@ dependencies = [
     "numina >= 0.40.0",
     "numpy >= 2",
     "pooch",
+    "scikit-image>=0.22",
     "shapely",
     "scipy",
+    "teareduce >= 0.7.9",
     "tqdm",
 ]
 
@@ -60,6 +61,7 @@ FRIDA = "fridadrp.loader:drp_load"
 fridadrp-ifu_simulator = "fridadrp.tools.frida_ifu_simulator:main"
 fridadrp-interpolate_traces_within_slices = "fridadrp.tools.interpolate_traces_within_slices:main"
 fridadrp-find_slice_boundary_borders_from_flat = "fridadrp.tools.find_slice_boundary_borders_from_flat:main"
+fridadrp-find_arc_lines = "fridadrp.tools.find_arc_lines:main"
 fridadrp-find_traces_within_slice_boundary_polynomials = "fridadrp.tools.find_traces_within_slice_boundary_polynomials:main"
 fridadrp-fit_slice_boundary_borders_with_polynomials = "fridadrp.tools.fit_slice_boundary_borders_with_polynomials:main"
 fridadrp-predict_polynomial_slice_borders = "fridadrp.tools.predict_polynomial_slice_borders:main"
