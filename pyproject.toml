@@ -30,7 +30,7 @@ dependencies = [
     "astropy",
     "joblib",
     "matplotlib",
-    "numina >= 0.40.0",
+    "numina >= 0.41.0",
     "numpy >= 2",
     "pooch",
     "scikit-image>=0.22",

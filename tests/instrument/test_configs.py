@@ -2,6 +2,7 @@ import pytest
 import astropy.io.fits as fits
 import numina.instrument.generic
 import numina.core
+from numina.instrument.assembly import configure_obresult
 from fridadrp.loader import drp_load
 
 
@@ -20,15 +21,11 @@ def create_simple_frame():
     ['c7f94f7d-1f57-4644-86d6-7004a2506680', 'c7f94f7d-1f57-4644-86d6-7004a2506680'],
 ])
 def test_loader1(conf, uuix):
-    import numina.core
-    from numina.instrument.assembly import assembly_instrument
-
     obs = numina.core.ObservationResult(instrument='FRIDA')
     obs.frames.append(create_simple_frame())
-    drpm = drp_load()
-    obs.configuration = conf
+    obs.profile = conf
 
-    key, date_obs, keyname = drpm.select_profile(obs)
-    ins = assembly_instrument(drpm.configurations, key, date_obs, by_key=keyname)
+    ins = configure_obresult(obs, drp_load())
     assert isinstance(ins, numina.instrument.generic.InstrumentGeneric)
     assert str(ins.origin.uuid) == uuix
+    assert obs.profile == uuix
