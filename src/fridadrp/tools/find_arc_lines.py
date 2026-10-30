@@ -35,7 +35,7 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
-from fridadrp.core import sliceid_from_sliceindex
+from fridadrp.core import sliceid_from_sliceindex, sliceindex_from_sliceid
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
@@ -213,6 +213,8 @@ def find_arc_lines(
     ylim=None,
     vlim=None,
     voffset=[0.0],
+    slicenum_list=[0],
+    sliceid_list=[0],
     denoise_patch_size=3,
     denoise_patch_distance=2,
     times_sigma_threshold=10.0,
@@ -246,6 +248,12 @@ def find_arc_lines(
         slice boundary polynomials. A positive value shifts the
         displayed polynomials upwards (i.e., towards higher array indices
         along NAXIS2).
+    slicenum_list : list of int, optional
+        List of slice numbers to process (1-based). If [0], all slices
+        will be processed. This parameter is mutually exclusive with `sliceid_list`.
+    sliceid_list : list of int, optional
+        List of slice IDs to process (1-based). If [0], all slices
+        will be processed. This parameter is mutually exclusive with `slicenum_list`.
     denoise_patch_size : int, optional
         Patch size for denoising (default: 3).
     denoise_patch_distance : int, optional
@@ -278,9 +286,29 @@ def find_arc_lines(
     # Initialize dictionary to store the list of arc line detections
     dict_arc_lines_detections = {}
 
+    # Avoid incompatible choices of slicenum and sliceid
+    if slicenum_list != [0] and sliceid_list != [0]:
+        raise ValueError("Cannot specify both slicenum_list and sliceid_list. Please choose one.")
+    if slicenum_list != [0] and 0 in slicenum_list:
+        raise ValueError("Invalid value in slicenum_list: 0. Use 0 only to indicate all slices.")
+    if sliceid_list != [0] and 0 in sliceid_list:
+        raise ValueError("Invalid value in sliceid_list: 0. Use 0 only to indicate all slices.")
+    if sliceid_list == [0]:
+        slicenum_to_process = slicenum_list
+    else:
+        slicenum_to_process = [int(sliceindex_from_sliceid(i) + 1) for i in sliceid_list]
+    if slicenum_to_process == [0]:
+        slicenum_to_process = list(range(1, FRIDA_NSLICES + 1))  # All slices
+    logger.debug(f"Slices to process: #{slicenum_to_process}")
+
+    # Check that the provided slice numbers are valid
+    for slicenum in slicenum_to_process:
+        if slicenum < 1 or slicenum > FRIDA_NSLICES:
+            raise ValueError(f"Invalid slice #{slicenum}. Must be between 1 and {FRIDA_NSLICES}.")
+
     # Main loop to detect arc lines in each slice
-    for islice in range(FRIDA_NSLICES):
-        slicenum = islice + 1
+    for slicenum in slicenum_to_process:
+        islice = slicenum - 1
         sliceid = sliceid_from_sliceindex(islice)
         logger.info("Processing slice #%2d / %2d (Slice ID: %2d)", slicenum, FRIDA_NSLICES, sliceid)
 
@@ -434,7 +462,7 @@ def find_arc_lines(
             title = f"Image: {Path(image).name}\n"
             subtitle = f"[Slice #{slicenum} / {FRIDA_NSLICES}, Slice ID: {sliceid}]"
             title += subtitle
-            fig, axarr = plt.subplots(nrows=3, ncols=2, figsize=(15, 10), sharex=True, sharey=True)
+            fig, axarr = plt.subplots(nrows=3, ncols=2, figsize=(12, 8), sharex=True, sharey=True)
             ax1, ax2, ax3, ax4, ax5, ax6 = axarr.flatten()
             tea.imshow(
                 fig,
@@ -677,7 +705,7 @@ def find_arc_lines(
         image_skewness[mask_slice] = filled_slice_skewness[mask_slice]
         image_kurtosis_excess[mask_slice] = filled_slice_kurtosis_excess[mask_slice]
 
-    fig, axarr = plt.subplots(nrows=2, ncols=2, figsize=(15, 12), sharex=True, sharey=True)
+    fig, axarr = plt.subplots(nrows=2, ncols=2, figsize=(12, 8), sharex=True, sharey=True)
     ax1, ax2, ax3, ax4 = axarr.flatten()
 
     # Display the four summary panels; a panel without finite values is not displayed
@@ -783,6 +811,22 @@ def main(args=None):
         default=[0.0],
     )
     parser.add_argument(
+        "--slicenum-list",
+        help=f"Slice number (from 1 to {FRIDA_NSLICES}; 0=ALL, default)",
+        type=int,
+        nargs="+",
+        default=[0],
+        choices=list(range(0, FRIDA_NSLICES + 1)),
+    )
+    parser.add_argument(
+        "--sliceid-list",
+        help=f"Slice ID (from 1 to {FRIDA_NSLICES}; 0=ALL, default)",
+        type=int,
+        nargs="+",
+        default=[0],
+        choices=list(range(0, FRIDA_NSLICES + 1)),
+    )
+    parser.add_argument(
         "--denoise-patch-size",
         help="Patch size for denoising (default: 3)",
         type=int,
@@ -851,6 +895,8 @@ def main(args=None):
         ylim=args.ylim,
         vlim=args.vlim,
         voffset=args.voffset,
+        slicenum_list=args.slicenum_list,
+        sliceid_list=args.sliceid_list,
         denoise_patch_size=args.denoise_patch_size,
         denoise_patch_distance=args.denoise_patch_distance,
         times_sigma_threshold=args.times_sigma_threshold,
