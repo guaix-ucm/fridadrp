@@ -35,7 +35,7 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
-from fridadrp.core import sliceid_from_sliceindex, sliceindex_from_sliceid
+from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
 from fridadrp.tools.interpolate_traces_within_slices import interpolate_traces_in_single_slice
@@ -220,7 +220,8 @@ def find_traces_within_slice_boundary_polynomials(
                 list_poly_right[islice] += voffset[0]
     else:
         logger.info(
-            f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets and applying it to slice boundary polynomials."
+            f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets "
+            "and applying it to slice boundary polynomials."
         )
         nvoffsets = len(voffset)
         xdum_voffset = np.linspace(
@@ -238,7 +239,7 @@ def find_traces_within_slice_boundary_polynomials(
             deg=len(voffset) - 1,
             xlabel="array index along NAXIS1",
             ylabel="array index along NAXIS2",
-            title=f"Vertical offset to be applied to all the slice boundary polynomials",
+            title="Vertical offset to be applied to all the slice boundary polynomials",
             debugplot=debugplot,
         )
         for islice in range(FRIDA_NSLICES):
@@ -267,7 +268,7 @@ def find_traces_within_slice_boundary_polynomials(
             ax=ax,
             list_poly_left=list_poly_left,
             list_poly_right=list_poly_right,
-            sliceid=True,
+            show_sliceid=True,
         )
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
@@ -351,10 +352,11 @@ def find_traces_within_slice_boundary_polynomials(
                     nmaxpeaks=ntraces,
                     nclean_around_peak=nclean_around_peaks,
                     nwinwidth=5,
-                    title=f"Slice {islice+1} (ID {sliceid}), Column {icolumn+1}",
+                    title=f"Slice #{islice+1} (ID {sliceid}), Column {icolumn+1}",
                     debugplot=debugplot,
                 )
-                # Ignore all the peaks when the first peak is at the first pixel of the y-data range, as it may be an artifact
+                # Ignore all the peaks when the first peak is at the first pixel of the y-data range,
+                # as it may be an artifact
                 if iypeaks[0] != 0:
                     # Refine the peak positions to sub-pixel accuracy
                     fypeaks, _ = refine_peaks_spectrum(
@@ -362,7 +364,7 @@ def find_traces_within_slice_boundary_polynomials(
                         ixpeaks=iypeaks,
                         nwinwidth=3,
                         method="poly2",
-                        title=f"Slice {islice+1} (ID {sliceid}), Column {icolumn+1}",
+                        title=f"Slice #{islice+1} (ID {sliceid}), Column {icolumn+1}",
                         debugplot=debugplot,
                     )
                     fypeaks_slice = fypeaks + ymin_left - 1  # Adjust the peak positions to the original y-data range
@@ -371,7 +373,7 @@ def find_traces_within_slice_boundary_polynomials(
                     )
                     if debugplot == 2:
                         logger.info(
-                            f"Slice {islice+1} (ID {sliceid}), Column {icolumn+1}: Found peaks at\n{fypeaks_slice}"
+                            f"Slice #{islice+1} (ID {sliceid}), Column {icolumn+1}: Found peaks at\n{fypeaks_slice}"
                         )
             # Fit polynomials to the traces found in the current slice
             collapsed_array2d_peaks_slice = np.sum(array2d_peaks_slice, axis=0)
@@ -421,7 +423,7 @@ def find_traces_within_slice_boundary_polynomials(
                             )
                             ax1.set_ylabel("array index along NAXIS2")
                             ax1.legend()
-                            ax1.set_title(f"Slice {islice+1} (ID {sliceid}), Trace {itrace+1} / {ntraces}")
+                            ax1.set_title(f"Slice #{islice+1} (ID {sliceid}), Trace {itrace+1} / {ntraces}")
                             ax2.scatter(xfit, residuals_theilsen, marker="o", color="b", edgecolor="k", s=75)
                             ax2.axhline(0, color="k", linestyle="--")
                             ax2.set_xlabel("array index along NAXIS1")
@@ -454,15 +456,15 @@ def find_traces_within_slice_boundary_polynomials(
                         vmax=vmax,
                         aspect="auto",
                         ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
-                        title=f"Slice {islice+1} (ID {sliceid}), Traces Found",
+                        title=f"Slice #{islice+1} (ID {sliceid}), Traces Found",
                     )
-                    # set sliceid=False in plot_fitted_boundary_polynomials to avoid a problem
-                    # in plt.tight_layout() when sliceid=True (it fails to compute the layout properly)
+                    # set show_sliceid=False in plot_fitted_boundary_polynomials to avoid a problem
+                    # in plt.tight_layout() when show_sliceid=True (it fails to compute the layout properly)
                     plot_fitted_boundary_polynomials(
                         ax=ax,
                         list_poly_left=list_poly_left,
                         list_poly_right=list_poly_right,
-                        sliceid=False,
+                        show_sliceid=False,
                     )
                     ymin = np.min(list_poly_left[islice](ixdum)) - 10
                     ymax = np.max(list_poly_right[islice](ixdum)) + 10
@@ -491,7 +493,9 @@ def find_traces_within_slice_boundary_polynomials(
                 list_poly_traces_all_slices.append(list_poly_traces_slice)
             else:
                 logger.warning(
-                    f"Slice {islice+1} (ID {sliceid}) has too few valid data points ({len(ixdum[~ibad_array2d_peaks_slice])}) to fit a polynomial of degree {deg}. At least {deg + 1} valid data points are required."
+                    f"Slice #{islice+1} (ID {sliceid}) has too few valid data points "
+                    f"({len(ixdum[~ibad_array2d_peaks_slice])}) "
+                    f"to fit a polynomial of degree {deg}. At least {deg + 1} valid data points are required."
                 )
         pbar.update()
     if len(icolumns_to_analyze) == 1:
@@ -499,7 +503,8 @@ def find_traces_within_slice_boundary_polynomials(
         sys.exit(0)  # Exit the program if only one column was analyzed, as no extrapolation is needed
     if len(list_poly_traces_all_slices) != FRIDA_NSLICES:
         logger.warning(
-            f"Expected {FRIDA_NSLICES} slices, but found {len(list_poly_traces_all_slices)} slices in the list of polynomial traces."
+            f"Expected {FRIDA_NSLICES} slices, but found {len(list_poly_traces_all_slices)} slices "
+            "in the list of polynomial traces."
         )
         logger.info("Exiting the program due to the mismatch in the number of slices.")
         sys.exit(0)
@@ -514,10 +519,12 @@ def find_traces_within_slice_boundary_polynomials(
             if islice not in allowed_islice_skipped:
                 sliceid = sliceid_from_sliceindex(islice)
                 logger.error(
-                    f"Slice {islice+1} (ID {sliceid}) was skipped, but it is not in the allowed list of skipped slices."
+                    f"Slice #{islice+1} (ID {sliceid}) was skipped, "
+                    "but it is not in the allowed list of skipped slices."
                 )
                 raise ValueError(
-                    f"Slice {islice+1} (ID {sliceid}) was skipped, but it is not in the allowed list of skipped slices."
+                    f"Slice #{islice+1} (ID {sliceid}) was skipped, "
+                    "but it is not in the allowed list of skipped slices."
                 )
 
     # Extrapolate the traces for the skipped slices using the traces from the same group of slices
@@ -540,7 +547,7 @@ def find_traces_within_slice_boundary_polynomials(
                 logger.info(f"Slice ID {sliceid} belongs to the group of slices with ID:\n{slicesid_group}.")
             else:
                 raise ValueError(
-                    f"Slice {islice+1} (ID {sliceid}) was skipped, "
+                    f"Slice #{islice+1} (ID {sliceid}) was skipped, "
                     f"but it is not the first or last slice. This should not happen."
                 )
             list_slicesid_to_fit = []
@@ -576,15 +583,15 @@ def find_traces_within_slice_boundary_polynomials(
                     vmax=vmax,
                     aspect="auto",
                     ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
-                    title=f"Slice {islice+1} (ID {sliceid}), Traces Found",
+                    title=f"Slice #{islice+1} (ID {sliceid}), Traces Found",
                 )
-                # set sliceid=False in plot_fitted_boundary_polynomials to avoid a problem
-                # in plt.tight_layout() when sliceid=True (it fails to compute the layout properly)
+                # set show_sliceid=False in plot_fitted_boundary_polynomials to avoid a problem
+                # in plt.tight_layout() when show_sliceid=True (it fails to compute the layout properly)
                 plot_fitted_boundary_polynomials(
                     ax=ax,
                     list_poly_left=list_poly_left,
                     list_poly_right=list_poly_right,
-                    sliceid=False,
+                    show_sliceid=False,
                 )
                 ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
                 ymin = np.min(list_poly_left[islice](ixdum)) - 10
@@ -592,8 +599,8 @@ def find_traces_within_slice_boundary_polynomials(
                 xcenter = np.mean(icolumns_to_analyze)
                 for itrace in range(ntraces):
                     if itrace == 0:
-                        label1 = f"extrapolated trace"
-                        label2 = f"extrapolated and refined trace"
+                        label1 = "extrapolated trace"
+                        label2 = "extrapolated and refined trace"
                     else:
                         label1 = None
                         label2 = None
@@ -619,7 +626,7 @@ def find_traces_within_slice_boundary_polynomials(
                         )
                 ax.set_ylim(ymin, ymax)
                 ax.legend()
-                plt.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
+                plt.tight_layout()  # Fails if show_sliceid=True in plot_fitted_boundary_polynomials
                 plt.show()
 
             # update the list of polynomial traces for all slices with the extrapolated
@@ -631,19 +638,19 @@ def find_traces_within_slice_boundary_polynomials(
         if list_poly_traces_all_slices[islice] is None:
             sliceid = sliceid_from_sliceindex(islice)
             raise ValueError(
-                f"Slice {islice+1} (ID {sliceid}) was skipped and could not be extrapolated from other slices."
+                f"Slice #{islice+1} (ID {sliceid}) was skipped and could not be extrapolated from other slices."
             )
         if len(list_poly_traces_all_slices[islice]) != ntraces:
             sliceid = sliceid_from_sliceindex(islice)
             raise ValueError(
-                f"Slice {islice+1} (ID {sliceid}) has {len(list_poly_traces_all_slices[islice])} traces, "
+                f"Slice #{islice+1} (ID {sliceid}) has {len(list_poly_traces_all_slices[islice])} traces, "
                 f"but {ntraces} traces were expected."
             )
         for itrace in range(ntraces):
             poly_trace = list_poly_traces_all_slices[islice][itrace]
             if poly_trace is None:
                 sliceid = sliceid_from_sliceindex(islice)
-                raise ValueError(f"Trace {itrace+1} of slice {islice+1} (ID {sliceid}) could not be fitted.")
+                raise ValueError(f"Trace #{itrace+1} of slice {islice+1} (ID {sliceid}) could not be fitted.")
 
     # save PDF file with the final plots of traces for every slice
     if pdf_out is not None:
@@ -659,7 +666,7 @@ def find_traces_within_slice_boundary_polynomials(
             list_poly_left=list_poly_left,
             list_poly_right=list_poly_right,
             list_poly_traces_all_slices=list_poly_traces_all_slices,
-            traceid=True,
+            show_traceid=True,
         )
     # return the list of polynomial traces for all slices
     return list_poly_left, list_poly_right, list_poly_traces_all_slices
@@ -675,7 +682,8 @@ def main(args=None):
     parser.add_argument(
         "--voffset",
         help="Vertical offset to apply to the slice boundaries (default: 0.0 pixels; + upward, - downward). "
-        "If more than one value is provided, a polynomial of degree len(voffset)-1 will be fitted to the offsets and applied to the slice boundaries.",
+        "If more than one value is provided, a polynomial of degree len(voffset)-1 will be fitted "
+        "to the offsets and applied to the slice boundaries.",
         type=float,
         nargs="+",
         default=[0.0],
@@ -689,7 +697,8 @@ def main(args=None):
     )
     parser.add_argument(
         "--nclean-around-peaks",
-        help="Number of pixels to clean at both sides of each peak (default: -1; set to zero pixels moving outward from the peak while the signal keeps decreasing)",
+        help="Number of pixels to clean at both sides of each peak (default: -1; set to zero pixels moving outward "
+        "from the peak while the signal keeps decreasing)",
         type=int,
         default=-1,
     )
@@ -778,7 +787,7 @@ def main(args=None):
     if args.plotsliceid is not None:
         for sliceid in args.plotsliceid:
             if sliceid < 1 or sliceid > FRIDA_NSLICES:
-                raise ValueError(f"Invalid slice id {sliceid}. Must be between 1 and {FRIDA_NSLICES}.")
+                raise ValueError(f"Invalid slice ID {sliceid}. Must be between 1 and {FRIDA_NSLICES}.")
 
     # Define the columns to analyze based on the specified column ranges
     columns_to_analyze = columns_to_analyze_from_colranges(args.colrange)
@@ -844,7 +853,7 @@ def main(args=None):
     for i in range(1, FRIDA_NSLICES + 1):
         primary_hdu.header[f"SLCNUM{i:02d}"] = (
             True,
-            f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is included",
+            f"Slice #{i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is included",
         )
     add_script_info_to_fits_history(primary_hdu.header, args, title="Traces within slice boundary polynomials")
     hdul = [primary_hdu, hdu1, hdu2, hdu3]
@@ -852,10 +861,10 @@ def main(args=None):
     for islice in range(FRIDA_NSLICES):
         sliceid = sliceid_from_sliceindex(islice)
         if list_poly_traces_all_slices[islice] is None:
-            raise ValueError(f"Slice {islice+1} (ID {sliceid}) has no traces. This should not happen.")
+            raise ValueError(f"Slice #{islice+1} (ID {sliceid}) has no traces. This should not happen.")
         if len(list_poly_traces_all_slices[islice]) != args.ntraces:
             raise ValueError(
-                f"Slice {islice+1} (ID {sliceid}) has {len(list_poly_traces_all_slices[islice])} traces, "
+                f"Slice #{islice+1} (ID {sliceid}) has {len(list_poly_traces_all_slices[islice])} traces, "
                 f"but {args.ntraces} traces were expected."
             )
         array2d_coeffs = np.full((args.ntraces, args.deg + 1), np.nan, dtype=float)

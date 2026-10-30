@@ -71,7 +71,7 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
     array_right_border=None,
     ibad=None,
     list_poly_traces_all_slices=None,
-    traceid=False,
+    show_traceid=False,
     vlim=None,
 ):
     """Plot the traces within the slice boundary polynomials for every slice in a PDF mosaic
@@ -100,7 +100,7 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         List of indices of bad columns (to be ignored).
     list_poly_traces_all_slices : list of list of numpy.polynomial.Polynomial, optional
         The list of polynomials for each slice.
-    traceid : bool, optional
+    show_traceid : bool, optional
         If True, overplot the trace ID at the center of each trace.
     vlim : tuple of float, optional
         Background and foreground limits for the plot (vmin, vmax).
@@ -130,7 +130,7 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
             vmax=vmax,
             aspect="auto",
             ds9mode=False,  # note that the polynomials are fitted using array indices (0-based)
-            title=title + f"\nSlice {islice + 1} (ID {sliceid})",
+            title=title + f"\nSlice num {islice + 1} (ID {sliceid})",
         )
         # Plot the boundary polynomials
         if list_poly_left is not None and list_poly_right is not None:
@@ -138,22 +138,20 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
                 ax,
                 list_poly_left,
                 list_poly_right,
-                sliceid=False,
+                show_sliceid=False,
                 isliceplot=islice,
             )
         # Overplot the boundary borders
         if array_left_border is not None and array_right_border is not None and ibad is not None:
-            plot_borders(
-                ax, array_left_border, array_right_border, ibad, sliceid=False, isliceplot=islice
-            )
+            plot_borders(ax, array_left_border, array_right_border, ibad, show_sliceid=False, isliceplot=islice)
         ixdum = np.arange(FRIDA_NAXIS1_HAWAII.value)  # (0-based)
         ymin = np.min(list_poly_left[islice](ixdum)) - 10
         ymax = np.max(list_poly_right[islice](ixdum)) + 10
         ax.set_ylim(ymin, ymax)
         # Overplot the slice traces
         if list_poly_traces_all_slices is not None:
-            plot_traces(ax, list_poly_traces_all_slices, traceid=False, isliceplot=islice)
-            if traceid:
+            plot_traces(ax, list_poly_traces_all_slices, show_traceid=False, isliceplot=islice)
+            if show_traceid:
                 ntraces = len(list_poly_traces_all_slices[islice])
                 xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
                 for itrace in range(ntraces):
@@ -175,7 +173,7 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
                             bbox=dict(facecolor="black", alpha=0.3, edgecolor="black", boxstyle="round,pad=0.5"),
                         )
         #
-        fig.tight_layout()  # Fails if sliceid=True in plot_fitted_boundary_polynomials
+        fig.tight_layout()  # Fails if show_sliceid=True in plot_fitted_boundary_polynomials
         pdf_out.savefig(fig, bbox_inches="tight")
     pdf_out.close()
 
@@ -197,18 +195,22 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         logger.info(f"Creating montage of the final plots in file:\n[green]{montage_output}[/green]")
         montage_command = [
             montage_executable,
-            "-density", "300",
+            "-density",
+            "300",
             str(pdf_output_path),
-            "-tile", "6x5",
-            "-geometry", "600x375+5+5",
-            "-background", "white",
+            "-tile",
+            "6x5",
+            "-geometry",
+            "600x375+5+5",
+            "-background",
+            "white",
             str(montage_output),
         ]
         logger.debug(f"Running montage command: {' '.join(montage_command)}")
         subprocess.run(montage_command, check=True)
 
 
-def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, sliceid=False, isliceplot=None):
+def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=None):
     """Plot the fitted slice boundary polynomials on the given axes
 
     The polynomials are assumed to be fitted using as independent variable
@@ -224,7 +226,7 @@ def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, slicei
         The list of left slice boundary polynomials.
     list_poly_right : list of numpy.polynomial.Polynomial
         The list of right slice boundary polynomials.
-    sliceid : bool, optional
+    show_sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
     isliceplot : int, optional
         If provided, only plot the polynomials for the specified slice index (0-based).
@@ -243,7 +245,7 @@ def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, slicei
         if list_poly_right[islice] is not None:
             ax.plot(xdum, list_poly_right[islice](xdum), color="white", lw=5.0, alpha=0.7)
             ax.plot(xdum, list_poly_right[islice](xdum), color="C1", lw=2.0, alpha=0.7)
-        if sliceid:
+        if show_sliceid:
             if list_poly_left[islice] is not None and list_poly_right[islice] is not None:
                 xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
                 ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
@@ -267,7 +269,7 @@ def plot_borders(
     array_left_border,
     array_right_border,
     ibad,
-    sliceid=False,
+    show_sliceid=False,
     isliceplot=None,
     color="white",
     marker=".",
@@ -286,7 +288,7 @@ def plot_borders(
         The array of right slice boundary borders (0-based indices).
     ibad : list of int
         List of indices of bad columns (to be ignored).
-    sliceid : bool, optional
+    show_sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
     isliceplot : int, optional
         If provided, only plot the borders for the specified slice index (0-based).
@@ -314,7 +316,7 @@ def plot_borders(
             ax.plot(xplot, y_left, color=color, marker=marker, markersize=markersize, linestyle="None", alpha=alpha)
         if not np.all(np.isnan(y_right)):
             ax.plot(xplot, y_right, color=color, marker=marker, markersize=markersize, linestyle="None", alpha=alpha)
-        if not np.all(np.isnan(y_left)) and not np.all(np.isnan(y_right)) and sliceid:
+        if not np.all(np.isnan(y_left)) and not np.all(np.isnan(y_right)) and show_sliceid:
             xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
             ycenter = (array_left_border[islice, int(xcenter)] + array_right_border[islice, int(xcenter)]) / 2
             ax.text(
@@ -331,7 +333,7 @@ def plot_borders(
             )
 
 
-def plot_traces(ax, list_poly_traces_all_slices, traceid=False, color="cyan", alpha=1.0, isliceplot=None):
+def plot_traces(ax, list_poly_traces_all_slices, show_traceid=False, color="cyan", alpha=1.0, isliceplot=None):
     """Plot the slice trace polynomials on the given axes
 
     The polynomials are assumed to be fitted using as independent variable
@@ -345,7 +347,7 @@ def plot_traces(ax, list_poly_traces_all_slices, traceid=False, color="cyan", al
         The axes on which to plot the traces.
     list_poly_traces_all_slices : list of list of numpy.polynomial.Polynomial
         The list of polynomials for each slice.
-    traceid : bool, optional
+    show_traceid : bool, optional
         If True, overplot the trace ID at the center of each trace.
     color : str, optional
         Color of the lines for the traces.
@@ -369,7 +371,7 @@ def plot_traces(ax, list_poly_traces_all_slices, traceid=False, color="cyan", al
                 lw=1.0,
                 alpha=alpha,
             )
-            if traceid:
+            if show_traceid:
                 xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
                 ycenter = poly(xcenter)
                 ax.text(
@@ -395,8 +397,8 @@ def overplot_slice_boundary_polynomials(
     xlim=None,
     ylim=None,
     vlim=None,
-    sliceid=False,
-    traceid=False,
+    show_sliceid=False,
+    show_traceid=False,
     pdf_mosaic=False,
     montage=None,
     output_dir=".",
@@ -443,9 +445,9 @@ def overplot_slice_boundary_polynomials(
         slice boundaries and polynomials. A positive value shifts the
         displayed objects upwards (i.e., towards higher array indices
         along NAXIS2).
-    sliceid : bool, optional
+    show_sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
-    traceid : bool, optional
+    show_traceid : bool, optional
         If True, overplot the trace ID at the center of each trace.
     pdf_mosaic : str, optional
         Path to the output PDF file where the mosaic will be saved.
@@ -472,9 +474,7 @@ def overplot_slice_boundary_polynomials(
         raise ValueError("The list of vertical offsets (voffset) must contain at least one value.")
     else:
         if voffset != [0.0]:
-            logger.info(
-                f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets"
-            )
+            logger.info(f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets")
         nvoffsets = len(voffset)
         xdum_voffsets = np.linspace(
             FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
@@ -512,9 +512,7 @@ def overplot_slice_boundary_polynomials(
 
     # Read the boundary borders from the input file and overplot them on the image
     if input_borders is not None:
-        array_left_border, array_right_border, ibad, _, _ = read_slice_boundary_borders(
-            input_borders
-        )
+        array_left_border, array_right_border, ibad, _, _ = read_slice_boundary_borders(input_borders)
         logger.info(
             f"Read {len(array_left_border)} left borders and {len(array_right_border)} right borders "
             f"from\n[blue]{input_borders}[/blue]."
@@ -566,7 +564,7 @@ def overplot_slice_boundary_polynomials(
             array_right_border=array_right_border,
             ibad=ibad,
             list_poly_traces_all_slices=list_poly_traces_all_slices,
-            traceid=traceid,
+            show_traceid=show_traceid,
             vlim=vlim,
         )
     else:
@@ -602,17 +600,17 @@ def overplot_slice_boundary_polynomials(
                 ax,
                 list_poly_left,
                 list_poly_right,
-                sliceid,
+                show_sliceid,
             )
         # Overplot the boundary borders
         if input_borders is not None:
-            sliceid_ = sliceid
+            show_sliceid_ = show_sliceid
             if input_poly is not None:
-                sliceid_ = False  # Avoid overplotting slice IDs twice
-            plot_borders(ax, array_left_border, array_right_border, ibad, sliceid=sliceid_)
+                show_sliceid_ = False  # Avoid overplotting slice IDs twice
+            plot_borders(ax, array_left_border, array_right_border, ibad, show_sliceid=show_sliceid_)
         # Overplot the slice traces
         if input_traces is not None:
-            plot_traces(ax, list_poly_traces_all_slices, traceid=traceid)
+            plot_traces(ax, list_poly_traces_all_slices, show_traceid=show_traceid)
 
         mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
         mpl.rcParams["keymap.back"] = []  # disable 'c'
@@ -715,8 +713,8 @@ def main(args=None):
         nargs="+",
         default=[0.0],
     )
-    parser.add_argument("--sliceid", help="Overplot slice ID", action="store_true")
-    parser.add_argument("--traceid", help="Overplot trace ID", action="store_true")
+    parser.add_argument("--show-sliceid", help="Overplot slice ID", action="store_true")
+    parser.add_argument("--show-traceid", help="Overplot trace ID", action="store_true")
     parser.add_argument(
         "--xlim",
         help="X-axis limits for the plot (xmin, xmax); array indices (1-based along NAXIS1 axis)",
@@ -769,16 +767,16 @@ def main(args=None):
     if args.image is None:
         logger.warning("No input image file defined. The slice boundaries will not be overplotted on an image.")
 
-    # Check that both sliceid and traceid are not defined at the same time
-    if args.sliceid and args.traceid:
+    # Check that both show_sliceid and show_traceid are not defined at the same time
+    if args.show_sliceid and args.show_traceid:
         raise ValueError(
-            "Both --sliceid and --traceid are defined. Please define only one of them to overplot the IDs."
+            "Both --show-sliceid and --show-traceid are defined. Please define only one of them to overplot the IDs."
         )
 
-    # Check that if traceid is defined, traces file must be provided
-    if args.traceid and args.traces is None:
+    # Check that if show_traceid is defined, traces file must be provided
+    if args.show_traceid and args.traces is None:
         raise ValueError(
-            "The --traceid option is defined, but no slice trace polynomials file is provided. "
+            "The --show-traceid option is defined, but no slice trace polynomials file is provided. "
             "Please provide a valid --traces file."
         )
 
@@ -799,8 +797,8 @@ def main(args=None):
         ylim=args.ylim,
         vlim=args.vlim,
         voffset=args.voffset,
-        sliceid=args.sliceid,
-        traceid=args.traceid,
+        show_sliceid=args.show_sliceid,
+        show_traceid=args.show_traceid,
         pdf_mosaic=args.pdf_mosaic,
         montage=args.montage,
         output_dir=args.output_dir,

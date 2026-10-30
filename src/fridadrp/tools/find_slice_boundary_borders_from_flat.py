@@ -831,12 +831,12 @@ def main(args=None):
             if i in range(args.slice_ini, args.slice_end + 1):
                 primary_hdu.header[f"SLCNUM{i:02d}"] = (
                     True,
-                    f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is included",
+                    f"Slice #{i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is included",
                 )
             else:
                 primary_hdu.header[f"SLCNUM{i:02d}"] = (
                     False,
-                    f"Slice number {i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is not included",
+                    f"Slice #{i:02d} (ID: {sliceid_from_sliceindex(i-1):02d}) is not included",
                 )
         add_script_info_to_fits_history(primary_hdu.header, args, title="Slice boundary borders from flat image")
         hdul = fits.HDUList([primary_hdu, hdu1, hdu2, hdu3])

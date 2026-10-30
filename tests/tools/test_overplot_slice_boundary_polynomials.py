@@ -24,7 +24,7 @@ def test_mosaic_pdf(tmp_path):
         list_poly_left=list_poly_left,
         list_poly_right=list_poly_right,
         list_poly_traces_all_slices=traces,
-        traceid=True,
+        show_traceid=True,
     )
     assert pdf_output.stat().st_size > 0
     assert plt.get_fignums() == before

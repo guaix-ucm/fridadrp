@@ -344,7 +344,8 @@ def interpolate_traces_within_slices(
     # Read also the trace polynomials
     list_poly_traces_all_slices = read_slice_trace_polynomials(input_traces)
     logger.info(
-        f"Read {len(list_poly_traces_all_slices)} slices with {len(list_poly_traces_all_slices[0])} traces per slice from\n[blue]{input_traces}[/blue]."
+        f"Read {len(list_poly_traces_all_slices)} slices with {len(list_poly_traces_all_slices[0])} "
+        f"traces per slice from\n[blue]{input_traces}[/blue]."
     )
     deg = len(list_poly_traces_all_slices[0][0].coef) - 1  # Degree of the trace polynomials
     logger.info(f"Degree of the trace polynomials: {deg}")
@@ -423,10 +424,10 @@ def interpolate_traces_within_slices(
                 ax,
                 list_poly_left,
                 list_poly_right,
-                sliceid=False,
+                show_sliceid=False,
                 isliceplot=islice,
             )
-            plot_traces(ax, list_poly_traces_all_slices, traceid=False, isliceplot=islice)
+            plot_traces(ax, list_poly_traces_all_slices, show_traceid=False, isliceplot=islice)
             ntraces = len(list_poly_traces_all_slices[islice])
             if refine:
                 kmax = 3
@@ -445,7 +446,7 @@ def interpolate_traces_within_slices(
                         xcenter = xcenter1
                         color = "C1"
                         if itrace == 0:
-                            label = f"Initial traces"
+                            label = "Initial traces"
                     elif k == 1:
                         poly_trace = list_poly_traces_slice[itrace]
                         xcenter = xcenter2
@@ -454,13 +455,13 @@ def interpolate_traces_within_slices(
                         else:
                             color = "magenta"
                         if itrace == 0:
-                            label = f"Interpolated traces"
+                            label = "Interpolated traces"
                     elif k == 2:
                         poly_trace = list_poly_traces_slice_refined[itrace]
                         xcenter = xcenter3
                         color = "white"
                         if itrace == 0:
-                            label = f"Refined interpolated traces"
+                            label = "Refined interpolated traces"
                     else:
                         raise ValueError(f"Unexpected value of k: {k}")
                     ytrace = poly_trace(icolumns_to_analyze)
