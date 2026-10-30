@@ -180,7 +180,7 @@ def main(args=None):
 
     # Set output file name if not defined
     if args.output is None:
-        args.output = f"slice_boundary_polynomials.fits"
+        args.output = "slice_boundary_polynomials.fits"
     # Check and set the output file path, creating the output directory if necessary
     output_fname = check_output_file_overwrite(args.output, args.output_dir, args.overwrite)
 
