@@ -88,7 +88,9 @@ def retrieve_initial_data(image, input_poly, xlim=None, voffset=[0.0]):
         raise ValueError("The list of vertical offsets (voffset) must contain at least one value.")
     else:
         if voffset != [0.0]:
-            logger.info(f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets")
+            logger.info(
+                f"Fitting a polynomial of degree {len(voffset)-1} " "to the vertical offsets (boundary polynomials)"
+            )
         nvoffsets = len(voffset)
         xdum_voffsets = np.linspace(
             FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
@@ -220,6 +222,8 @@ def find_arc_lines(
     times_sigma_threshold=10.0,
     minheight_percentage=80.0,
     maxwidth_pixels=None,
+    nwinwidth_search_peaks=5,
+    nwinwidth_refine_peaks=3,
     show_sliceid=False,
     allplots=False,
 ):
@@ -265,6 +269,11 @@ def find_arc_lines(
         of the maximum height of the slice at the line location (default: 80.0).
     maxwidth_pixels : float, optional
         The maximum width of the detected arc lines in pixels.
+    nwinwidth_search_peaks : int, optional
+        The window width (in pixels) for searching peaks in the arc line characterization.
+    nwinwidth_refine_peaks : int, optional
+        The window width (in pixels) for refining peaks in the arc line characterization.
+        It must be less than or equal to `nwinwidth_search_peaks`.
     show_sliceid : bool, optional
         If True, overplot the slice ID at the center of each slice.
     allplots : bool, optional
@@ -272,6 +281,18 @@ def find_arc_lines(
 
     """
     logger = logging.getLogger(__name__)
+
+    # Check some relevant input parameters
+    if nwinwidth_search_peaks < 3:
+        raise ValueError(f"{nwinwidth_search_peaks=} must be at least 3")
+    if nwinwidth_search_peaks % 2 == 0:
+        raise ValueError(f"{nwinwidth_search_peaks=} must be odd")
+    if nwinwidth_refine_peaks < 3:
+        raise ValueError(f"{nwinwidth_refine_peaks=} must be at least 3")
+    if nwinwidth_refine_peaks % 2 == 0:
+        raise ValueError(f"{nwinwidth_refine_peaks=} must be odd")
+    if nwinwidth_refine_peaks > nwinwidth_search_peaks:
+        raise ValueError(f"{nwinwidth_refine_peaks=} must be less than or equal to {nwinwidth_search_peaks=}")
 
     # Retrieve initial data
     image_data, list_poly_left, list_poly_right, xlim = retrieve_initial_data(image, input_poly, xlim, voffset)
@@ -404,7 +425,23 @@ def find_arc_lines(
         sigmag = 0.7413 * (q75 - q25)  # robust standard deviation
         threshold = q50 + times_sigma_threshold * sigmag  # threshold for arc line detection
         image_slice_denoised[np.isnan(image_slice_denoised)] = 0.0  # Set NaN values to zero for labeling
-        labels_arc_lines, num_features = ndimage.label(image_slice_denoised > threshold)
+        # Binary mask and initial labelling (labels follow row-major scan order)
+        mask_to_find_arc_lines = image_slice_denoised > threshold
+        labels_arc_lines, num_features = ndimage.label(mask_to_find_arc_lines)
+        # X coordinate (column index) of the centroid of each feature.
+        # Using the boolean mask gives unweighted (geometric) centroids;
+        # pass image_slice_denoised instead to get flux-weighted centroids.
+        centroids = ndimage.center_of_mass(
+            mask_to_find_arc_lines, labels_arc_lines, index=np.arange(1, num_features + 1)
+        )
+        xcentroids = np.array([c[1] for c in centroids])
+        # order[k] is the (0-based) old label of the k-th feature from the left
+        order = np.argsort(xcentroids, kind="stable")
+        # Lookup table: old label -> new label (0 = background is preserved)
+        lut = np.zeros(num_features + 1, dtype=labels_arc_lines.dtype)
+        lut[order + 1] = np.arange(1, num_features + 1)
+        # Relabelled image: label 1 is now the leftmost feature
+        labels_arc_lines = lut[labels_arc_lines]
 
         if num_features > 0:
             # Select arc lines by imposing a condition based on the dimensions
@@ -428,13 +465,10 @@ def find_arc_lines(
                         valid = height >= minheight
                     else:
                         valid = height >= minheight and width <= maxwidth_pixels
-                    arc_line_table.add_row([i, average_x, height, minheight, width, valid])
+                    arc_line_table.add_row([i + 1, average_x, height, minheight, width, valid])
                 else:
-                    arc_line_table.add_row([i, np.nan, np.nan, np.nan, np.nan, False])
+                    arc_line_table.add_row([i + 1, np.nan, np.nan, np.nan, np.nan, False])
             num_valid_arc_lines = np.sum(arc_line_table["valid"])
-            arc_line_table.sort("x_pos")  # sort the table by x_pos
-            # sort the candidate_arc_line_slices according to the sorted table
-            candidate_arc_line_slices = [candidate_arc_line_slices[i] for i in arc_line_table["feature"]]
         else:
             logger.warning(
                 "Slice #%2d (Slice ID: %2d) has no detected arc lines. Skipping this slice.",
@@ -533,24 +567,28 @@ def find_arc_lines(
             ax4.set_ylim(ylim)
             plot_fitted_boundary_polynomials(ax4, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
 
+            # Display the detected arc lines
             if num_features > 0:
-                # Display the detected arc lines
                 title = "Detected arc lines\n"
                 title += subtitle
+                cmap = plt.cm.rainbow.copy()
+                cmap.set_under("white")
                 tea.imshow(
                     fig,
                     ax5,
                     labels_arc_lines,
-                    vmin=0,
+                    vmin=1,
                     vmax=num_features,
                     aspect="auto",
                     title=title,
-                    cmap="nipy_spectral",
+                    cmap=cmap,
                     cblabel="Object label",
                 )
                 ax5.set_xlim(xlim)
                 ax5.set_ylim(ylim)
-                plot_fitted_boundary_polynomials(ax5, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
+                plot_fitted_boundary_polynomials(
+                    ax5, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
+                )
 
                 # Display the valid arc lines after selection
                 title = "Valid arc lines after selection\n"
@@ -559,11 +597,11 @@ def find_arc_lines(
                     fig,
                     ax6,
                     labels_arc_lines,
-                    vmin=0,
+                    vmin=1,
                     vmax=num_features,
                     aspect="auto",
                     title=title,
-                    cmap="nipy_spectral",
+                    cmap=cmap,
                     cblabel="Object label",
                 )
                 for k in range(num_features):
@@ -573,14 +611,16 @@ def find_arc_lines(
                             (slice_x.start, slice_y.start),
                             slice_x.stop - slice_x.start,
                             slice_y.stop - slice_y.start,
-                            edgecolor="white",
+                            edgecolor="black",
                             facecolor="none",
-                            linewidth=1.5,
+                            linewidth=0.5,
                         )  # plot a rectangle around the valid arc line
                         ax6.add_patch(rect)
                 ax6.set_xlim(xlim)
                 ax6.set_ylim(ylim)
-                plot_fitted_boundary_polynomials(ax6, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
+                plot_fitted_boundary_polynomials(
+                    ax6, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
+                )
             else:
                 # Do not display the last two plots if there are no detected arc lines
                 ax5.axis("off")
@@ -598,6 +638,8 @@ def find_arc_lines(
         slice_skewness = np.full((FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
         slice_kurtosis_excess = np.full((FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
         if num_valid_arc_lines > 0:
+            if allplots:
+                next_feature_id_to_be_displayed = 1
             for k in range(num_features):
                 if arc_line_table["valid"][k]:
                     slice_y, slice_x = candidate_arc_line_slices[k]
@@ -616,35 +658,41 @@ def find_arc_lines(
                     feature_id = arc_line_table["feature"][k]
                     logger.debug(f"feature_id: {feature_id}")
                     # Find the indices of the pixels that belong to the valid arc line
-                    iok = np.argwhere(labels_arc_lines == feature_id + 1)  # +1 because labels start from 1
-                    if allplots:
+                    iok = np.argwhere(labels_arc_lines == feature_id)
+                    if allplots and feature_id >= next_feature_id_to_be_displayed:
+                        allplots_effective = True
                         arc_line_box = image_slice_bkgsub[slice_y, slice_x]
                         vmin, vmax = ZScaleInterval().get_limits(
                             arc_line_box.flatten()[~np.isnan(arc_line_box.flatten())]
                         )
-                        fig, ax = plt.subplots(figsize=(8, 6))
+                        plt.ion()
+                        fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(12, 6))
                         tea.imshow(
                             fig,
-                            ax,
+                            ax1,
                             image_slice_bkgsub,
                             vmin=vmin,
                             vmax=vmax,
                             aspect="auto",
                             title=f"feature {feature_id}",
                         )
-                        ax.set_xlim(slice_x.start - 0.5, slice_x.stop - 0.5)  # .stop is exclusive, so we subtract 0.5
-                        ax.set_ylim(slice_y.start - 0.5, slice_y.stop - 0.5)  # .stop is exclusive, so we subtract 0.5
+                        ax1.set_xlim(slice_x.start - 0.5, slice_x.stop - 0.5)  # .stop is exclusive, so we subtract 0.5
+                        ax1.set_ylim(slice_y.start - 0.5, slice_y.stop - 0.5)  # .stop is exclusive, so we subtract 0.5
+                    else:
+                        ax1 = ax2 = None
+                        allplots_effective = False
                     detection_table = Table(names=["row_index", "x_peak_index"], dtype=["i4", "f8"])
                     detection_table["row_index"].format = "d"
                     detection_table["x_peak_index"].format = ".2f"
                     for j in range(slice_y.start, slice_y.stop):
                         ixfit = iok[iok[:, 0] == j, 1]  # x indices of valid arc line pixels in row j
-                        if allplots:
-                            ax.plot(ixfit, [j] * len(ixfit), "C0o")
+                        mean_ixfit = np.mean(ixfit) if len(ixfit) > 0 else np.nan
+                        if allplots_effective:
+                            ax1.plot(ixfit, [j] * len(ixfit), "C0o")
                         logger.debug(f"Row {j}: x indices of valid arc line pixels: {ixfit}")
                         # TODO: check if this is the correct reference image for fitting:
                         # it can be the denoised image, the background-subtracted image, or the original image
-                        image_slice_reference = image_slice_denoised
+                        image_slice_reference = image_slice_bkgsub
                         if len(ixfit) == 0:
                             continue
                         # Use the contiguous x range spanned by the arc line pixels in row j
@@ -652,28 +700,45 @@ def find_arc_lines(
                         x0 = ixfit.min()
                         spectrum = image_slice_reference[j, x0 : ixfit.max() + 1]
                         logger.debug(f"{spectrum=}")
-                        if len(spectrum) >= 5:  # require at least 5 pixels to fit a peak
-                            nwinwidth = 5
-                            ixpeaks = find_peaks_spectrum(spectrum, nwinwidth=nwinwidth)
-                            if len(ixpeaks) == 0:  # if no peaks were found, try with a smaller window
-                                nwinwidth = 3
-                                ixpeaks = find_peaks_spectrum(spectrum, nwinwidth=nwinwidth)
-                        elif len(spectrum) >= 3:  # require at least 3 pixels to fit a peak
-                            nwinwidth = 3
-                            ixpeaks = find_peaks_spectrum(spectrum, nwinwidth=nwinwidth)
-                        else:
-                            ixpeaks = []
+                        ixpeaks = []
+                        if len(spectrum) >= 3:
+                            loop_search_ixpeaks = True
+                            nwinwidth = nwinwidth_search_peaks
+                            while loop_search_ixpeaks:
+                                if len(spectrum) >= nwinwidth:  # require at least nwinwidth pixels to fit a peak
+                                    ixpeaks = find_peaks_spectrum(spectrum, nwinwidth=nwinwidth)
+                                    if len(ixpeaks) == 0:  # if no peaks were found, try with a smaller window
+                                        nwinwidth -= 2
+                                    else:
+                                        loop_search_ixpeaks = False
+                                else:
+                                    nwinwidth -= 2
+                                if (
+                                    nwinwidth < nwinwidth_refine_peaks
+                                ):  # if the window width is too small, stop searching
+                                    loop_search_ixpeaks = False
                         if len(ixpeaks) == 1:  # a single peak was detected
                             ixpeak = ixpeaks + x0  # convert to x indices in the original image
+                            if ax2 is not None:
+                                ax2.cla()  # clear the axes for the refined peak plot
                             xpeak, sxpeak, dict_moments = refine_peaks_spectrum(
-                                spectrum, ixpeaks, nwinwidth=nwinwidth, method="gaussian+moments"
+                                spectrum,
+                                ixpeaks,
+                                nwinwidth=nwinwidth_refine_peaks,
+                                method="gaussian+moments",
+                                title=f"mean_x_data {mean_ixfit:.1f}, feature id {feature_id}, row index {j}",
+                                ax_external=ax2,
                             )
+                            if ax2 is not None:
+                                fig.canvas.draw_idle()
+                                fig.tight_layout()
+                                plt.pause(0.1)  # pause to allow the plot to update
                             xpeak = xpeak[0]  # convert to scalar
                             xpeak += x0  # convert to x indices in the original image
                             detection_table.add_row([j, xpeak])
-                            if allplots:
-                                ax.plot(ixpeak, j, "C1o")
-                                ax.plot(xpeak, j, "C3o")
+                            if allplots_effective:
+                                ax1.plot(ixpeak, j, "C1o")
+                                ax1.plot(xpeak, j, "C3o")
                             # Store the FWHM in the FWHM array
                             if dict_moments is not None:
                                 fwhm_np = dict_moments["fwhm_np"]
@@ -686,9 +751,18 @@ def find_arc_lines(
                                 if kurtosis_excess is not None and not np.isnan(kurtosis_excess):
                                     slice_kurtosis_excess[j, int(xpeak + 0.5)] = kurtosis_excess
                     dict_arc_lines_detections[islice].append(detection_table)
-                    if allplots:
+                    if allplots_effective:
                         logger.debug("Showing plot for valid arc line.")
-                        plt.show()
+                        next_action = input("<CR> to continue, 'x' to stop plotting, <num>: next feature id: ")
+                        if next_action == "x":
+                            next_feature_id_to_be_displayed = num_features + 1
+                            logger.info("Please wait...")
+                        elif next_action.isdigit():
+                            next_feature_id_to_be_displayed = int(next_action)
+                        else:
+                            next_feature_id_to_be_displayed = feature_id + 1
+                        plt.ioff()
+                        plt.close(fig)
         if np.isfinite(slice_fwhm_np).any():
             filled_slice_fwhm_np = fill_voronoi_kdtree(slice_fwhm_np)
         else:
@@ -857,6 +931,19 @@ def main(args=None):
         type=float,
         default=20.0,
     )
+    parser.add_argument(
+        "--nwinwidth-search-peaks",
+        help="Window width for searching peaks in the spectrum (default: 5; minimum: 3; odd number)",
+        type=int,
+        default=5,
+    )
+    parser.add_argument(
+        "--nwinwidth-refine-peaks",
+        help="Window width for refining peaks in the spectrum (default: 3; minimum: 3; odd number). "
+        "It must be smaller or equal to nwinwidth-search-peaks.",
+        type=int,
+        default=3,
+    )
     parser.add_argument("--show-sliceid", help="Overplot slice ID", action="store_true")
     parser.add_argument("--allplots", help="Display all plots", action="store_true")
     parser.add_argument(
@@ -902,6 +989,8 @@ def main(args=None):
         times_sigma_threshold=args.times_sigma_threshold,
         minheight_percentage=args.minheight_percentage,
         maxwidth_pixels=args.maxwidth_pixels,
+        nwinwidth_search_peaks=args.nwinwidth_search_peaks,
+        nwinwidth_refine_peaks=args.nwinwidth_refine_peaks,
         show_sliceid=args.show_sliceid,
         allplots=args.allplots,
     )
