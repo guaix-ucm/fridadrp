@@ -12,7 +12,7 @@
 import argparse
 from astropy.io import fits
 from astropy.table import Table
-from astropy.visualization import ZScaleInterval
+from astropy.visualization import ZScaleInterval, MinMaxInterval
 import logging
 from matplotlib.patches import Rectangle
 import matplotlib.pyplot as plt
@@ -206,6 +206,110 @@ def finite_limits(array, method="zscale"):
         return np.min(values), np.max(values)
     else:
         raise ValueError(f"Unknown method: {method}")
+
+
+def imshow_slice(ax, image_slice, arc_line_table=None, xlim=None, ylim=None, vlim=None, vmethod="zscale", **kwargs):
+    """
+    Display a slice of the image with optional limits and title.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes on which to display the image.
+    image_slice : ndarray
+        2D array representing the slice of the image.
+    arc_line_table : astropy.table.Table, optional
+        Table containing the detected arc lines. If provided, rectangles
+        will be drawn around the valid arc lines.
+    xlim : list, tuple or "auto", optional
+        The x-axis limits for the plot. If "auto", the limits are
+        determined from the finite values of `image_slice`.
+    ylim : list, tuple or "auto", optional
+        The y-axis limits for the plot. If "auto", the limits are
+        determined from the finite values of `image_slice`.
+    vlim : list, optional
+        The vmin and vmax values for the display. If None, they are
+        computed from the finite values of `image_slice` using `vmethod`.
+    vmethod : {'zscale', 'minmax'}, optional
+        Method used to compute the display limits if `vlim` is None.
+    kwargs : dict
+        Additional keyword arguments passed to `tea.imshow`.
+
+    Returns
+    -------
+    result : dict
+        Dictionary containing the image, color axis, color bar, and limits.
+    """
+    if vlim is not None:
+        vmin, vmax = vlim
+    else:
+        if vmethod == "zscale":
+            vmin, vmax = ZScaleInterval().get_limits(image_slice)
+        elif vmethod == "minmax":
+            vmin, vmax = MinMaxInterval().get_limits(image_slice)
+        else:
+            raise ValueError(f"Unknown method: {vmethod}")
+
+    img, cax, cbar = tea.imshow(
+        fig=ax.figure,
+        ax=ax,
+        data=image_slice,
+        vmin=vmin,
+        vmax=vmax,
+        aspect="auto",
+        **kwargs,
+    )
+
+    if xlim == "auto":
+        # get the first column and last column with finite values
+        finite_cols = np.where(np.isfinite(image_slice).any(axis=0))[0]
+        if len(finite_cols) > 0:
+            ax.set_xlim(finite_cols[0], finite_cols[-1])
+    elif isinstance(xlim, (list, tuple)):
+        if len(xlim) == 2:
+            ax.set_xlim(xlim)
+        else:
+            raise ValueError("xlim must be a list or tuple of length 2.")
+    else:
+        ax.set_xlim(-0.5, image_slice.shape[1] - 0.5)
+
+    if ylim == "auto":
+        # get the first row and last row with finite values
+        finite_rows = np.where(np.isfinite(image_slice).any(axis=1))[0]
+        if len(finite_rows) > 0:
+            ax.set_ylim(finite_rows[0], finite_rows[-1])
+    elif isinstance(ylim, (list, tuple)):
+        if len(ylim) == 2:
+            ax.set_ylim(ylim)
+        else:
+            raise ValueError("ylim must be a list or tuple of length 2.")
+    else:
+        ax.set_ylim(-0.5, image_slice.shape[0] - 0.5)
+
+    # Add rectangles around valid arc lines if arc_line_table is provided
+    if arc_line_table is not None:
+        num_features = len(arc_line_table)
+        for k in range(num_features):
+            if arc_line_table["valid"][k]:
+                x_start = arc_line_table["x_start"][k]
+                x_stop = arc_line_table["x_stop"][k]
+                y_start = arc_line_table["y_start"][k]
+                y_stop = arc_line_table["y_stop"][k]
+                rect = Rectangle(
+                    (x_start - 0.5, y_start - 0.5),
+                    x_stop - x_start,
+                    y_stop - y_start,
+                    edgecolor="black",
+                    facecolor="none",
+                    linewidth=0.5,
+                )  # plot a rectangle around the valid arc line
+                ax.add_patch(rect)
+
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+
+    result = dict(img=img, cax=cax, cbar=cbar, xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax, vmin=vmin, vmax=vmax)
+    return result
 
 
 def find_arc_lines(
@@ -448,8 +552,19 @@ def find_arc_lines(
             # of the detected features
             candidate_arc_line_slices = ndimage.find_objects(labels_arc_lines)
             arc_line_table = Table(
-                names=["feature", "x_pos", "height", "minheight", "width", "valid"],
-                dtype=["i4", "f8", "f8", "f8", "f8", "bool"],
+                names=[
+                    "feature",
+                    "x_start",
+                    "x_stop",
+                    "x_pos",
+                    "y_start",
+                    "y_stop",
+                    "height",
+                    "minheight",
+                    "width",
+                    "valid",
+                ],
+                dtype=["i4", "i4", "i4", "f8", "i4", "i4", "f8", "f8", "f8", "bool"],
             )
             for colname in ["x_pos", "height", "width", "minheight"]:
                 arc_line_table[colname].format = ".1f"
@@ -465,9 +580,22 @@ def find_arc_lines(
                         valid = height >= minheight
                     else:
                         valid = height >= minheight and width <= maxwidth_pixels
-                    arc_line_table.add_row([i + 1, average_x, height, minheight, width, valid])
+                    arc_line_table.add_row(
+                        [
+                            i + 1,
+                            slice_x.start,
+                            slice_x.stop,
+                            average_x,
+                            slice_y.start,
+                            slice_y.stop,
+                            height,
+                            minheight,
+                            width,
+                            valid,
+                        ]
+                    )
                 else:
-                    arc_line_table.add_row([i + 1, np.nan, np.nan, np.nan, np.nan, False])
+                    arc_line_table.add_row([i + 1, -1, -1, np.nan, -1, -1, np.nan, np.nan, np.nan, False])
             num_valid_arc_lines = np.sum(arc_line_table["valid"])
         else:
             logger.warning(
@@ -486,85 +614,35 @@ def find_arc_lines(
                 logger.info("Arc line table:\n%s", "\n".join(arc_line_table.pformat(max_lines=-1)))
             logger.info("Number of arc lines detected.......: %d", num_features)
             logger.info("Number of arc lines after selection: %d", num_valid_arc_lines)
-            # Display slice
-            if vlim is not None:
-                vmin, vmax = vlim
-            else:
-                # Use ZScaleInterval to compute the display limits for the slice
-                # ignoring the NaN values outside the slice boundaries
-                vmin, vmax = ZScaleInterval().get_limits(image_slice.flatten()[~np.isnan(image_slice.flatten())])
+
+            fig, axarr = plt.subplots(nrows=3, ncols=2, figsize=(12, 8), sharex=True, sharey=True)
+            ax1, ax2, ax3, ax4, ax5, ax6 = axarr.flatten()
+
+            # Display the original slice
             title = f"Image: {Path(image).name}\n"
             subtitle = f"[Slice #{slicenum} / {FRIDA_NSLICES}, Slice ID: {sliceid}]"
             title += subtitle
-            fig, axarr = plt.subplots(nrows=3, ncols=2, figsize=(12, 8), sharex=True, sharey=True)
-            ax1, ax2, ax3, ax4, ax5, ax6 = axarr.flatten()
-            tea.imshow(
-                fig,
-                ax1,
-                image_slice,
-                vmin=vmin,
-                vmax=vmax,
-                aspect="auto",
-                title=title,
-            )
-            ax1.set_xlim(xlim)
-            ax1.set_ylim(ylim)
+            imshow_slice(ax1, image_slice, xlim=xlim, ylim=ylim, vlim=vlim, title=title)
             plot_fitted_boundary_polynomials(ax1, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
 
             # Display the background
-            vmin, vmax = ZScaleInterval().get_limits(image_slice_bkg.flatten()[~np.isnan(image_slice_bkg.flatten())])
             title = "Background slice\n"
             title += subtitle
-            tea.imshow(
-                fig,
-                ax2,
-                image_slice_bkg,
-                vmin=vmin,
-                vmax=vmax,
-                aspect="auto",
-                title=title,
-            )
-            ax2.set_xlim(xlim)
-            ax2.set_ylim(ylim)
+            imshow_slice(ax2, image_slice_bkg, xlim=xlim, ylim=ylim, vlim=vlim, title=title)
             plot_fitted_boundary_polynomials(ax2, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
 
             # Display the background-subtracted slice
-            if vlim is not None:
-                vmin, vmax = vlim
-            else:
-                vmin, vmax = ZScaleInterval().get_limits(
-                    image_slice_bkgsub.flatten()[~np.isnan(image_slice_bkgsub.flatten())]
-                )
             title = "Background-subtracted slice\n"
             title += subtitle
-            tea.imshow(
-                fig,
-                ax3,
-                image_slice_bkgsub,
-                vmin=vmin,
-                vmax=vmax,
-                aspect="auto",
-                title=title,
-            )
-            ax3.set_xlim(xlim)
-            ax3.set_ylim(ylim)
+            imshow3 = imshow_slice(ax3, image_slice_bkgsub, xlim=xlim, ylim=ylim, vlim=vlim, title=title)
             plot_fitted_boundary_polynomials(ax3, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
 
             # Display the denoised background-subtracted slice
             # (use the same vmin and vmax as for the background-subtracted slice)
             title = "Denoised background-subtracted slice\n"
             title += subtitle
-            tea.imshow(
-                fig,
-                ax4,
-                image_slice_denoised,
-                vmin=vmin,
-                vmax=vmax,
-                aspect="auto",
-                title=title,
-            )
-            ax4.set_xlim(xlim)
-            ax4.set_ylim(ylim)
+            vmin, vmax = (imshow3["vmin"], imshow3["vmax"])
+            imshow_slice(ax4, image_slice_denoised, xlim=xlim, ylim=ylim, vlim=(vmin, vmax), title=title)
             plot_fitted_boundary_polynomials(ax4, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
 
             # Display the detected arc lines
@@ -573,19 +651,16 @@ def find_arc_lines(
                 title += subtitle
                 cmap = plt.cm.rainbow.copy()
                 cmap.set_under("white")
-                tea.imshow(
-                    fig,
+                imshow_slice(
                     ax5,
                     labels_arc_lines,
-                    vmin=1,
-                    vmax=num_features,
-                    aspect="auto",
+                    xlim=xlim,
+                    ylim=ylim,
+                    vlim=(1, num_features),
                     title=title,
                     cmap=cmap,
                     cblabel="Object label",
                 )
-                ax5.set_xlim(xlim)
-                ax5.set_ylim(ylim)
                 plot_fitted_boundary_polynomials(
                     ax5, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
                 )
@@ -593,31 +668,17 @@ def find_arc_lines(
                 # Display the valid arc lines after selection
                 title = "Valid arc lines after selection\n"
                 title += subtitle
-                tea.imshow(
-                    fig,
+                imshow_slice(
                     ax6,
                     labels_arc_lines,
-                    vmin=1,
-                    vmax=num_features,
-                    aspect="auto",
+                    arc_line_table=arc_line_table,
+                    xlim=xlim,
+                    ylim=ylim,
+                    vlim=(1, num_features),
                     title=title,
                     cmap=cmap,
                     cblabel="Object label",
                 )
-                for k in range(num_features):
-                    if arc_line_table["valid"][k]:
-                        slice_y, slice_x = candidate_arc_line_slices[k]
-                        rect = Rectangle(
-                            (slice_x.start, slice_y.start),
-                            slice_x.stop - slice_x.start,
-                            slice_y.stop - slice_y.start,
-                            edgecolor="black",
-                            facecolor="none",
-                            linewidth=0.5,
-                        )  # plot a rectangle around the valid arc line
-                        ax6.add_patch(rect)
-                ax6.set_xlim(xlim)
-                ax6.set_ylim(ylim)
                 plot_fitted_boundary_polynomials(
                     ax6, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
                 )
@@ -661,25 +722,50 @@ def find_arc_lines(
                     iok = np.argwhere(labels_arc_lines == feature_id)
                     if allplots and feature_id >= next_feature_id_to_be_displayed:
                         allplots_effective = True
-                        arc_line_box = image_slice_bkgsub[slice_y, slice_x]
-                        vmin, vmax = ZScaleInterval().get_limits(
-                            arc_line_box.flatten()[~np.isnan(arc_line_box.flatten())]
-                        )
                         plt.ion()
-                        fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(12, 6))
-                        tea.imshow(
-                            fig,
-                            ax1,
+                        fig = plt.figure(figsize=(12, 8))
+                        gs = fig.add_gridspec(nrows=2, ncols=2, height_ratios=[1, 1])
+                        ax1 = fig.add_subplot(gs[0, 0])  # row 0, column 0
+                        ax2 = fig.add_subplot(gs[0, 1], sharex=ax1, sharey=ax1)  # row 0, column 1
+                        ax3 = fig.add_subplot(gs[1, 0])  # row 1, column 0
+                        ax4 = fig.add_subplot(gs[1, 1])  # row 1, column 1
+                        title = "Background-subtracted slice\n"
+                        title += subtitle
+                        imshow_slice(ax1, image_slice_bkgsub, xlim=xlim, ylim=ylim, vlim=vlim, title=title)
+                        plot_fitted_boundary_polynomials(
+                            ax1, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice
+                        )
+                        title = "Valid arc lines after selection\n"
+                        title += subtitle
+                        cmap = plt.cm.rainbow.copy()
+                        cmap.set_under("white")
+                        imshow_slice(
+                            ax2,
+                            labels_arc_lines,
+                            arc_line_table=arc_line_table,
+                            xlim=xlim,
+                            ylim=ylim,
+                            vlim=(1, num_features),
+                            title=title,
+                            cmap=cmap,
+                            cblabel="Object label",
+                        )
+                        plot_fitted_boundary_polynomials(
+                            ax2, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
+                        )
+                        xmin, xmax = slice_x.start - 0.5, slice_x.stop - 0.5  # .stop is exclusive, so we subtract 0.5
+                        ymin, ymax = slice_y.start - 0.5, slice_y.stop - 0.5  # .stop is exclusive, so we subtract 0.5
+                        vmin, vmax = ZScaleInterval().get_limits(image_slice_bkgsub[slice_y, slice_x])
+                        imshow_slice(
+                            ax3,
                             image_slice_bkgsub,
-                            vmin=vmin,
-                            vmax=vmax,
-                            aspect="auto",
+                            xlim=(xmin, xmax),
+                            ylim=(ymin, ymax),
+                            vlim=(vmin, vmax),
                             title=f"feature {feature_id}",
                         )
-                        ax1.set_xlim(slice_x.start - 0.5, slice_x.stop - 0.5)  # .stop is exclusive, so we subtract 0.5
-                        ax1.set_ylim(slice_y.start - 0.5, slice_y.stop - 0.5)  # .stop is exclusive, so we subtract 0.5
                     else:
-                        ax1 = ax2 = None
+                        ax1 = ax2 = ax3 = ax4 = None
                         allplots_effective = False
                     detection_table = Table(names=["row_index", "x_peak_index"], dtype=["i4", "f8"])
                     detection_table["row_index"].format = "d"
@@ -688,7 +774,7 @@ def find_arc_lines(
                         ixfit = iok[iok[:, 0] == j, 1]  # x indices of valid arc line pixels in row j
                         mean_ixfit = np.mean(ixfit) if len(ixfit) > 0 else np.nan
                         if allplots_effective:
-                            ax1.plot(ixfit, [j] * len(ixfit), "C0o")
+                            ax3.plot(ixfit, [j] * len(ixfit), "C0o")
                         logger.debug(f"Row {j}: x indices of valid arc line pixels: {ixfit}")
                         # TODO: check if this is the correct reference image for fitting:
                         # it can be the denoised image, the background-subtracted image, or the original image
@@ -719,17 +805,17 @@ def find_arc_lines(
                                     loop_search_ixpeaks = False
                         if len(ixpeaks) == 1:  # a single peak was detected
                             ixpeak = ixpeaks + x0  # convert to x indices in the original image
-                            if ax2 is not None:
-                                ax2.cla()  # clear the axes for the refined peak plot
+                            if ax4 is not None:
+                                ax4.cla()  # clear the axes for the refined peak plot
                             xpeak, sxpeak, dict_moments = refine_peaks_spectrum(
                                 spectrum,
                                 ixpeaks,
                                 nwinwidth=nwinwidth_refine_peaks,
                                 method="gaussian+moments",
                                 title=f"mean_x_data {mean_ixfit:.1f}, feature id {feature_id}, row index {j}",
-                                ax_external=ax2,
+                                ax_external=ax4,
                             )
-                            if ax2 is not None:
+                            if ax4 is not None:
                                 fig.canvas.draw_idle()
                                 fig.tight_layout()
                                 plt.pause(0.1)  # pause to allow the plot to update
@@ -737,8 +823,8 @@ def find_arc_lines(
                             xpeak += x0  # convert to x indices in the original image
                             detection_table.add_row([j, xpeak])
                             if allplots_effective:
-                                ax1.plot(ixpeak, j, "C1o")
-                                ax1.plot(xpeak, j, "C3o")
+                                ax3.plot(ixpeak, j, "C1o")
+                                ax3.plot(xpeak, j, "C3o")
                             # Store the FWHM in the FWHM array
                             if dict_moments is not None:
                                 fwhm_np = dict_moments["fwhm_np"]
