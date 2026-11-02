@@ -23,6 +23,7 @@ from rich_argparse import RichHelpFormatter
 from scipy import ndimage
 from scipy.spatial import cKDTree
 from skimage import restoration
+import sys
 import teareduce as tea
 import warnings
 
@@ -30,6 +31,7 @@ from numina.array.display.polfit_residuals import polfit_residuals
 from numina.array.wavecalib.peaks_spectrum import find_peaks_spectrum, refine_peaks_spectrum
 from numina.array.rescale_array_z1z2 import rescale_array_to_z1z2, rescale_array_from_z1z2
 from numina.tools.initialize_script_with_args import NuminaScriptDefinition
+from numina.tools.input_number import input_number
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
@@ -722,6 +724,10 @@ def find_arc_lines(
                     iok = np.argwhere(labels_arc_lines == feature_id)
                     if allplots and feature_id >= next_feature_id_to_be_displayed:
                         allplots_effective = True
+                        last_figure_is_closed = False
+                        logger.info(
+                            f"Displaying plots for feature {feature_id} in slice #{slicenum} (Slice ID: {sliceid})"
+                        )
                         plt.ion()
                         fig = plt.figure(figsize=(12, 8))
                         gs = fig.add_gridspec(nrows=2, ncols=2, height_ratios=[1, 1])
@@ -764,13 +770,84 @@ def find_arc_lines(
                             vlim=(vmin, vmax),
                             title=f"feature {feature_id}",
                         )
+
+                        pause_between_rows = True
+                        last_event_key = None
+
+                        def on_key(event):
+                            nonlocal allplots_effective
+                            nonlocal next_feature_id_to_be_displayed
+                            nonlocal pause_between_rows
+                            nonlocal last_event_key
+                            if event.key == "x":
+                                logger.info("Exiting the program by user request")
+                                sys.exit()
+                            elif event.key == "c":
+                                pause_between_rows = False
+                            elif event.key == "n":
+                                pass
+                            elif event.key == "q":
+                                pause_between_rows = False
+                                allplots_effective = False
+                            elif event.key == "j":
+                                if feature_id < num_features:
+                                    next_feature_id_to_be_displayed = input_number(
+                                        expected_type="int",
+                                        prompt="Next feature ID to be displayed "
+                                        f"(from {feature_id + 1} to {num_features}; {num_features + 1}: skip all)?",
+                                        default=feature_id + 1,
+                                        min_val=feature_id + 1,
+                                        max_val=num_features + 1,
+                                    )
+                                else:
+                                    next_feature_id_to_be_displayed = num_features + 1
+                                pause_between_rows = False
+                                allplots_effective = False
+                            if event.key in ["q", "j"]:
+                                logger.info("Working (please wait)...")
+                            if event.key in ["c", "n", "q", "j"]:
+                                # resume the loop over rows
+                                event.canvas.stop_event_loop()
+                            if event.key in ["c", "n", "q"]:
+                                next_feature_id_to_be_displayed = feature_id + 1
+                            last_event_key = event.key
+
+                        def on_close(event):
+                            nonlocal allplots_effective
+                            nonlocal last_figure_is_closed
+                            nonlocal pause_between_rows
+                            allplots_effective = False
+                            last_figure_is_closed = True
+                            pause_between_rows = False
+                            # avoid blocking the loop forever if the figure is closed
+                            event.canvas.stop_event_loop()
+
+                        fig.canvas.mpl_connect("key_press_event", on_key)
+                        fig.canvas.mpl_connect("close_event", on_close)
                     else:
                         ax1 = ax2 = ax3 = ax4 = None
                         allplots_effective = False
+                        last_figure_is_closed = True
+                        pause_between_rows = False
+                        last_event_key = None
                     detection_table = Table(names=["row_index", "x_peak_index"], dtype=["i4", "f8"])
                     detection_table["row_index"].format = "d"
                     detection_table["x_peak_index"].format = ".2f"
                     for j in range(slice_y.start, slice_y.stop):
+                        if j == slice_y.start:
+                            # Display the instructions only once, at the beginning of the loop over rows
+                            logger.info(f"'n': fit arc line in next row of feature {feature_id}")
+                            logger.info(
+                                f"'c': continue fitting the remaining rows of feature {feature_id}" " without pausing"
+                            )
+                            logger.info(
+                                f"'q': continue fitting the remaining rows of feature {feature_id}" " without plotting"
+                            )
+                            logger.info("'j': jump to feature <num>")
+                            logger.info("'x': exit the program")
+                        # Diplay result of full feature
+                        if j == (slice_y.stop - 1) and last_event_key == "c":
+                            pause_between_rows = True
                         ixfit = iok[iok[:, 0] == j, 1]  # x indices of valid arc line pixels in row j
                         mean_ixfit = np.mean(ixfit) if len(ixfit) > 0 else np.nan
                         if allplots_effective:
@@ -780,6 +857,11 @@ def find_arc_lines(
                         # it can be the denoised image, the background-subtracted image, or the original image
                         image_slice_reference = image_slice_bkgsub
                         if len(ixfit) == 0:
+                            logger.warning(
+                                "Row %d of feature %d has no valid arc line pixels. Skipping this row.",
+                                j,
+                                feature_id,
+                            )
                             continue
                         # Use the contiguous x range spanned by the arc line pixels in row j
                         # (ixfit may have gaps), so that indices in spectrum map to x = x0 + index
@@ -803,19 +885,41 @@ def find_arc_lines(
                                     nwinwidth < nwinwidth_refine_peaks
                                 ):  # if the window width is too small, stop searching
                                     loop_search_ixpeaks = False
-                        if len(ixpeaks) == 1:  # a single peak was detected
-                            ixpeak = ixpeaks + x0  # convert to x indices in the original image
-                            if ax4 is not None:
-                                ax4.cla()  # clear the axes for the refined peak plot
+                        else:
+                            logger.debug(
+                                f"Number of points for fit: {len(spectrum)} < 3. "
+                                f"Skipping row {j} of feature {feature_id}."
+                            )
+                        if len(ixpeaks) <= 0:
+                            logger.debug(
+                                "Row %d of feature %d has no peaks. Skipping this row.",
+                                j,
+                                feature_id,
+                            )
+                            if allplots_effective:
+                                if pause_between_rows:
+                                    # It is necessary to insert a pause to allow the event loop to start before
+                                    # the execution of the second iteration of the row loop
+                                    plt.pause(0.2)
+                                    fig.canvas.start_event_loop(timeout=0)
+                        else:
+                            # Determine the highest peak
+                            imax = np.argmax(spectrum[ixpeaks])
+                            ixpeaks = ixpeaks[imax : imax + 1]  # keep only the highest peak
+                            ax_external = None
+                            if allplots_effective:
+                                if ax4 is not None:
+                                    ax4.cla()  # clear the axes for the refined peak plot
+                                    ax_external = ax4
                             xpeak, sxpeak, dict_moments = refine_peaks_spectrum(
                                 spectrum,
                                 ixpeaks,
                                 nwinwidth=nwinwidth_refine_peaks,
                                 method="gaussian+moments",
                                 title=f"mean_x_data {mean_ixfit:.1f}, feature id {feature_id}, row index {j}",
-                                ax_external=ax4,
+                                ax_external=ax_external,
                             )
-                            if ax4 is not None:
+                            if ax_external is not None:
                                 fig.canvas.draw_idle()
                                 fig.tight_layout()
                                 plt.pause(0.1)  # pause to allow the plot to update
@@ -823,8 +927,15 @@ def find_arc_lines(
                             xpeak += x0  # convert to x indices in the original image
                             detection_table.add_row([j, xpeak])
                             if allplots_effective:
+                                ixpeak = ixpeaks + x0  # convert to x index in the original image
                                 ax3.plot(ixpeak, j, "C1o")
                                 ax3.plot(xpeak, j, "C3o")
+                                # Wait until the user takes a decision
+                                if pause_between_rows:
+                                    # It is necessary to insert a pause to allow the event loop to start before
+                                    # the execution of the second iteration of the row loop
+                                    plt.pause(0.2)
+                                    fig.canvas.start_event_loop(timeout=0)
                             # Store the FWHM in the FWHM array
                             if dict_moments is not None:
                                 fwhm_np = dict_moments["fwhm_np"]
@@ -836,19 +947,12 @@ def find_arc_lines(
                                 kurtosis_excess = dict_moments["kurtosis_excess"]
                                 if kurtosis_excess is not None and not np.isnan(kurtosis_excess):
                                     slice_kurtosis_excess[j, int(xpeak + 0.5)] = kurtosis_excess
+
                     dict_arc_lines_detections[islice].append(detection_table)
-                    if allplots_effective:
-                        logger.debug("Showing plot for valid arc line.")
-                        next_action = input("<CR> to continue, 'x' to stop plotting, <num>: next feature id: ")
-                        if next_action == "x":
-                            next_feature_id_to_be_displayed = num_features + 1
-                            logger.info("Please wait...")
-                        elif next_action.isdigit():
-                            next_feature_id_to_be_displayed = int(next_action)
-                        else:
-                            next_feature_id_to_be_displayed = feature_id + 1
+                    if not last_figure_is_closed:
                         plt.ioff()
                         plt.close(fig)
+                        last_figure_is_closed = True
         if np.isfinite(slice_fwhm_np).any():
             filled_slice_fwhm_np = fill_voronoi_kdtree(slice_fwhm_np)
         else:
