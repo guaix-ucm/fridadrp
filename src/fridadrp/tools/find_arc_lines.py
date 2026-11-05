@@ -974,7 +974,7 @@ def main(args=None):
         description="Find and characterize arc lines in FRIDA IFU images",
         formatter_class=RichHelpFormatter,
     )
-    parser.add_argument("--image", help="Image to display boundaries on", type=str, required=True)
+    parser.add_argument("--image", help="Input arc image (mandatory)", type=str, required=True)
     parser.add_argument(
         "--poly", help="Path to the file with the boundary polynomials (mandatory)", type=str, required=True
     )
