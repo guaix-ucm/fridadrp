@@ -25,6 +25,7 @@ from scipy import ndimage
 from skimage import restoration
 import sys
 import teareduce as tea
+import uuid
 import warnings
 
 from numina.array.display.disable_keys_in_figure import disable_keys_in_figure
@@ -39,6 +40,7 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex, sliceindex_from_sliceid
+from fridadrp.core import set_hawaii_border_pixels_to_nan
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
@@ -353,8 +355,8 @@ def find_arc_lines(
         If a slice is not processed, the corresponding table will be None.
         If the boundary polynomials for a slice are not valid, the corresponding
         table will also be None.
-        If a slice extends beyond the useful detector region, the corresponding
-        table will also be None.
+        If a slice does not have a minimum number of rows within the useful
+        detector region, the corresponding table will also be None.
         If a slice has no detections, the corresponding table will not be None,
         but will be empty (i.e., it will have zero rows).
     """
@@ -408,8 +410,47 @@ def find_arc_lines(
         sliceid = sliceid_from_sliceindex(islice)
         if slicenum not in slicenum_to_process:
             logger.debug("Skipping slice #%2d (Slice ID: %2d)", slicenum, sliceid)
-            continue
+            continue  # Skip this slice if it is not in the list of slices to process
+
         logger.info("Processing slice #%2d / %2d (Slice ID: %2d)", slicenum, FRIDA_NSLICES, sliceid)
+
+        # Check if the polynomial boundaries for the current slice are valid
+        if list_poly_left[islice] is None or list_poly_right[islice] is None:
+            logger.warning(
+                "Slice #%2d (Slice ID: %2d) has no valid polynomial boundaries. Skipping this slice.",
+                slicenum,
+                sliceid,
+            )
+            continue  # Skip this slice if the polynomial boundaries are not valid
+
+        # Create a copy of the image data to work on the current slice
+        image_slice = image_data.copy()
+
+        # Set to NaN the pixels outside the useful detector region
+        image_slice = set_hawaii_border_pixels_to_nan(image_slice, inplace=True)
+
+        # Set to NaN the pixels outside the slice boundaries
+        for j in range(FRIDA_NAXIS1_HAWAII.value):
+            yleft = int(list_poly_left[islice](j) + 0.5)
+            if yleft >= FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value - 1:
+                image_slice[:yleft, j] = np.nan
+            yright = int(list_poly_right[islice](j) + 0.5)
+            if yright <= FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value - 1:
+                image_slice[yright + 1 :, j] = np.nan
+
+        # Check that a minimum number of rows are within the useful detector region
+        minimum_number_of_rows_within_useful_region = 20
+        num_rows_within_useful_region = np.sum(np.isfinite(image_slice).any(axis=1))
+        if num_rows_within_useful_region < minimum_number_of_rows_within_useful_region:
+            logger.warning(
+                "Slice #%2d (Slice ID: %2d) has pixels outside the useful detector region.\n"
+                "Only %d rows are within the useful detector region (minimum required: %d).",
+                slicenum,
+                sliceid,
+                num_rows_within_useful_region,
+                minimum_number_of_rows_within_useful_region,
+            )
+            continue  # Skip this slice if it has less than the required minimum number of valid rows
 
         # Initialize table to store the arc line detections for each slice
         table_names = ["feature_id", "row_index", "x_peak"]
@@ -430,39 +471,6 @@ def find_arc_lines(
                 detection_table[colname].format = "10.4f"
         detection_table.meta["SLICENUM"] = (slicenum, "Slice number (1-based)")
         detection_table.meta["SLICEID"] = (sliceid, "Slice ID")
-
-        # Check if the polynomial boundaries for the current slice are valid
-        if list_poly_left[islice] is None or list_poly_right[islice] is None:
-            logger.warning(
-                "Slice #%2d (Slice ID: %2d) has no valid polynomial boundaries. Skipping this slice.",
-                slicenum,
-                sliceid,
-            )
-            continue
-        # Create a copy of the image data to work on the current slice
-        image_slice = image_data.copy()
-
-        # Set to NaN the pixels outside the slice boundaries
-        slice_within_useful_detector_region = True
-        for j in range(FRIDA_NAXIS1_HAWAII.value):
-            yleft = int(list_poly_left[islice](j) + 0.5)
-            if yleft >= FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value - 1:
-                image_slice[:yleft, j] = np.nan
-            else:
-                slice_within_useful_detector_region = False
-            yright = int(list_poly_right[islice](j) + 0.5)
-            if yright <= FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value - 1:
-                image_slice[yright + 1 :, j] = np.nan
-            else:
-                slice_within_useful_detector_region = False
-        if not slice_within_useful_detector_region:
-            logger.warning(
-                "Slice #%2d (Slice ID: %2d) has pixels outside the useful detector region. "
-                "Some pixels may be set to NaN.",
-                slicenum,
-                sliceid,
-            )
-            continue  # Skip this slice if it is outside the useful detector region
 
         # automatic limits for the y-axis (NAXIS2) based on the polynomial boundaries of the slices
         xdum = np.arange(FRIDA_NAXIS1_HAWAII.value)
@@ -1124,7 +1132,7 @@ def main(args=None):
             primary_hdu = fits.PrimaryHDU()
             hdr = primary_hdu.header
             hdr["IMAGE"] = (Path(args.image).name, "Input arc image")
-            hdr["POLYFILE"] = (Path(args.poly).name, "Slice boundary polynomials")
+            hdr["POLYFILE"] = (Path(args.poly).name, "Slice bound. pol.")
             hdr["FITMETH"] = (args.fit_method, "Line profile fit method")
             hdr["FWHMDIFF"] = (args.fwhm_diffraction, "[pix] Assumed diffraction-limited FWHM")
             hdr["NWSEARCH"] = (args.nwinwidth_search_peaks, "Window width to search peaks")
@@ -1132,6 +1140,7 @@ def main(args=None):
             hdr["TSIGMA"] = (args.times_sigma_threshold, "Detection threshold (robust sigma)")
             hdr["MINHPCT"] = (args.minheight_percentage, "Minimum line height (percent)")
             hdr["MAXWPIX"] = (args.maxwidth_pixels, "[pix] Maximum line width")
+            hdr["UUID"] = (str(uuid.uuid4()), "Unique identifier for this run")
             hdr["COMMENT"] = "row_index, x_peak and mean are 0-based array indices"
             hdu_list = fits.HDUList([primary_hdu])
             # Descriptions of the columns, stored as comments of the TTYPEn keywords
