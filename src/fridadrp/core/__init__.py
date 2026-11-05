@@ -124,3 +124,66 @@ def sliceindex_from_sliceid(slice_number):
         return DEF_SLICEINDEX_FROM_SLICEID[slice_number]
     else:
         raise TypeError(f"slice_number of type {type(slice_number)} must be an int or array-like of int")
+
+
+def set_hawaii_border_pixels_to_nan(image_data, inplace=False):
+    """Set the pixels outside the useful detector region to NaN.
+
+    The useful region is defined by the constants
+    FRIDA_NAXIS[12]_HAWAII_FIRST_USEFUL_PIXEL and
+    FRIDA_NAXIS[12]_HAWAII_LAST_USEFUL_PIXEL, which follow the FITS
+    convention (1-based). In 0-based array indices, the useful region
+    spans FIRST-1 ... LAST-1 along each axis.
+
+    Parameters
+    ----------
+    image_data : numpy.ndarray
+        Input image data, with shape (FRIDA_NAXIS2_HAWAII, FRIDA_NAXIS1_HAWAII)
+        and a floating point (or complex) dtype, so that NaN can be stored.
+    inplace : bool, optional
+        If True, `image_data` is modified in place and returned. If False
+        (default), a modified copy is returned and `image_data` is left
+        unchanged.
+
+    Returns
+    -------
+    image_data : numpy.ndarray
+        Image data with pixels outside the useful detector region set to NaN.
+        It is the input array itself if `inplace` is True, and a copy
+        otherwise.
+
+    Raises
+    ------
+    TypeError
+        If `image_data` is not a numpy.ndarray, or if its dtype cannot store
+        NaN (e.g. an integer or boolean image).
+    ValueError
+        If `image_data` does not have the shape of the HAWAII detector.
+    """
+    # Check that the input is a numpy array whose dtype can store NaN
+    if not isinstance(image_data, np.ndarray):
+        raise TypeError(f"Input image data must be a numpy.ndarray, but is of type {type(image_data)}")
+    if not np.issubdtype(image_data.dtype, np.inexact):
+        raise TypeError(
+            f"Input image data must have a floating point dtype to store NaN, but has dtype {image_data.dtype}"
+        )
+
+    # Check that the input image data has the correct shape
+    if image_data.shape != (FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value):
+        raise ValueError(
+            f"Input image data must have shape ({FRIDA_NAXIS2_HAWAII.value}, {FRIDA_NAXIS1_HAWAII.value}), "
+            f"but has shape {image_data.shape}"
+        )
+
+    if not inplace:
+        image_data = image_data.copy()
+
+    # Set to NaN the pixels outside the useful detector region.
+    # The constants follow the FITS convention (1-based): the useful region
+    # spans the 0-based array indices FIRST-1 ... LAST-1
+    image_data[:, : FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1] = np.nan
+    image_data[:, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value :] = np.nan
+    image_data[: FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value - 1, :] = np.nan
+    image_data[FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value :, :] = np.nan
+
+    return image_data
