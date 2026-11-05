@@ -12,6 +12,7 @@
 import argparse
 from astropy.io import fits
 from astropy.table import Table
+import astropy.units as u
 from astropy.visualization import ZScaleInterval, MinMaxInterval
 import logging
 from matplotlib.patches import Rectangle
@@ -21,7 +22,6 @@ from numpy.lib.stride_tricks import sliding_window_view
 from pathlib import Path
 from rich_argparse import RichHelpFormatter
 from scipy import ndimage
-from scipy.spatial import cKDTree
 from skimage import restoration
 import sys
 import teareduce as tea
@@ -134,81 +134,6 @@ def retrieve_initial_data(image, input_poly, xlim=None, voffset=[0.0]):
         xlim[1] -= 1  # (0-based)
 
     return image_data, list_poly_left, list_poly_right, xlim
-
-
-def fill_voronoi_kdtree(array, pixel_scale=(1.0, 1.0), max_distance=np.inf):
-    """
-    Fill NaN pixels with the value of the nearest valid pixel using a
-    k-d tree. Pixels farther than `max_distance` from any valid pixel
-    are left as NaN.
-
-    Parameters
-    ----------
-    array : ndarray, shape (ny, nx)
-        2D array with NaN at unknown pixels.
-    pixel_scale : tuple of float, optional
-        Pixel size along (y, x), used to scale pixel indices to
-        physical coordinates.
-    max_distance : float, optional
-        Maximum distance (in the units of `pixel_scale`) to a valid
-        pixel for a NaN pixel to be filled.
-
-    Returns
-    -------
-    filled : ndarray, shape (ny, nx)
-        Copy of `array` with NaN replaced where a valid pixel lies
-        within `max_distance`.
-    """
-    array = np.asarray(array, dtype=float)
-    valid = ~np.isnan(array)
-
-    if not valid.any():
-        raise ValueError("The array contains no valid (non-NaN) pixels.")
-
-    # Coordinates (in physical units) of all pixels of the grid
-    yy, xx = np.indices(array.shape)
-    coords = np.column_stack([yy.ravel() * pixel_scale[0], xx.ravel() * pixel_scale[1]])
-
-    # Tree built only on the valid pixels (the Voronoi seeds)
-    seeds = coords[valid.ravel()]
-    tree = cKDTree(seeds)
-
-    # Nearest seed for every pixel; dist = inf if beyond max_distance
-    dist, idx = tree.query(coords, distance_upper_bound=max_distance)
-
-    values = array[valid]  # seed values, same order as seeds
-    filled = np.full(array.size, np.nan)
-    found = np.isfinite(dist)  # idx == len(seeds) where not found
-    filled[found] = values[idx[found]]
-
-    return filled.reshape(array.shape)
-
-
-def finite_limits(array, method="zscale"):
-    """
-    Compute display limits using only the finite values of an array.
-
-    Parameters
-    ----------
-    array : ndarray
-        Input array (may contain NaN or inf).
-    method : {'zscale', 'minmax'}, optional
-        Method used to compute the limits.
-
-    Returns
-    -------
-    limits : tuple of float or None
-        (vmin, vmax), or None if `array` has no finite values.
-    """
-    values = np.asarray(array)[np.isfinite(array)]
-    if values.size == 0:
-        return None
-    if method == "zscale":
-        return ZScaleInterval().get_limits(values)
-    elif method == "minmax":
-        return np.min(values), np.max(values)
-    else:
-        raise ValueError(f"Unknown method: {method}")
 
 
 def imshow_slice(
@@ -421,6 +346,17 @@ def find_arc_lines(
     allplots : bool, optional
         If True, all plots will be displayed.
 
+    Returns
+    -------
+    list_detection_tables : list of astropy.table.Table
+        List of tables containing the arc line detections for each slice.
+        If a slice is not processed, the corresponding table will be None.
+        If the boundary polynomials for a slice are not valid, the corresponding
+        table will also be None.
+        If a slice extends beyond the useful detector region, the corresponding
+        table will also be None.
+        If a slice has no detections, the corresponding table will not be None,
+        but will be empty (i.e., it will have zero rows).
     """
     logger = logging.getLogger(__name__)
 
@@ -443,16 +379,6 @@ def find_arc_lines(
     # Retrieve initial data
     image_data, list_poly_left, list_poly_right, xlim = retrieve_initial_data(image, input_poly, xlim, voffset)
 
-    image_data_denoised = np.full((FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
-
-    # Initialize an array to store the FWHM, skewness and Strehl values for each pixel in the image
-    image_fwhm_np = np.full((FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
-    image_skewness = np.full((FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
-    image_strehl = np.full((FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
-
-    # Initialize dictionary to store the list of arc line detections
-    dict_arc_lines_detections = {}
-
     # Avoid incompatible choices of slicenum and sliceid
     if slicenum_list != [0] and sliceid_list != [0]:
         raise ValueError("Cannot specify both slicenum_list and sliceid_list. Please choose one.")
@@ -473,11 +399,37 @@ def find_arc_lines(
         if slicenum < 1 or slicenum > FRIDA_NSLICES:
             raise ValueError(f"Invalid slice #{slicenum}. Must be between 1 and {FRIDA_NSLICES}.")
 
+    # Initialize list to store the table with the arc line detections for each slice
+    list_detection_tables = [None] * FRIDA_NSLICES
+
     # Main loop to detect arc lines in each slice
-    for slicenum in slicenum_to_process:
-        islice = slicenum - 1
+    for islice in range(FRIDA_NSLICES):
+        slicenum = islice + 1
         sliceid = sliceid_from_sliceindex(islice)
+        if slicenum not in slicenum_to_process:
+            logger.debug("Skipping slice #%2d (Slice ID: %2d)", slicenum, sliceid)
+            continue
         logger.info("Processing slice #%2d / %2d (Slice ID: %2d)", slicenum, FRIDA_NSLICES, sliceid)
+
+        # Initialize table to store the arc line detections for each slice
+        table_names = ["feature_id", "row_index", "x_peak"]
+        table_dtype = ["i2", "i2", "f4"]
+        if fit_method == "gaussian+moments":
+            table_names += ["amplitude", "mean", "stddev", "skewness", "fwhm_np", "strehl"]
+            table_dtype += ["f4", "f4", "f4", "f4", "f4", "f4"]
+        detection_table = Table(names=table_names, dtype=table_dtype)
+        # Units, display formats and provenance of each slice table; these are
+        # written to the FITS header (TUNITn, TDISPn and header keywords) by
+        # fits.table_to_hdu. Indices are 0-based array indices.
+        for colname in ["x_peak", "mean", "stddev", "fwhm_np"]:
+            if colname in detection_table.colnames:
+                detection_table[colname].unit = u.pix
+                detection_table[colname].format = "9.3f"
+        for colname in ["amplitude", "skewness", "strehl"]:
+            if colname in detection_table.colnames:
+                detection_table[colname].format = "10.4f"
+        detection_table.meta["SLICENUM"] = (slicenum, "Slice number (1-based)")
+        detection_table.meta["SLICEID"] = (sliceid, "Slice ID")
 
         # Check if the polynomial boundaries for the current slice are valid
         if list_poly_left[islice] is None or list_poly_right[islice] is None:
@@ -511,17 +463,6 @@ def find_arc_lines(
                 sliceid,
             )
             continue  # Skip this slice if it is outside the useful detector region
-
-        # Define a mask for the pixels that are within the slice boundaries
-        mask_slice = np.zeros_like(image_slice, dtype=bool)
-        for j in range(FRIDA_NAXIS1_HAWAII.value):
-            yleft = int(list_poly_left[islice](j) + 0.5)
-            yright = int(list_poly_right[islice](j) + 0.5)
-            if (
-                yleft >= FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL.value - 1
-                and yright <= FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL.value - 1
-            ):
-                mask_slice[yleft : yright + 1, j] = True
 
         # automatic limits for the y-axis (NAXIS2) based on the polynomial boundaries of the slices
         xdum = np.arange(FRIDA_NAXIS1_HAWAII.value)
@@ -561,8 +502,6 @@ def find_arc_lines(
         )
         image_slice_denoised = rescale_array_from_z1z2(image_slice_denoised, coef_rs)
         image_slice_denoised[mask_nan_slice] = np.nan  # Restore NaN values in the denoised slice
-
-        image_data_denoised[mask_slice] = image_slice_denoised[mask_slice]  # Store the denoised slice in the full image
 
         # Detect arc lines in the denoised background-subtracted slice using a simple thresholding method
         q25, q50, q75 = np.percentile(
@@ -734,13 +673,7 @@ def find_arc_lines(
             logger.info("Press 'q' to close this figure and continue...")
             plt.show()
 
-        # initialize the list of arc line tables for the current slice
-        dict_arc_lines_detections[islice] = []
-
         # Characterize the valid arc lines by fitting a peak to each row of the valid arc line
-        slice_fwhm_np = np.full((FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
-        slice_skewness = np.full((FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
-        slice_strehl = np.full((FRIDA_NAXIS2_HAWAII.value, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)
         if num_valid_arc_lines > 0:
             if allplots:
                 next_feature_id_to_be_displayed = 1
@@ -757,7 +690,7 @@ def find_arc_lines(
                         arc_line_table["width"][k],
                     )
                     logger.debug(f"slice_y: {slice_y}, slice_x: {slice_x}")
-                    logger.debug(f"arc_line_table[k]: {arc_line_table[k]}")
+                    logger.debug(f"arc_line_table[{k}]:\n{arc_line_table[k]}")
                     # Select the pixels corresponding to the valid arc line
                     feature_id = arc_line_table["feature"][k]
                     logger.debug(f"feature_id: {feature_id}")
@@ -877,9 +810,6 @@ def find_arc_lines(
                         last_figure_is_closed = True
                         pause_between_rows = False
                         last_event_key = None
-                    detection_table = Table(names=["row_index", "x_peak_index"], dtype=["i4", "f8"])
-                    detection_table["row_index"].format = "d"
-                    detection_table["x_peak_index"].format = ".2f"
                     for j in range(slice_y.start, slice_y.stop):
                         if j == slice_y.start:
                             if allplots_effective:
@@ -986,9 +916,30 @@ def find_arc_lines(
                                 fig.canvas.draw_idle()
                                 fig.tight_layout()
                                 plt.pause(0.1)  # pause to allow the plot to update
+                            # In debug mode, show the fit result in the console
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug("\n".join([f"{k}={v!r}" for k, v in dict_fit_result.items()]))
+                            # Store the results in the detection table
                             xpeak = xpeak[0]  # convert to scalar
                             xpeak += x0  # convert to x indices in the original image
-                            detection_table.add_row([j, xpeak])
+                            if fit_method == "gaussian+moments":
+                                if dict_fit_result["fit_ok"]:
+                                    table_row = [
+                                        feature_id,
+                                        j,
+                                        xpeak,
+                                        dict_fit_result["gaussian_amp"],  # amplitude
+                                        dict_fit_result["gaussian_mean"] + x0,  # mean
+                                        dict_fit_result["gaussian_sigma"],  # stddev
+                                        dict_fit_result["moment_skewness"],  # skewness
+                                        dict_fit_result["fwhm_np"],  # FWHM from non-parametric method
+                                        dict_fit_result["strehl"],  # Strehl ratio
+                                    ]
+                                else:
+                                    table_row = [feature_id, j, xpeak] + [np.nan] * 6
+                            else:
+                                table_row = [feature_id, j, xpeak]
+                            detection_table.add_row(table_row)
                             if allplots_effective:
                                 ixpeak = ixpeaks + x0  # convert to x index in the original image
                                 ax3.plot(ixpeak, j, "C1o")
@@ -999,138 +950,14 @@ def find_arc_lines(
                                     # the execution of the second iteration of the row loop
                                     plt.pause(0.2)
                                     fig.canvas.start_event_loop(timeout=0)
-                            # Store FWHM, skewness and Strehl values in the corresponding arrays
-                            if dict_fit_result is not None:
-                                ii = int(xpeak + 0.5)  # convert to integer index
-                                # Check if ii is within the valid range of x indices;
-                                # if not, set it to None to avoid storing values outside the array bounds
-                                if ii < 0 or ii >= FRIDA_NAXIS1_HAWAII.value:
-                                    ii = None
-                                if ii is not None:
-                                    if "fwhm_np" in dict_fit_result:
-                                        fwhm_np = dict_fit_result["fwhm_np"]
-                                    else:
-                                        fwhm_np = None
-                                    if fwhm_np is not None and not np.isnan(fwhm_np):
-                                        slice_fwhm_np[j, ii] = fwhm_np
-                                    if "skewness" in dict_fit_result:
-                                        skewness = dict_fit_result["skewness"]
-                                    else:
-                                        skewness = None
-                                    if skewness is not None and not np.isnan(skewness):
-                                        slice_skewness[j, ii] = skewness
-                                    if "strehl" in dict_fit_result:
-                                        strehl = dict_fit_result["strehl"]
-                                    else:
-                                        strehl = None
-                                    if strehl is not None and not np.isnan(strehl):
-                                        slice_strehl[j, ii] = strehl
-
-                    dict_arc_lines_detections[islice].append(detection_table)
                     if not last_figure_is_closed:
                         plt.ioff()
                         plt.close(fig)
                         last_figure_is_closed = True
-        if np.isfinite(slice_fwhm_np).any():
-            filled_slice_fwhm_np = fill_voronoi_kdtree(slice_fwhm_np)
-        else:
-            filled_slice_fwhm_np = slice_fwhm_np
-        if np.isfinite(slice_skewness).any():
-            filled_slice_skewness = fill_voronoi_kdtree(slice_skewness)
-        else:
-            filled_slice_skewness = slice_skewness
-        if np.isfinite(slice_strehl).any():
-            filled_slice_strehl = fill_voronoi_kdtree(slice_strehl)
-        else:
-            filled_slice_strehl = slice_strehl
-        image_fwhm_np[mask_slice] = filled_slice_fwhm_np[mask_slice]
-        image_skewness[mask_slice] = filled_slice_skewness[mask_slice]
-        image_strehl[mask_slice] = filled_slice_strehl[mask_slice]
 
-    fig, axarr = plt.subplots(nrows=2, ncols=2, figsize=(12, 8), sharex=True, sharey=True)
-    ax1, ax2, ax3, ax4 = axarr.flatten()
+        list_detection_tables[islice] = detection_table
 
-    # Display the four summary panels; a panel without finite values is not displayed
-    panels = [
-        (ax1, image_data_denoised, f"Input image: {Path(image).name} (denoised)", {}),
-        (ax2, image_fwhm_np, "FWHM of valid arc lines", {"cmap": "viridis", "cblabel": "FWHM (pixels)"}),
-        (ax3, image_skewness, "Skewness of valid arc lines", {"cmap": "viridis", "cblabel": "Skewness"}),
-        (
-            ax4,
-            image_strehl,
-            f"Strehl of valid arc lines (assuming FWHM-diffraction = {fwhm_diffraction} pixels)",
-            {"cmap": "viridis", "cblabel": "Strehl"},
-        ),
-    ]
-    dict_img = {}  # image returned by tea.imshow for each displayed panel
-    for ax, data, title, kwargs in panels:
-        if ax == ax1 and vlim is not None:
-            limits = vlim
-        else:
-            limits = finite_limits(data)
-        if limits is None:
-            logger.warning("No valid values for panel '%s'. Panel not displayed.", title)
-            ax.set_title(title)
-            ax.text(0.5, 0.5, "No valid measurements", ha="center", va="center", transform=ax.transAxes)
-            dict_img[ax] = None
-        else:
-            vmin, vmax = limits
-            dict_img[ax], _, _ = tea.imshow(fig, ax, data, vmin=vmin, vmax=vmax, aspect="auto", title=title, **kwargs)
-    for islice in range(FRIDA_NSLICES):
-        if islice in dict_arc_lines_detections and len(dict_arc_lines_detections[islice]) > 0:
-            for detection_table in dict_arc_lines_detections[islice]:
-                ax1.plot(
-                    detection_table["x_peak_index"],
-                    detection_table["row_index"],
-                    "C1+",
-                    markersize=2,
-                )
-
-    mouse_info = {"ax": None, "x": None, "y": None}
-
-    def on_mouse_move(event):
-        if event.inaxes in [ax1, ax2, ax3, ax4]:
-            mouse_info["ax"] = event.inaxes
-            mouse_info["x"] = event.xdata
-            mouse_info["y"] = event.ydata
-
-    fig.canvas.mpl_connect("motion_notify_event", on_mouse_move)
-
-    def on_key(event):
-        ax_mouse = mouse_info["ax"]
-        if event.key in [",", "/"]:
-            if ax_mouse in [ax1, ax2, ax3, ax4]:
-                xmin, xmax = list(ax_mouse.get_xlim())
-                ymin, ymax = list(ax_mouse.get_ylim())
-                ixmin = int(round(xmin))
-                ixmax = int(round(xmax))
-                iymin = int(round(ymin))
-                iymax = int(round(ymax))
-                if ixmin > ixmax:
-                    ixmin, ixmax = ixmax, ixmin
-                if iymin > iymax:
-                    iymin, iymax = iymax, iymin
-                if ixmin < 1:
-                    ixmin = 1
-                if ixmax > FRIDA_NAXIS1_HAWAII.value:
-                    ixmax = FRIDA_NAXIS1_HAWAII.value
-                if iymin < 1:
-                    iymin = 1
-                if iymax > FRIDA_NAXIS2_HAWAII.value:
-                    iymax = FRIDA_NAXIS2_HAWAII.value
-                region2d = tea.SliceRegion2D(f"[{ixmin}:{ixmax},{iymin}:{iymax}]", mode="fits").python
-                method = "minmax" if event.key == "," else "zscale"
-                for ax, data, _, _ in panels:
-                    if ax_mouse == ax and dict_img[ax] is not None:
-                        limits = finite_limits(data[region2d], method=method)
-                        if limits is not None:  # do nothing if the visible region has no finite values
-                            dict_img[ax].set_clim(*limits)
-                            ax.figure.canvas.draw_idle()
-
-    fig.canvas.mpl_connect("key_press_event", on_key)
-
-    fig.tight_layout()
-    plt.show()
+    return list_detection_tables
 
 
 def main(args=None):
@@ -1248,6 +1075,12 @@ def main(args=None):
         nargs=2,
         default=None,
     )
+    parser.add_argument(
+        "--output",
+        help="Output FITS file name to save the arc line detection tables (default: None)",
+        type=str,
+        default=None,
+    )
 
     # Include default arguments for common actions, and initialize console and logging
     myscript = NuminaScriptDefinition(parser, argv=args)
@@ -1256,7 +1089,7 @@ def main(args=None):
 
     # Find and characterize arc lines in the image using the provided parameters
     logger.debug("Calling find_arc_lines script function")
-    find_arc_lines(
+    list_detection_tables = find_arc_lines(
         image=args.image,
         input_poly=args.poly,
         voffset=args.voffset,
@@ -1277,6 +1110,55 @@ def main(args=None):
         show_sliceid=args.show_sliceid,
         allplots=args.allplots,
     )
+
+    # Save the arc line detection tables to a FITS file if an output filename is provided
+    if args.output is not None:
+        logger.info("Saving arc line detection tables to FITS file: %s", args.output)
+        # Check that at least one detection table is not None and has at least one row
+        if not any(
+            detection_table is not None and len(detection_table) > 0 for detection_table in list_detection_tables
+        ):
+            logger.warning("No valid arc line detection tables to save. The output FITS file will not be created.")
+        else:
+            # Primary HDU with the provenance of the tables
+            primary_hdu = fits.PrimaryHDU()
+            hdr = primary_hdu.header
+            hdr["IMAGE"] = (Path(args.image).name, "Input arc image")
+            hdr["POLYFILE"] = (Path(args.poly).name, "Slice boundary polynomials")
+            hdr["FITMETH"] = (args.fit_method, "Line profile fit method")
+            hdr["FWHMDIFF"] = (args.fwhm_diffraction, "[pix] Assumed diffraction-limited FWHM")
+            hdr["NWSEARCH"] = (args.nwinwidth_search_peaks, "Window width to search peaks")
+            hdr["NWREFINE"] = (args.nwinwidth_refine_peaks, "Window width to refine peaks")
+            hdr["TSIGMA"] = (args.times_sigma_threshold, "Detection threshold (robust sigma)")
+            hdr["MINHPCT"] = (args.minheight_percentage, "Minimum line height (percent)")
+            hdr["MAXWPIX"] = (args.maxwidth_pixels, "[pix] Maximum line width")
+            hdr["COMMENT"] = "row_index, x_peak and mean are 0-based array indices"
+            hdu_list = fits.HDUList([primary_hdu])
+            # Descriptions of the columns, stored as comments of the TTYPEn keywords
+            # (the column description attribute is not written by fits.table_to_hdu)
+            column_comments = {
+                "feature_id": "Arc line label (1 = leftmost)",
+                "row_index": "Row (0-based index along NAXIS2)",
+                "x_peak": "Refined peak (0-based index along NAXIS1)",
+                "mean": "Gaussian mean (0-based index along NAXIS1)",
+                "stddev": "Gaussian sigma",
+                "skewness": "Moment skewness",
+                "fwhm_np": "Non-parametric FWHM",
+                "strehl": "Strehl ratio",
+            }
+            # One extension per processed slice, named "SLCNUMXX" where XX is the slice
+            # number (1-based); processed slices without detections are also written
+            # (NAXIS2 = 0), so they can be distinguished from slices not processed
+            for islice, detection_table in enumerate(list_detection_tables):
+                if detection_table is not None:
+                    hdu = fits.table_to_hdu(detection_table)
+                    hdu.name = f"SLCNUM{islice + 1:02d}"
+                    for i, colname in enumerate(detection_table.colnames, start=1):
+                        if colname in column_comments:
+                            hdu.header.comments[f"TTYPE{i}"] = column_comments[colname]
+                    hdu_list.append(hdu)
+            hdu_list.writeto(args.output, overwrite=True)
+            logger.info("Arc line detection tables saved to FITS file: %s", args.output)
 
     # Display goodbye message and save console if recording is enabled
     myscript.goodbye_message_and_save_console()
