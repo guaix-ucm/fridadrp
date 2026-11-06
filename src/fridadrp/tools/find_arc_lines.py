@@ -39,7 +39,8 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
-from fridadrp.core import sliceid_from_sliceindex, sliceindex_from_sliceid
+from fridadrp.core import sliceid_from_sliceindex
+from fridadrp.core import slicenum_list_from_slice_lists
 from fridadrp.core import set_hawaii_border_pixels_to_nan
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
@@ -381,25 +382,9 @@ def find_arc_lines(
     # Retrieve initial data
     image_data, list_poly_left, list_poly_right, xlim = retrieve_initial_data(image, input_poly, xlim, voffset)
 
-    # Avoid incompatible choices of slicenum and sliceid
-    if slicenum_list != [0] and sliceid_list != [0]:
-        raise ValueError("Cannot specify both slicenum_list and sliceid_list. Please choose one.")
-    if slicenum_list != [0] and 0 in slicenum_list:
-        raise ValueError("Invalid value in slicenum_list: 0. Use 0 only to indicate all slices.")
-    if sliceid_list != [0] and 0 in sliceid_list:
-        raise ValueError("Invalid value in sliceid_list: 0. Use 0 only to indicate all slices.")
-    if sliceid_list == [0]:
-        slicenum_to_process = slicenum_list
-    else:
-        slicenum_to_process = [int(sliceindex_from_sliceid(i) + 1) for i in sliceid_list]
-    if slicenum_to_process == [0]:
-        slicenum_to_process = list(range(1, FRIDA_NSLICES + 1))  # All slices
+    # Define slice numbers to process based on the provided slicenum_list and sliceid_list
+    slicenum_to_process = slicenum_list_from_slice_lists(slicenum_list, sliceid_list)
     logger.debug(f"Slices to process: #{slicenum_to_process}")
-
-    # Check that the provided slice numbers are valid
-    for slicenum in slicenum_to_process:
-        if slicenum < 1 or slicenum > FRIDA_NSLICES:
-            raise ValueError(f"Invalid slice #{slicenum}. Must be between 1 and {FRIDA_NSLICES}.")
 
     # Initialize list to store the table with the arc line detections for each slice
     list_detection_tables = [None] * FRIDA_NSLICES
