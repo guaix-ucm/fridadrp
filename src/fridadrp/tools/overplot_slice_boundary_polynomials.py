@@ -210,7 +210,15 @@ def plot_traces_within_slice_boundary_polynomials_mosaic(
         subprocess.run(montage_command, check=True)
 
 
-def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=None):
+def plot_fitted_boundary_polynomials(
+    ax,
+    list_poly_left,
+    list_poly_right,
+    show_sliceid=False,
+    isliceplot=None,
+    plot_left_boundary=True,
+    plot_right_boundary=True,
+):
     """Plot the fitted slice boundary polynomials on the given axes
 
     The polynomials are assumed to be fitted using as independent variable
@@ -230,6 +238,10 @@ def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, show_s
         If True, overplot the slice ID at the center of each slice.
     isliceplot : int, optional
         If provided, only plot the polynomials for the specified slice index (0-based).
+    plot_left_boundary : bool, optional
+        If True, plot the left boundary polynomial.
+    plot_right_boundary : bool, optional
+        If True, plot the right boundary polynomial.
     """
     xmin, xmax = ax.get_xlim()
     xdum = np.linspace(xmin, xmax, 1000)
@@ -239,10 +251,10 @@ def plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, show_s
     else:
         islice_range = [isliceplot]
     for islice in islice_range:
-        if list_poly_left[islice] is not None:
+        if plot_left_boundary and list_poly_left[islice] is not None:
             ax.plot(xdum, list_poly_left[islice](xdum), color="white", lw=5.0, alpha=0.7)
             ax.plot(xdum, list_poly_left[islice](xdum), color="C0", lw=2.0, alpha=0.7)
-        if list_poly_right[islice] is not None:
+        if plot_right_boundary and list_poly_right[islice] is not None:
             ax.plot(xdum, list_poly_right[islice](xdum), color="white", lw=5.0, alpha=0.7)
             ax.plot(xdum, list_poly_right[islice](xdum), color="C1", lw=2.0, alpha=0.7)
         if show_sliceid:
