@@ -104,7 +104,7 @@ def retrieve_initial_data(image, input_poly, xlim=None, voffset=[0.0]):
             nvoffsets,
         )  # using array indices (0 based)
         if logger.isEnabledFor(logging.DEBUG):
-            debugplot = 2
+            debugplot = -2
         else:
             debugplot = 0
         poly_voffset, _ = polfit_residuals(
@@ -286,7 +286,6 @@ def find_arc_lines(
     nwinwidth_search_peaks=5,
     nwinwidth_refine_peaks=3,
     fwhm_diffraction=2.0,
-    show_sliceid=False,
     allplots=False,
 ):
     """Find and characterize arc lines in FRIDA IFU exposures
@@ -344,8 +343,6 @@ def find_arc_lines(
         Strehl ratio scales linearly with fwhm_diffraction, a value computed
         with an assumed FWHM can be corrected afterwards, without refitting,
         by multiplying it by fwhm_diffraction_real / fwhm_diffraction.
-    show_sliceid : bool, optional
-        If True, overplot the slice ID at the center of each slice.
     allplots : bool, optional
         If True, all plots will be displayed.
 
@@ -597,19 +594,25 @@ def find_arc_lines(
             subtitle = f"[Slice #{slicenum} / {FRIDA_NSLICES}, Slice ID: {sliceid}]"
             title += subtitle
             imshow_slice(ax1, image_slice, xlim=xlim, ylim=ylim, vlim=vlim, title=title)
-            plot_fitted_boundary_polynomials(ax1, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
+            plot_fitted_boundary_polynomials(
+                ax1, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
+            )
 
             # Display the background
             title = "Background slice\n"
             title += subtitle
             imshow_slice(ax2, image_slice_bkg, xlim=xlim, ylim=ylim, vlim=vlim, title=title)
-            plot_fitted_boundary_polynomials(ax2, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
+            plot_fitted_boundary_polynomials(
+                ax2, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
+            )
 
             # Display the background-subtracted slice
             title = "Background-subtracted slice\n"
             title += subtitle
             imshow3 = imshow_slice(ax3, image_slice_bkgsub, xlim=xlim, ylim=ylim, vlim=vlim, title=title)
-            plot_fitted_boundary_polynomials(ax3, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
+            plot_fitted_boundary_polynomials(
+                ax3, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
+            )
 
             # Display the denoised background-subtracted slice
             # (use the same vmin and vmax as for the background-subtracted slice)
@@ -617,7 +620,9 @@ def find_arc_lines(
             title += subtitle
             vmin, vmax = (imshow3["vmin"], imshow3["vmax"])
             imshow_slice(ax4, image_slice_denoised, xlim=xlim, ylim=ylim, vlim=(vmin, vmax), title=title)
-            plot_fitted_boundary_polynomials(ax4, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice)
+            plot_fitted_boundary_polynomials(
+                ax4, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
+            )
 
             # Display the detected arc lines
             if num_features > 0:
@@ -709,7 +714,7 @@ def find_arc_lines(
                         title += subtitle
                         imshow_slice(ax1, image_slice_bkgsub, xlim=xlim, ylim=ylim, vlim=vlim, title=title)
                         plot_fitted_boundary_polynomials(
-                            ax1, list_poly_left, list_poly_right, show_sliceid, isliceplot=islice
+                            ax1, list_poly_left, list_poly_right, show_sliceid=False, isliceplot=islice
                         )
                         title = "Valid arc lines after selection\n"
                         title += subtitle
@@ -866,10 +871,14 @@ def find_arc_lines(
                                 f"Number of points for fit: {len(spectrum)} < {min_len_spectrum}. "
                                 f"Skipping row {j} of feature {feature_id}."
                             )
+                        bad_msg = None
                         if len(ixpeaks) <= 0:
-                            msg = f"Row {j} of feature {feature_id} has no valid peak. Skipping this row."
+                            bad_msg = f"Row {j} of feature {feature_id} has no valid peak. Skipping this row."
+                        elif len(ixpeaks) > 1:
+                            bad_msg = f"Row {j} of feature {feature_id} has multiple peaks. Skipping this row."
+                        if bad_msg is not None:
                             if allplots_effective:
-                                logger.info(msg)
+                                logger.info(bad_msg)
                                 if pause_between_rows:
                                     # It is necessary to insert a pause to allow the event loop to start before
                                     # the execution of the second iteration of the row loop
@@ -879,11 +888,8 @@ def find_arc_lines(
                                     plt.pause(0.2)
                                     fig.canvas.start_event_loop(timeout=0)
                             else:
-                                logger.debug(msg)
+                                logger.debug(bad_msg)
                         else:
-                            # Determine the highest peak
-                            imax = np.argmax(spectrum[ixpeaks])
-                            ixpeaks = ixpeaks[imax : imax + 1]  # keep only the highest peak
                             ax_external = None
                             if allplots_effective:
                                 if ax4 is not None:
@@ -948,6 +954,42 @@ def find_arc_lines(
                         plt.close(fig)
                         last_figure_is_closed = True
 
+        # Remove the rows corresponding to features with insufficient valid rows
+        # from the detection table, if any. This is done after the loop over rows to avoid
+        # having to deal with the case of an empty table during the loop over rows.
+        if len(detection_table) > 0:
+            # Count the number of valid rows for each feature
+            feature_ids, counts = np.unique(detection_table["feature_id"], return_counts=True)
+            # Minimum number of valid rows required for each feature: use the same
+            # threshold employed in the initial feature selection (minheight, evaluated
+            # at the x location of each feature). Row i of arc_line_table corresponds
+            # to feature label i + 1 (labels are 1-based).
+            minimum_number_of_valid_rows = arc_line_table["minheight"][feature_ids - 1]
+            # Determine which features have insufficient valid rows
+            insufficient_rows_features = feature_ids[counts < minimum_number_of_valid_rows]
+            if len(insufficient_rows_features) > 0:
+                logger.debug(
+                    "Slice #%2d (Slice ID: %2d) has features with insufficient valid rows.",
+                    slicenum,
+                    sliceid,
+                )
+                if len(insufficient_rows_features) == 1:
+                    logger.debug("Feature with insufficient valid rows: %s", insufficient_rows_features[0])
+                else:
+                    logger.debug(
+                        "Features with insufficient valid rows: %s", ", ".join(map(str, insufficient_rows_features))
+                    )
+                # Remove the rows corresponding to features with insufficient valid rows
+                mask_sufficient_rows = ~np.isin(detection_table["feature_id"], insufficient_rows_features)
+                detection_table = detection_table[mask_sufficient_rows]
+            if len(detection_table) == 0:
+                logger.warning(
+                    "Slice #%2d (Slice ID: %2d) has no valid arc lines after removing features "
+                    "with insufficient valid rows.",
+                    slicenum,
+                    sliceid,
+                )
+
         list_detection_tables[islice] = detection_table
 
     return list_detection_tables
@@ -1009,9 +1051,9 @@ def main(args=None):
     )
     parser.add_argument(
         "--times-sigma-threshold",
-        help="Threshold for arc line detection in units of the robust standard deviation (default: 5.0)",
+        help="Threshold for arc line detection in units of the robust standard deviation (default: 10.0)",
         type=float,
-        default=5.0,
+        default=10.0,
     )
     parser.add_argument(
         "--minheight-percentage",
@@ -1045,7 +1087,6 @@ def main(args=None):
         type=float,
         default=2.0,
     )
-    parser.add_argument("--show-sliceid", help="Overplot slice ID", action="store_true")
     parser.add_argument("--allplots", help="Display all plots", action="store_true")
     parser.add_argument(
         "--xlim",
@@ -1100,7 +1141,6 @@ def main(args=None):
         nwinwidth_search_peaks=args.nwinwidth_search_peaks,
         nwinwidth_refine_peaks=args.nwinwidth_refine_peaks,
         fwhm_diffraction=args.fwhm_diffraction,
-        show_sliceid=args.show_sliceid,
         allplots=args.allplots,
     )
 
