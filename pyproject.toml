@@ -59,6 +59,7 @@ Repository = "https://github.com/guaix-ucm/fridadrp.git"
 FRIDA = "fridadrp.loader:drp_load"
 
 [project.scripts]
+fridadrp-analyze_arc_lines = "fridadrp.tools.analyze_arc_lines:main"
 fridadrp-ifu_simulator = "fridadrp.tools.frida_ifu_simulator:main"
 fridadrp-interpolate_traces_within_slices = "fridadrp.tools.interpolate_traces_within_slices:main"
 fridadrp-find_slice_boundary_borders_from_flat = "fridadrp.tools.find_slice_boundary_borders_from_flat:main"

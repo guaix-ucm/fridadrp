@@ -259,7 +259,7 @@ def plot_fitted_boundary_polynomials(
             ax.plot(xdum, list_poly_right[islice](xdum), color="C1", lw=2.0, alpha=0.7)
         if show_sliceid:
             if list_poly_left[islice] is not None and list_poly_right[islice] is not None:
-                xcenter = (FRIDA_NAXIS1_HAWAII.value - 1) / 2
+                xcenter = (xmin + xmax) / 2
                 ycenter = (list_poly_left[islice](xcenter) + list_poly_right[islice](xcenter)) / 2
                 if ymin <= ycenter <= ymax:
                     ax.text(
