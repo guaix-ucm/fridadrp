@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools >= 64", "wheel", "setuptools_scm[toml]>=8"]
+requires = ["setuptools >= 77", "wheel", "setuptools_scm[toml]>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "FRIDA Data Reduction Pipeline"
 readme = "README.rst"
 requires-python = ">=3.11"
-license = {text = "GPL-3.0-or-later"}
+license = "GPL-3.0-or-later"
 authors = [
     {name = "Nicolás Cardiel", email = "cardiel@ucm.es"},
     {name = "Sergio Pascual", email = "sergiopr@fis.ucm.es"}
@@ -22,7 +22,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: GNU General Public License (GPL)",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
