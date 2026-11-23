@@ -50,7 +50,7 @@ def define_auxiliary_files(grating, logger=None):
     logger.debug(f"path for caching auxiliary files: {pooch.os_cache(project='fridadrp')}")
     fconf = pooch.retrieve(
         f'{base_url}/{configuration_FRIDA_IFU_file}',
-        known_hash='md5:981684f1920fac9835a6067782b1b531',
+        known_hash='md5:42be1e2a146f52f566e875fb1a7f8821',
         path=pooch.os_cache(project="fridadrp"),
         progressbar=True
     )

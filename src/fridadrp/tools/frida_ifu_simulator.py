@@ -139,7 +139,7 @@ def main(args=None):
     logging.getLogger("matplotlib").setLevel(logging.ERROR)  # Suppress matplotlib debug logs
 
     # Welcome message
-    console.rule(f"[bold magenta]Welcome to fridadrp-ifu_simulator[/bold magenta]")
+    console.rule("[bold magenta]Welcome to fridadrp-ifu_simulator[/bold magenta]")
 
     # Display version info
     logger = logging.getLogger(__name__)
