@@ -13,7 +13,6 @@ import argparse
 from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 import logging
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial import Polynomial
@@ -22,14 +21,12 @@ from rich_argparse import RichHelpFormatter
 from scipy.ndimage import median_filter, generic_filter
 from scipy.signal import savgol_filter
 import teareduce as tea
-import types
 import uuid
 
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, find_peaks_spectrum
 from numina.tools.add_script_info_to_fits_history import add_script_info_to_fits_history
 from numina.tools.progressbarlines import ProgressBarLines
 from numina.tools.initialize_script_with_args import NuminaScriptDefinition
-from numina.tools.input_number import input_number
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
@@ -37,6 +34,7 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
 from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_from_colranges
+from fridadrp.tools.overplot_slice_boundary_polynomials import interactive_image_display
 
 
 def find_slice_boundary_borders_from_flat(
@@ -212,77 +210,17 @@ def find_slice_boundary_borders_from_flat(
             ds9mode=True,
             title=f"{Path(flatfile).name}\nSavitzky-Golay Second Derivative Filtered Flat Data",
         )
-        mpl.rcParams["keymap.forward"] = []  # disable 'v' (conflict with 'v' for setting vmin/vmax)
-
-        def on_key(event):
-            if event.key == "?":
-                logger.info("-" * 79)
-                logger.info("'?': show this help message")
-                logger.info("'a': toggle imshow aspect='equal' / aspect='auto'")
-                logger.info("'v': set vmin and vmax manually")
-                logger.info("',': set vmin and vmax to min and max of the zoomed region")
-                logger.info("'/': set vmin and vmax using zscale of the zoomed region")
-                logger.info("'q': quit")
-                logger.info("-" * 79)
-            elif event.key == "a":
-                for iax, ax in enumerate(axarr):
-                    if ax.get_aspect() in ["equal", 1.0]:
-                        if iax == 0:
-                            logger.info("Setting aspect to 'auto' for all axes.")
-                        ax.set_aspect("auto")
-                    else:
-                        if iax == 0:
-                            logger.info("Setting aspect to 'equal' for all axes.")
-                        ax.set_aspect("equal")
-                fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
-                fig.tight_layout()  # apply new tight_layout adjustments
-                fig.canvas.draw()
-            elif event.key in ["v", ",", "/"]:
-                if event.inaxes in axarr:
-                    if event.inaxes == axarr[0]:
-                        data = flat_data
-                    elif event.inaxes == axarr[1]:
-                        data = flat_data_filtered
-                    elif event.inaxes == axarr[2]:
-                        data = flat_data_savgol_deriv1
-                    else:
-                        data = flat_data_savgol_deriv2
-                    if event.key == "v":
-                        current_vmin, current_vmax = event.inaxes.images[0].get_clim()
-                        vmin = input_number(expected_type="float", prompt="Enter vmin: ", default=current_vmin)
-                        vmax = input_number(expected_type="float", prompt="Enter vmax: ", default=current_vmax)
-                    else:
-                        xlim = event.inaxes.get_xlim()
-                        ylim = event.inaxes.get_ylim()
-                        x1, x2 = int(xlim[0]), int(xlim[1])
-                        y1, y2 = int(ylim[0]), int(ylim[1])
-                        x1 = max(0, min(x1, FRIDA_NAXIS1_HAWAII.value - 1))
-                        x2 = max(0, min(x2, FRIDA_NAXIS1_HAWAII.value - 1))
-                        y1 = max(0, min(y1, FRIDA_NAXIS2_HAWAII.value - 1))
-                        y2 = max(0, min(y2, FRIDA_NAXIS2_HAWAII.value - 1))
-                        if event.key == ",":
-                            vmin = np.nanmin(data[y1 : (y2 + 1), x1 : (x2 + 1)])
-                            vmax = np.nanmax(data[y1 : (y2 + 1), x1 : (x2 + 1)])
-                        else:
-                            vmin, vmax = ZScaleInterval().get_limits(data[y1 : (y2 + 1), x1 : (x2 + 1)])
-                    event.inaxes.images[0].set_clim(vmin, vmax)
-                    fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
-                    fig.tight_layout()  # apply new tight_layout adjustments
-                    fig.canvas.draw()
-            elif event.key == "q":
-                plt.close(fig)
-
-        on_key(event=types.SimpleNamespace(key="?"))  # Show help message on startup
-        fig.canvas.mpl_connect("key_press_event", on_key)
-        fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
-        fig.tight_layout()  # apply new tight_layout adjustments
-        # instead of plt.show(), use a loop to keep the figure open until closed by the user
-        # (otherwise, after using input_number() in the on_key function, the matplotlib event
-        # loop is not properly restored and the execution of the code continues as if the
-        # figure was closed, which is not the case)
-        while plt.fignum_exists(fig.number):
-            plt.pause(0.1)
-        # plt.show()
+        # Initial display limits of each panel (as set by tea.imshow above)
+        list_clim = [ax.images[0].get_clim() for ax in axarr]
+        # the images are displayed with ds9mode=True (axis coordinates are 1-based FITS pixels)
+        interactive_image_display(
+            fig,
+            axarr,
+            [flat_data, flat_data_filtered, flat_data_savgol_deriv1, flat_data_savgol_deriv2],
+            [clim[0] for clim in list_clim],
+            [clim[1] for clim in list_clim],
+            ds9mode=True,
+        )
 
     # Define arrays to store slice boundaries for all the FRIDA_NSLICES slices
     array_left_border = np.full((FRIDA_NSLICES, FRIDA_NAXIS1_HAWAII.value), np.nan, dtype=float)

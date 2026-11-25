@@ -19,6 +19,7 @@ from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 import logging
 import matplotlib as mpl
+from matplotlib.axes import Axes
 from matplotlib.backend_bases import NavigationToolbar2
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
@@ -473,19 +474,25 @@ def polynomial_from_voffset(voffset, debugplot=None):
     return poly_voffset
 
 
-def connect_image_display_keys(fig, ax, image_data, vmin, vmax):
-    """Connect the interactive keys to a figure displaying an image
+def connect_image_display_keys(fig, ax, image_data, vmin, vmax, ds9mode=False):
+    """Connect the interactive keys to a figure displaying one or several images
 
     The following keys are available ('?' displays this list, which is
     also shown when this function is called):
 
-    - 'a': toggle imshow aspect='equal' / aspect='auto'
-    - 'h': reset zoom to the axis limits at the time of this call
-      (and the display limits to the last vmin, vmax selected)
+    - 'a': toggle imshow aspect='equal' / aspect='auto' (all the axes)
+    - 'h': reset zoom to the axis limits at the time of this call, for all
+      the axes (and the display limits of each image to the last vmin,
+      vmax selected for it)
     - 'v': set vmin and vmax manually (read from standard input)
     - ',': set vmin and vmax to the min and max of the zoomed region
     - '/': set vmin and vmax using zscale of the zoomed region
     - 'q': close the figure
+
+    When a single axes is given, the keys 'v', ',' and '/' act on its image
+    wherever the cursor is. When several axes are given, they act on the
+    image of the axes under the cursor, and are ignored when the cursor is
+    not over any of them.
 
     The default matplotlib keymaps for 'h', 'r', 'c' and 'v' are disabled
     to avoid conflicts. The figure is set in zoom mode (equivalent to
@@ -495,36 +502,68 @@ def connect_image_display_keys(fig, ax, image_data, vmin, vmax):
     Parameters
     ----------
     fig : matplotlib.figure.Figure
-        Figure containing the image.
-    ax : matplotlib.axes.Axes
-        Axes where the image has been displayed (the image must be
-        ax.images[0]). The axis limits are assumed to be given in
-        array indices (0-based).
-    image_data : numpy.ndarray
-        2D array with the displayed image, employed to compute the
-        display limits of the zoomed region.
-    vmin : float
-        Initial background display limit.
-    vmax : float
-        Initial foreground display limit.
+        Figure containing the image(s).
+    ax : matplotlib.axes.Axes or sequence of matplotlib.axes.Axes
+        Axes where each image has been displayed (the image must be
+        ax.images[0] in each axes).
+    image_data : numpy.ndarray or sequence of numpy.ndarray
+        2D array(s) with the displayed image(s), employed to compute the
+        display limits of the zoomed region. If ax is a sequence, it must
+        be a sequence of the same length.
+    vmin : float or sequence of float
+        Initial background display limit(s). If ax is a sequence, it must
+        be a sequence of the same length.
+    vmax : float or sequence of float
+        Initial foreground display limit(s). If ax is a sequence, it must
+        be a sequence of the same length.
+    ds9mode : bool, optional
+        If False, the axis coordinates are array indices (0-based), i.e.,
+        the image extent is [-0.5, NAXIS1-0.5, -0.5, NAXIS2-0.5]. If True,
+        the axis coordinates are FITS pixels (1-based), i.e., the image
+        extent is [0.5, NAXIS1+0.5, 0.5, NAXIS2+0.5], as with
+        teareduce.imshow(..., ds9mode=True).
 
     Returns
     -------
     on_key : callable
         Function connected to the 'key_press_event' of the figure. It
-        receives an object with a 'key' attribute.
+        receives an object with a 'key' attribute (and, when several axes
+        are given, an 'inaxes' attribute).
+
+    Raises
+    ------
+    ValueError
+        If ax is a sequence and image_data, vmin and vmax are not
+        sequences of the same length.
     """
     logger = logging.getLogger(__name__)
+
+    # Normalise the input to lists with one element per displayed image
+    if isinstance(ax, Axes):
+        list_ax = [ax]
+        list_data = [image_data]
+        list_vmin = [vmin]
+        list_vmax = [vmax]
+    else:
+        list_ax = list(ax)
+        try:
+            list_data = list(image_data)
+            list_vmin = list(vmin)
+            list_vmax = list(vmax)
+        except TypeError:
+            raise ValueError("When ax is a sequence, image_data, vmin and vmax must be sequences too.")
+        if not (len(list_data) == len(list_vmin) == len(list_vmax) == len(list_ax)):
+            raise ValueError("ax, image_data, vmin and vmax must have the same length.")
+    nax = len(list_ax)
+    # offset to convert axis coordinates into 0-based array indices
+    ioffset = 1 if ds9mode else 0
 
     mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
     mpl.rcParams["keymap.back"] = []  # disable 'c'
     mpl.rcParams["keymap.forward"] = []  # disable 'v' (conflict with 'v' for setting vmin/vmax)
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-    init_xylimits = xlim, ylim
+    init_xylimits = [(ax_.get_xlim(), ax_.get_ylim()) for ax_ in list_ax]
 
     def on_key(event):
-        nonlocal vmin, vmax
         if event.key == "?":
             logger.info("-" * 79)
             logger.info("'?': show this help message")
@@ -533,50 +572,70 @@ def connect_image_display_keys(fig, ax, image_data, vmin, vmax):
             logger.info("'v': set vmin and vmax manually")
             logger.info("',': set vmin and vmax to min and max of the zoomed region")
             logger.info("'/': set vmin and vmax using zscale of the zoomed region")
+            if nax > 1:
+                logger.info("('v', ',' and '/' act on the image under the cursor)")
             logger.info("'q': quit")
             logger.info("-" * 79)
         elif event.key == "h":
-            xlim, ylim = init_xylimits
-            ax.set_xlim(xlim)
-            ax.set_ylim(ylim)
-            ax.images[0].set_clim(vmin, vmax)
+            for iax, ax_ in enumerate(list_ax):
+                xlim, ylim = init_xylimits[iax]
+                ax_.set_xlim(xlim)
+                ax_.set_ylim(ylim)
+                ax_.images[0].set_clim(list_vmin[iax], list_vmax[iax])
             fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
             fig.tight_layout()  # apply new tight_layout adjustments
-            ax.figure.canvas.draw_idle()
-            plt.pause(0.1)  # allow time for the figure to update
+            # the redraw is performed by the event loop running this handler
+            # (do not call plt.pause() here: it would start a nested event loop)
+            fig.canvas.draw_idle()
         elif event.key == "a":
-            if ax.get_aspect() in ["equal", 1.0]:
+            # the new aspect is decided from the first axes and applied to all of them
+            if list_ax[0].get_aspect() in ["equal", 1.0]:
                 logger.info("Setting aspect to 'auto'.")
-                ax.set_aspect("auto")
+                new_aspect = "auto"
             else:
                 logger.info("Setting aspect to 'equal'.")
-                ax.set_aspect("equal")
+                new_aspect = "equal"
+            for ax_ in list_ax:
+                ax_.set_aspect(new_aspect)
             fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
             fig.tight_layout()  # apply new tight_layout adjustments
             fig.canvas.draw()
         elif event.key in ["v", ",", "/"]:
-            if event.key == "v":
-                current_vmin, current_vmax = ax.images[0].get_clim()
-                vmin = input_number(expected_type="float", prompt="Enter vmin: ", default=current_vmin)
-                vmax = input_number(expected_type="float", prompt="Enter vmax: ", default=current_vmax)
+            # select the image on which the key acts
+            if nax == 1:
+                iax = 0
             else:
-                xlim = ax.get_xlim()
-                ylim = ax.get_ylim()
-                x1, x2 = int(xlim[0]), int(xlim[1])
-                y1, y2 = int(ylim[0]), int(ylim[1])
+                inaxes = getattr(event, "inaxes", None)
+                if inaxes not in list_ax:
+                    return
+                iax = list_ax.index(inaxes)
+            ax_ = list_ax[iax]
+            if event.key == "v":
+                current_vmin, current_vmax = ax_.images[0].get_clim()
+                vmin_ = input_number(expected_type="float", prompt="Enter vmin: ", default=current_vmin)
+                vmax_ = input_number(expected_type="float", prompt="Enter vmax: ", default=current_vmax)
+            else:
+                xlim = ax_.get_xlim()
+                ylim = ax_.get_ylim()
+                # axis coordinates -> 0-based array indices
+                x1, x2 = int(xlim[0] - ioffset), int(xlim[1] - ioffset)
+                y1, y2 = int(ylim[0] - ioffset), int(ylim[1] - ioffset)
                 x1 = max(0, min(x1, FRIDA_NAXIS1_HAWAII.value - 1))
                 x2 = max(0, min(x2, FRIDA_NAXIS1_HAWAII.value - 1))
                 y1 = max(0, min(y1, FRIDA_NAXIS2_HAWAII.value - 1))
                 y2 = max(0, min(y2, FRIDA_NAXIS2_HAWAII.value - 1))
+                data = list_data[iax]
                 if event.key == ",":
-                    vmin = np.nanmin(image_data[y1 : y2 + 1, x1 : x2 + 1])
-                    vmax = np.nanmax(image_data[y1 : y2 + 1, x1 : x2 + 1])
+                    vmin_ = np.nanmin(data[y1 : y2 + 1, x1 : x2 + 1])
+                    vmax_ = np.nanmax(data[y1 : y2 + 1, x1 : x2 + 1])
                 else:
-                    vmin, vmax = ZScaleInterval().get_limits(image_data[y1 : y2 + 1, x1 : x2 + 1])
-                logger.info(f"Setting vmin={vmin}, vmax={vmax} for the zoomed region.")
-            ax.images[0].set_clim(vmin, vmax)
-            ax.figure.canvas.draw_idle()
-            plt.pause(0.1)  # allow time for the figure to update
+                    vmin_, vmax_ = ZScaleInterval().get_limits(data[y1 : y2 + 1, x1 : x2 + 1])
+                logger.info(f"Setting vmin={vmin_}, vmax={vmax_} for the zoomed region.")
+            list_vmin[iax], list_vmax[iax] = vmin_, vmax_
+            ax_.images[0].set_clim(vmin_, vmax_)
+            # the redraw is performed by the event loop running this handler
+            # (do not call plt.pause() here: it would start a nested event loop)
+            fig.canvas.draw_idle()
         elif event.key == "q":
             plt.close(fig)
 
@@ -592,8 +651,8 @@ def connect_image_display_keys(fig, ax, image_data, vmin, vmax):
     return on_key
 
 
-def interactive_image_display(fig, ax, image_data, vmin, vmax):
-    """Display an image interactively until the figure is closed
+def interactive_image_display(fig, ax, image_data, vmin, vmax, ds9mode=False):
+    """Display one or several images interactively until the figure is closed
 
     The interactive keys defined in connect_image_display_keys are
     connected to the figure, and the execution is blocked until the
@@ -602,19 +661,21 @@ def interactive_image_display(fig, ax, image_data, vmin, vmax):
     Parameters
     ----------
     fig : matplotlib.figure.Figure
-        Figure containing the image (created with pyplot).
-    ax : matplotlib.axes.Axes
-        Axes where the image has been displayed (the image must be
-        ax.images[0]). The axis limits are assumed to be given in
-        array indices (0-based).
-    image_data : numpy.ndarray
-        2D array with the displayed image.
-    vmin : float
-        Initial background display limit.
-    vmax : float
-        Initial foreground display limit.
+        Figure containing the image(s) (created with pyplot).
+    ax : matplotlib.axes.Axes or sequence of matplotlib.axes.Axes
+        Axes where each image has been displayed (the image must be
+        ax.images[0] in each axes).
+    image_data : numpy.ndarray or sequence of numpy.ndarray
+        2D array(s) with the displayed image(s).
+    vmin : float or sequence of float
+        Initial background display limit(s).
+    vmax : float or sequence of float
+        Initial foreground display limit(s).
+    ds9mode : bool, optional
+        If True, the axis coordinates are FITS pixels (1-based) instead of
+        array indices (0-based). See connect_image_display_keys.
     """
-    connect_image_display_keys(fig, ax, image_data, vmin, vmax)
+    connect_image_display_keys(fig, ax, image_data, vmin, vmax, ds9mode=ds9mode)
     # fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
     fig.tight_layout()  # apply new tight_layout adjustments
     # instead of plt.show(), use a loop to keep the figure open until closed by the user

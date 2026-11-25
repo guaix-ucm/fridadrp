@@ -191,3 +191,83 @@ def test_connect_image_display_keys(agg_pyplot, caplog):
         assert plt.fignum_exists(fig.number)
         on_key(types.SimpleNamespace(key="q"))
         assert not plt.fignum_exists(fig.number)
+
+
+@pytest.mark.filterwarnings("ignore:FigureCanvasAgg is non-interactive:UserWarning")
+def test_connect_image_display_keys_several_axes_ds9mode(agg_pyplot):
+    # Two images with values 100 * row + column and twice that (0-based array indices),
+    # displayed with 1-based axis coordinates (as teareduce.imshow with ds9mode=True)
+    naxis2, naxis1 = 100, 100
+    image1 = np.add.outer(100.0 * np.arange(naxis2), np.arange(naxis1))
+    image2 = 2 * image1
+    extent = [0.5, naxis1 + 0.5, 0.5, naxis2 + 0.5]
+    with mpl.rc_context():  # the function modifies the global keymaps
+        fig, axarr = plt.subplots(ncols=2, sharex=True, sharey=True)
+        clim1, clim2 = (0.0, image1.max()), (0.0, image2.max())
+        axarr[0].imshow(image1, origin="lower", extent=extent, vmin=clim1[0], vmax=clim1[1])
+        axarr[1].imshow(image2, origin="lower", extent=extent, vmin=clim2[0], vmax=clim2[1])
+        init_xlim, init_ylim = axarr[0].get_xlim(), axarr[0].get_ylim()
+        on_key = connect_image_display_keys(
+            fig, axarr, [image1, image2], [clim1[0], clim2[0]], [clim1[1], clim2[1]], ds9mode=True
+        )
+
+        # Zoom on FITS pixels 11-21 along NAXIS1 and 31-41 along NAXIS2,
+        # i.e., array indices 10-20 (columns) and 30-40 (rows)
+        axarr[0].set_xlim(11.5, 21.5)
+        axarr[0].set_ylim(31.5, 41.5)
+
+        # The key acts only on the image under the cursor
+        on_key(types.SimpleNamespace(key=",", inaxes=axarr[1]))
+        assert axarr[1].images[0].get_clim() == (2 * (100.0 * 30 + 10), 2 * (100.0 * 40 + 20))
+        assert axarr[0].images[0].get_clim() == clim1
+        on_key(types.SimpleNamespace(key=",", inaxes=axarr[0]))
+        assert axarr[0].images[0].get_clim() == (100.0 * 30 + 10, 100.0 * 40 + 20)
+
+        # Ignored when the cursor is not over any of the images
+        on_key(types.SimpleNamespace(key="/", inaxes=None))
+        assert axarr[0].images[0].get_clim() == (100.0 * 30 + 10, 100.0 * 40 + 20)
+
+        # 'h': initial limits for all the axes, each image keeping its last display limits
+        on_key(types.SimpleNamespace(key="h"))
+        for ax in axarr:
+            assert ax.get_xlim() == init_xlim
+            assert ax.get_ylim() == init_ylim
+        assert axarr[0].images[0].get_clim() == (100.0 * 30 + 10, 100.0 * 40 + 20)
+        assert axarr[1].images[0].get_clim() == (2 * (100.0 * 30 + 10), 2 * (100.0 * 40 + 20))
+
+        # 'a': all the axes change their aspect
+        on_key(types.SimpleNamespace(key="a"))
+        assert [ax.get_aspect() for ax in axarr] == ["auto", "auto"]
+
+
+def test_connect_image_display_keys_inconsistent_lengths(agg_pyplot):
+    image = np.zeros((10, 10))
+    with mpl.rc_context():
+        fig, axarr = plt.subplots(ncols=2)
+        for ax in axarr:
+            ax.imshow(image)
+        with pytest.raises(ValueError, match="same length"):
+            connect_image_display_keys(fig, axarr, [image], [0.0, 0.0], [1.0, 1.0])
+        with pytest.raises(ValueError, match="must be sequences"):
+            connect_image_display_keys(fig, axarr, [image, image], 0.0, 1.0)
+
+
+@pytest.mark.filterwarnings("ignore:FigureCanvasAgg is non-interactive:UserWarning")
+def test_connect_image_display_keys_no_nested_event_loop(agg_pyplot, monkeypatch):
+    # The handler runs inside the GUI event loop started by plt.pause() in
+    # interactive_image_display; calling plt.pause() from the handler raises
+    # this error with the Qt backend (Agg allows nesting, so it is simulated here)
+    def fail_pause(interval):
+        raise RuntimeError("Event loop already running")
+
+    image = np.add.outer(100.0 * np.arange(100), np.arange(100))
+    with mpl.rc_context():  # the function modifies the global keymaps
+        fig, ax = plt.subplots()
+        ax.imshow(image, origin="lower", vmin=0.0, vmax=image.max())
+        on_key = connect_image_display_keys(fig, ax, image, 0.0, image.max())
+        monkeypatch.setattr(overplot_module.plt, "pause", fail_pause)
+        ax.set_xlim(10.5, 20.5)
+        ax.set_ylim(30.5, 40.5)
+        for key in [",", "/", "h", "a"]:
+            on_key(types.SimpleNamespace(key=key))
+        assert np.allclose(ax.images[0].get_clim(), ZScaleInterval().get_limits(image[30:41, 10:21]))
