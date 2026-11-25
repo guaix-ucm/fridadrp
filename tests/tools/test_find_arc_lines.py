@@ -19,6 +19,7 @@ from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.find_arc_lines import find_arc_lines
+from fridadrp.tools.find_arc_lines import retrieve_initial_data
 
 # Synthetic slice geometry: constant boundaries (0-based array indices along NAXIS2),
 # with slices of 60 pixels separated by 8 pixels
@@ -159,3 +160,16 @@ def test_detected_lines(detection_tables):
     yupper = ylower + SLICE_HEIGHT
     assert np.all(table["row_index"] >= int(ylower + 0.5))
     assert np.all(table["row_index"] <= int(yupper + 0.5))
+
+
+def test_retrieve_initial_data_xlim(synthetic_files):
+    image_file, poly_file = synthetic_files
+    # xlim is given as FITS pixels (1-based) and returned as array indices (0-based)
+    xlim = [101.0, 200.0]
+    *_, xlim_0based = retrieve_initial_data(str(image_file), str(poly_file), xlim=xlim)
+    assert xlim_0based == [100.0, 199.0]
+    # The input list is not modified
+    assert xlim == [101.0, 200.0]
+    # Default limits: the whole detector along NAXIS1
+    *_, xlim_default = retrieve_initial_data(str(image_file), str(poly_file))
+    assert xlim_default == [-0.5, FRIDA_NAXIS1_HAWAII.value - 0.5]

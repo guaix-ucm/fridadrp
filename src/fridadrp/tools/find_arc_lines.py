@@ -40,6 +40,7 @@ from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_H
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.core import slicenum_list_from_slice_lists
 from fridadrp.core import set_hawaii_border_pixels_to_nan
+from fridadrp.tools.check_plot_limits import check_plot_limits
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.overplot_slice_boundary_polynomials import polynomial_from_voffset
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
@@ -111,8 +112,8 @@ def retrieve_initial_data(image, input_poly, xlim=None, voffset=[0.0]):
     if xlim is None:
         xlim = [-0.5, FRIDA_NAXIS1_HAWAII.value - 0.5]
     else:
-        xlim[0] -= 1  # (0-based)
-        xlim[1] -= 1  # (0-based)
+        # new list (0-based), leaving the input list unchanged
+        xlim = [xlim[0] - 1, xlim[1] - 1]
 
     return image_data, list_poly_left, list_poly_right, xlim
 
@@ -252,7 +253,6 @@ def find_arc_lines(
     voffset=[0.0],
     fit_method="gaussian+moments",
     xlim=None,
-    ylim=None,
     vlim=None,
     slicenum_list=[0],
     sliceid_list=[0],
@@ -289,9 +289,8 @@ def find_arc_lines(
         The method employed to fit the arc line profile (default: gaussian+moments).
         Valid options are "gaussian+moments" and "skewnorm".
     xlim : list, optional
-        The x-axis limits for the plot.
-    ylim : list, optional
-        The y-axis limits for the plot.
+        The x-axis limits for the plot. The y-axis limits are computed
+        automatically for each slice from its boundary polynomials.
     vlim : list, optional
         The vertical axis limits for the plot.
     slicenum_list : list of int, optional
@@ -353,6 +352,8 @@ def find_arc_lines(
         raise ValueError(f"Invalid {fit_method=}. Must be 'gaussian+moments' or 'skewnorm'.")
     if fwhm_diffraction <= 0:
         raise ValueError(f"{fwhm_diffraction=} must be positive")
+    check_plot_limits(xlim, "xlim")
+    check_plot_limits(vlim, "vlim", require_increasing=True)
 
     # Retrieve initial data
     image_data, list_poly_left, list_poly_right, xlim = retrieve_initial_data(image, input_poly, xlim, voffset)
@@ -1074,13 +1075,6 @@ def main(args=None):
         default=None,
     )
     parser.add_argument(
-        "--ylim",
-        help="Y-axis limits for the plot (ymin, ymax); array indices (1-based along NAXIS2 axis)",
-        type=float,
-        nargs=2,
-        default=None,
-    )
-    parser.add_argument(
         "--vlim",
         help="Background and foreground limits (vmin, vmax)",
         type=float,
@@ -1107,7 +1101,6 @@ def main(args=None):
         voffset=args.voffset,
         fit_method=args.fit_method,
         xlim=args.xlim,
-        ylim=args.ylim,
         vlim=args.vlim,
         slicenum_list=args.slicenum_list,
         sliceid_list=args.sliceid_list,

@@ -33,6 +33,7 @@ from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_H
 from fridadrp.core import set_hawaii_border_pixels_to_nan
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.core import slicenum_list_from_slice_lists
+from fridadrp.tools.check_plot_limits import check_plot_limits
 from fridadrp.tools.find_arc_lines import retrieve_initial_data
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 
@@ -161,9 +162,15 @@ def analyze_arc_lines(
     """
     logger = logging.getLogger(__name__)
 
-    # Store the original xlim and ylim values for later use in the plotting
-    xlim_plot = xlim
-    ylim_plot = ylim
+    check_plot_limits(xlim, "xlim")
+    check_plot_limits(ylim, "ylim")
+    check_plot_limits(vlim, "vlim", require_increasing=True)
+
+    # Limits for the first panel: xlim and ylim are 1-based (FITS), while the panel
+    # axes use 0-based array indices. New lists are created so that the conversion
+    # does not depend on retrieve_initial_data modifying xlim in place.
+    xlim_plot = None if xlim is None else [xlim[0] - 1, xlim[1] - 1]
+    ylim_plot = None if ylim is None else [ylim[0] - 1, ylim[1] - 1]
 
     # Retrieve initial data
     image_data, list_poly_left, list_poly_right, xlim = retrieve_initial_data(image, input_poly, xlim, voffset)

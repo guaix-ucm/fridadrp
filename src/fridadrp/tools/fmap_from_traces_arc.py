@@ -23,6 +23,7 @@ from numina.tools.initialize_script_with_args import NuminaScriptDefinition
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
 from fridadrp.core import FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
+from fridadrp.tools.check_plot_limits import check_plot_limits
 from fridadrp.tools.overplot_slice_boundary_polynomials import interactive_image_display
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces
@@ -36,10 +37,10 @@ def compute_fmap_from_traces_arc(
     traces_file: str,
     voffset: list[float] = [0.0],
     show_sliceid: bool = False,
-    xlim: list[float] = None,
-    ylim: list[float] = None,
-    vlim: list[float] = None,
-):
+    xlim: list[float] | None = None,
+    ylim: list[float] | None = None,
+    vlim: list[float] | None = None,
+) -> None:
     """Compute the mapping from slice traces and an arc image.
 
     Parameters
@@ -60,8 +61,19 @@ def compute_fmap_from_traces_arc(
         Y-axis limits for the plot (ymin, ymax); array indices (1-based along NAXIS2 axis).
     vlim : list[float], optional
         Background and foreground limits (vmin, vmax).
+
+    Raises
+    ------
+    ValueError
+        If xlim, ylim or vlim are not None and do not contain two finite
+        and different numbers, or if vlim[0] >= vlim[1].
     """
     logger = logging.getLogger(__name__)
+
+    # Check the plot limits before reading any file
+    check_plot_limits(xlim, "xlim")
+    check_plot_limits(ylim, "ylim")
+    check_plot_limits(vlim, "vlim", require_increasing=True)
 
     # Read the arc image
     with fits.open(arc_file) as hdulist:
@@ -131,7 +143,7 @@ def compute_fmap_from_traces_arc(
     interactive_image_display(fig, ax, arc_data, vmin, vmax)
 
 
-def main(args=None):
+def main(args: list[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(
         description="Compute mapping from slice traces and arc image",

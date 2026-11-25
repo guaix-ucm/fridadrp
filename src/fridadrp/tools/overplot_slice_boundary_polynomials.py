@@ -42,6 +42,7 @@ from fridadrp.core import FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex
+from fridadrp.tools.check_plot_limits import check_plot_limits
 from fridadrp.tools.read_slice_boundary_borders import read_slice_boundary_borders
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynomials
@@ -757,6 +758,10 @@ def overplot_slice_boundary_polynomials(
         Path to the output directory where the PDF mosaic will be saved.
     """
     logger = logging.getLogger(__name__)
+
+    check_plot_limits(xlim, "xlim")
+    check_plot_limits(ylim, "ylim")
+    check_plot_limits(vlim, "vlim", require_increasing=True)
 
     # Read the image data from the input FITS file
     with fits.open(image) as hdul:
