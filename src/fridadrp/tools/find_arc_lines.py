@@ -29,7 +29,6 @@ import uuid
 import warnings
 
 from numina.array.display.disable_keys_in_figure import disable_keys_in_figure
-from numina.array.display.polfit_residuals import polfit_residuals
 from numina.array.wavecalib.peaks_spectrum import find_peaks_spectrum, refine_peaks_spectrum
 from numina.array.rescale_array_z1z2 import rescale_array_to_z1z2, rescale_array_from_z1z2
 from numina.tools.initialize_script_with_args import NuminaScriptDefinition
@@ -37,12 +36,12 @@ from numina.tools.input_number import input_number
 
 from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
-from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.core import slicenum_list_from_slice_lists
 from fridadrp.core import set_hawaii_border_pixels_to_nan
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
+from fridadrp.tools.overplot_slice_boundary_polynomials import polynomial_from_voffset
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
 
@@ -90,41 +89,20 @@ def retrieve_initial_data(image, input_poly, xlim=None, voffset=[0.0]):
 
     # Compute polynomial to take into account voffset. Note that voffset is applied
     # to the slice boundaries and polynomials, but not to the image data.
-    if len(voffset) < 1:
-        raise ValueError("The list of vertical offsets (voffset) must contain at least one value.")
+    if logger.isEnabledFor(logging.DEBUG):
+        debugplot = -2
     else:
-        if voffset != [0.0]:
-            logger.info(
-                f"Fitting a polynomial of degree {len(voffset)-1} " "to the vertical offsets (boundary polynomials)"
-            )
-        nvoffsets = len(voffset)
-        xdum_voffsets = np.linspace(
-            FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
-            FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value - 1,
-            nvoffsets,
-        )  # using array indices (0 based)
-        if logger.isEnabledFor(logging.DEBUG):
-            debugplot = -2
-        else:
-            debugplot = 0
-        poly_voffset, _ = polfit_residuals(
-            x=xdum_voffsets,
-            y=np.array(voffset),
-            deg=len(voffset) - 1,
-            xlabel="array index along NAXIS1",
-            ylabel="array index along NAXIS2",
-            title="Vertical offset to be applied",
-            debugplot=debugplot,
-        )
-        logger.debug("Polynomial coefficients for voffset: %s", poly_voffset)
-        # Apply voffset to the slice boundary polynomials
-        # apply requested voffset
-        logger.debug("Applying voffset to the slice boundary polynomials")
-        for islice in range(FRIDA_NSLICES):
-            if list_poly_left[islice] is not None:
-                list_poly_left[islice] += poly_voffset
-            if list_poly_right[islice] is not None:
-                list_poly_right[islice] += poly_voffset
+        debugplot = 0
+    poly_voffset = polynomial_from_voffset(voffset, debugplot=debugplot)
+    logger.debug("Polynomial coefficients for voffset: %s", poly_voffset)
+    # Apply voffset to the slice boundary polynomials
+    # apply requested voffset
+    logger.debug("Applying voffset to the slice boundary polynomials")
+    for islice in range(FRIDA_NSLICES):
+        if list_poly_left[islice] is not None:
+            list_poly_left[islice] += poly_voffset
+        if list_poly_right[islice] is not None:
+            list_poly_right[islice] += poly_voffset
 
     # Set the x-axis limits for the plot (1-based along NAXIS1 axis)
     # These limits should be computed outside the main loop to avoid

@@ -19,10 +19,12 @@ from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 import logging
 import matplotlib as mpl
+from matplotlib.backend_bases import NavigationToolbar2
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.polynomial import Polynomial
 from pathlib import Path
 from rich_argparse import RichHelpFormatter
 import shutil
@@ -405,6 +407,71 @@ def plot_traces(ax, list_poly_traces_all_slices, show_traceid=False, color="cyan
                 )
 
 
+def polynomial_from_voffset(voffset, debugplot=None):
+    """Compute the polynomial describing a vertical offset along NAXIS1
+
+    The vertical offsets are assumed to be evenly spaced along the useful
+    region of the detector in the NAXIS1 direction, from
+    FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL to FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
+    (both included). A polynomial of degree len(voffset)-1 is fitted to these
+    values, using as independent variable the array index (0-based) along NAXIS1.
+
+    Parameters
+    ----------
+    voffset : list of float
+        Vertical offsets (pixels) along NAXIS2. A positive value corresponds
+        to a shift towards higher array indices along NAXIS2.
+    debugplot : int or None, optional
+        Debugplot code passed to polfit_residuals (see
+        numina.array.display.pause_debugplot for valid values). If None,
+        2 is used when the logger of this module is enabled for DEBUG, and
+        0 otherwise. It has no effect when all the offsets are zero.
+
+    Returns
+    -------
+    poly_voffset : numpy.polynomial.Polynomial
+        Polynomial that returns the vertical offset as a function of the
+        array index (0-based) along NAXIS1. If all the offsets are zero,
+        no fit is performed and the null polynomial is returned.
+
+    Raises
+    ------
+    ValueError
+        If voffset is empty.
+    """
+    logger = logging.getLogger(__name__)
+
+    if len(voffset) < 1:
+        raise ValueError("The list of vertical offsets (voffset) must contain at least one value.")
+    if np.any(np.array(voffset) != 0):
+        logger.info(f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets")
+        nvoffsets = len(voffset)
+        xdum_voffsets = np.linspace(
+            FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
+            FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value - 1,
+            nvoffsets,
+        )  # using array indices (0 based)
+        if debugplot is None:
+            if logger.isEnabledFor(logging.DEBUG):
+                debugplot = 2
+            else:
+                debugplot = 0
+        poly_voffset, _ = polfit_residuals(
+            x=xdum_voffsets,
+            y=np.array(voffset),
+            deg=len(voffset) - 1,
+            xlabel="array index along NAXIS1",
+            ylabel="array index along NAXIS2",
+            title="Vertical offset to be applied",
+            debugplot=debugplot,
+        )
+    else:
+        # all offsets are zero: skip the fit (and its debug plot)
+        poly_voffset = Polynomial([0.0])
+
+    return poly_voffset
+
+
 def overplot_slice_boundary_polynomials(
     input_poly,
     input_borders,
@@ -487,29 +554,7 @@ def overplot_slice_boundary_polynomials(
     # - trace polynomials
     # Note that the voffset is applied to the slice boundaries and polynomials,
     # but not to the image data.
-    if len(voffset) < 1:
-        raise ValueError("The list of vertical offsets (voffset) must contain at least one value.")
-    if np.any(np.array(voffset) != 0):
-        logger.info(f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets")
-    nvoffsets = len(voffset)
-    xdum_voffsets = np.linspace(
-        FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
-        FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value - 1,
-        nvoffsets,
-    )  # using array indices (0 based)
-    if logger.isEnabledFor(logging.DEBUG):
-        debugplot = 2
-    else:
-        debugplot = 0
-    poly_voffset, _ = polfit_residuals(
-        x=xdum_voffsets,
-        y=np.array(voffset),
-        deg=len(voffset) - 1,
-        xlabel="array index along NAXIS1",
-        ylabel="array index along NAXIS2",
-        title="Vertical offset to be applied",
-        debugplot=debugplot,
-    )
+    poly_voffset = polynomial_from_voffset(voffset)
 
     # Read the boundary polynomial coefficients from the input FITS file
     if input_poly is not None or input_traces is not None:
@@ -694,6 +739,12 @@ def overplot_slice_boundary_polynomials(
 
         on_key(event=types.SimpleNamespace(key="?"))  # Show help message on startup
         fig.canvas.mpl_connect("key_press_event", on_key)
+        # Start in zoom mode (equivalent to pressing the zoom button of the toolbar or the key 'o').
+        # Nothing is done when there is no NavigationToolbar2 (non-interactive backend, or
+        # rcParams['toolbar'] set to 'toolmanager').
+        toolbar = getattr(fig.canvas.manager, "toolbar", None)
+        if isinstance(toolbar, NavigationToolbar2):
+            toolbar.zoom()
         # fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
         fig.tight_layout()  # apply new tight_layout adjustments
         # instead of plt.show(), use a loop to keep the figure open until closed by the user

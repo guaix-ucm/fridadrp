@@ -22,7 +22,7 @@ from scipy.ndimage import median_filter, generic_filter
 import teareduce as tea
 import uuid
 
-from numina.array.display.polfit_residuals import polfit_residuals, polfit_residuals_with_sigma_rejection
+from numina.array.display.polfit_residuals import polfit_residuals_with_sigma_rejection
 from numina.array.robustfit import fit_theil_sen
 from numina.array.stats import robust_std
 from numina.array.wavecalib.peaks_spectrum import find_highest_peaks_spectrum, refine_peaks_spectrum
@@ -33,7 +33,6 @@ from numina.tools.progressbarlines import ProgressBarLines
 from fridadrp.core import DEF_SLICEID_FROM_SLICEINDEX
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII
-from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import FRIDA_NAXIS2_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS2_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.check_output_file_overwrite import check_output_file_overwrite
@@ -41,6 +40,7 @@ from fridadrp.tools.columns_to_analyze_from_colranges import columns_to_analyze_
 from fridadrp.tools.interpolate_traces_within_slices import interpolate_traces_in_single_slice
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces_within_slice_boundary_polynomials_mosaic
+from fridadrp.tools.overplot_slice_boundary_polynomials import polynomial_from_voffset
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 
 
@@ -209,44 +209,17 @@ def find_traces_within_slice_boundary_polynomials(
     list_poly_left, list_poly_right, poldeg = read_slice_boundary_polynomials(poly_path)
 
     # Apply offset to the slice boundary polynomials
-    if len(voffset) < 1:
-        raise ValueError("The list of vertical offsets (voffset) must contain at least one value.")
-    elif len(voffset) == 1:
-        logger.info(f"Applying constant vertical offset of {voffset[0]} pixels to slice boundary polynomials.")
-        for islice in range(FRIDA_NSLICES):
-            if list_poly_left[islice] is not None:
-                list_poly_left[islice] += voffset[0]
-            if list_poly_right[islice] is not None:
-                list_poly_right[islice] += voffset[0]
+    # (the fit is only displayed when plotsliceid is set and voffset is not a constant)
+    if plotsliceid is not None and len(voffset) > 1:
+        debugplot = 2
     else:
-        logger.info(
-            f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets "
-            "and applying it to slice boundary polynomials."
-        )
-        nvoffsets = len(voffset)
-        xdum_voffset = np.linspace(
-            FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
-            FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value - 1,
-            nvoffsets,
-        )  # using array indices (0 based)
-        if plotsliceid is not None:
-            debugplot = 2
-        else:
-            debugplot = 0
-        poly_voffset, _ = polfit_residuals(
-            x=xdum_voffset,
-            y=np.array(voffset),
-            deg=len(voffset) - 1,
-            xlabel="array index along NAXIS1",
-            ylabel="array index along NAXIS2",
-            title="Vertical offset to be applied to all the slice boundary polynomials",
-            debugplot=debugplot,
-        )
-        for islice in range(FRIDA_NSLICES):
-            if list_poly_left[islice] is not None:
-                list_poly_left[islice] += poly_voffset
-            if list_poly_right[islice] is not None:
-                list_poly_right[islice] += poly_voffset
+        debugplot = 0
+    poly_voffset = polynomial_from_voffset(voffset, debugplot=debugplot)
+    for islice in range(FRIDA_NSLICES):
+        if list_poly_left[islice] is not None:
+            list_poly_left[islice] += poly_voffset
+        if list_poly_right[islice] is not None:
+            list_poly_right[islice] += poly_voffset
 
     # Plot the filtered image with the slice polynomial boundaries overplotted
     if plotsliceid is not None:
