@@ -7,7 +7,12 @@
 # License-Filename: LICENSE.txt
 #
 
-"""Overplot the slice boundary polynomials, borders and/or traces on image"""
+"""Overplot the slice boundary polynomials, borders and/or traces on image.
+
+Since the FITS file defining the slice traces already contains
+the slice boundary polynomials, --poly and --traces are mutually exclusive options.
+If both are provided, and error will be raised.
+"""
 
 import argparse
 from astropy.io import fits
