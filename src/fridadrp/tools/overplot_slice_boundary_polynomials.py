@@ -489,28 +489,27 @@ def overplot_slice_boundary_polynomials(
     # but not to the image data.
     if len(voffset) < 1:
         raise ValueError("The list of vertical offsets (voffset) must contain at least one value.")
+    if np.any(np.array(voffset) != 0):
+        logger.info(f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets")
+    nvoffsets = len(voffset)
+    xdum_voffsets = np.linspace(
+        FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
+        FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value - 1,
+        nvoffsets,
+    )  # using array indices (0 based)
+    if logger.isEnabledFor(logging.DEBUG):
+        debugplot = 2
     else:
-        if voffset != [0.0]:
-            logger.info(f"Fitting a polynomial of degree {len(voffset)-1} to the vertical offsets")
-        nvoffsets = len(voffset)
-        xdum_voffsets = np.linspace(
-            FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL.value - 1,
-            FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL.value - 1,
-            nvoffsets,
-        )  # using array indices (0 based)
-        if logger.isEnabledFor(logging.DEBUG):
-            debugplot = 2
-        else:
-            debugplot = 0
-        poly_voffset, _ = polfit_residuals(
-            x=xdum_voffsets,
-            y=np.array(voffset),
-            deg=len(voffset) - 1,
-            xlabel="array index along NAXIS1",
-            ylabel="array index along NAXIS2",
-            title="Vertical offset to be applied",
-            debugplot=debugplot,
-        )
+        debugplot = 0
+    poly_voffset, _ = polfit_residuals(
+        x=xdum_voffsets,
+        y=np.array(voffset),
+        deg=len(voffset) - 1,
+        xlabel="array index along NAXIS1",
+        ylabel="array index along NAXIS2",
+        title="Vertical offset to be applied",
+        debugplot=debugplot,
+    )
 
     # Read the boundary polynomial coefficients from the input FITS file
     if input_poly is not None or input_traces is not None:
