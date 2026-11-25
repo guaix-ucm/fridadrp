@@ -9,16 +9,14 @@
 
 """Check the limits (xlim, ylim, vlim) provided for a plot."""
 
-from collections.abc import Sequence
-
 import numpy as np
 
 
 def check_plot_limits(
-    limits: Sequence[float] | np.ndarray | None,
-    name: str,
-    require_increasing: bool = False,
-) -> None:
+    limits,
+    name,
+    require_increasing=False,
+):
     """Check that the limits provided for a plot are valid.
 
     The limits must be None (no limits provided) or a sequence of exactly

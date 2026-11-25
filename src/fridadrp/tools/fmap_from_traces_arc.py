@@ -33,14 +33,14 @@ from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynom
 
 
 def compute_fmap_from_traces_arc(
-    arc_file: str,
-    traces_file: str,
-    voffset: list[float] = [0.0],
-    show_sliceid: bool = False,
-    xlim: list[float] | None = None,
-    ylim: list[float] | None = None,
-    vlim: list[float] | None = None,
-) -> None:
+    arc_file,
+    traces_file,
+    voffset=[0.0],
+    show_sliceid=False,
+    xlim=None,
+    ylim=None,
+    vlim=None,
+):
     """Compute the mapping from slice traces and an arc image.
 
     Parameters
@@ -143,7 +143,7 @@ def compute_fmap_from_traces_arc(
     interactive_image_display(fig, ax, arc_data, vmin, vmax)
 
 
-def main(args: list[str] | None = None) -> None:
+def main(args=None):
 
     parser = argparse.ArgumentParser(
         description="Compute mapping from slice traces and arc image",
