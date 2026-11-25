@@ -33,10 +33,11 @@ import teareduce as tea
 import types
 
 from numina.array.display.polfit_residuals import polfit_residuals
-from numina.tools.input_number import input_number
 from numina.tools.initialize_script_with_args import NuminaScriptDefinition
+from numina.tools.input_number import input_number
 
-from fridadrp.core import FRIDA_NAXIS1_HAWAII, FRIDA_NAXIS2_HAWAII
+from fridadrp.core import FRIDA_NAXIS1_HAWAII
+from fridadrp.core import FRIDA_NAXIS2_HAWAII
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex
@@ -472,6 +473,158 @@ def polynomial_from_voffset(voffset, debugplot=None):
     return poly_voffset
 
 
+def connect_image_display_keys(fig, ax, image_data, vmin, vmax):
+    """Connect the interactive keys to a figure displaying an image
+
+    The following keys are available ('?' displays this list, which is
+    also shown when this function is called):
+
+    - 'a': toggle imshow aspect='equal' / aspect='auto'
+    - 'h': reset zoom to the axis limits at the time of this call
+      (and the display limits to the last vmin, vmax selected)
+    - 'v': set vmin and vmax manually (read from standard input)
+    - ',': set vmin and vmax to the min and max of the zoomed region
+    - '/': set vmin and vmax using zscale of the zoomed region
+    - 'q': close the figure
+
+    The default matplotlib keymaps for 'h', 'r', 'c' and 'v' are disabled
+    to avoid conflicts. The figure is set in zoom mode (equivalent to
+    pressing the zoom button of the toolbar or the key 'o') when the figure
+    window has a NavigationToolbar2.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        Figure containing the image.
+    ax : matplotlib.axes.Axes
+        Axes where the image has been displayed (the image must be
+        ax.images[0]). The axis limits are assumed to be given in
+        array indices (0-based).
+    image_data : numpy.ndarray
+        2D array with the displayed image, employed to compute the
+        display limits of the zoomed region.
+    vmin : float
+        Initial background display limit.
+    vmax : float
+        Initial foreground display limit.
+
+    Returns
+    -------
+    on_key : callable
+        Function connected to the 'key_press_event' of the figure. It
+        receives an object with a 'key' attribute.
+    """
+    logger = logging.getLogger(__name__)
+
+    mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
+    mpl.rcParams["keymap.back"] = []  # disable 'c'
+    mpl.rcParams["keymap.forward"] = []  # disable 'v' (conflict with 'v' for setting vmin/vmax)
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    init_xylimits = xlim, ylim
+
+    def on_key(event):
+        nonlocal vmin, vmax
+        if event.key == "?":
+            logger.info("-" * 79)
+            logger.info("'?': show this help message")
+            logger.info("'a': toggle imshow aspect='equal' / aspect='auto'")
+            logger.info("'h': reset zoom to initial limits")
+            logger.info("'v': set vmin and vmax manually")
+            logger.info("',': set vmin and vmax to min and max of the zoomed region")
+            logger.info("'/': set vmin and vmax using zscale of the zoomed region")
+            logger.info("'q': quit")
+            logger.info("-" * 79)
+        elif event.key == "h":
+            xlim, ylim = init_xylimits
+            ax.set_xlim(xlim)
+            ax.set_ylim(ylim)
+            ax.images[0].set_clim(vmin, vmax)
+            fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
+            fig.tight_layout()  # apply new tight_layout adjustments
+            ax.figure.canvas.draw_idle()
+            plt.pause(0.1)  # allow time for the figure to update
+        elif event.key == "a":
+            if ax.get_aspect() in ["equal", 1.0]:
+                logger.info("Setting aspect to 'auto'.")
+                ax.set_aspect("auto")
+            else:
+                logger.info("Setting aspect to 'equal'.")
+                ax.set_aspect("equal")
+            fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
+            fig.tight_layout()  # apply new tight_layout adjustments
+            fig.canvas.draw()
+        elif event.key in ["v", ",", "/"]:
+            if event.key == "v":
+                current_vmin, current_vmax = ax.images[0].get_clim()
+                vmin = input_number(expected_type="float", prompt="Enter vmin: ", default=current_vmin)
+                vmax = input_number(expected_type="float", prompt="Enter vmax: ", default=current_vmax)
+            else:
+                xlim = ax.get_xlim()
+                ylim = ax.get_ylim()
+                x1, x2 = int(xlim[0]), int(xlim[1])
+                y1, y2 = int(ylim[0]), int(ylim[1])
+                x1 = max(0, min(x1, FRIDA_NAXIS1_HAWAII.value - 1))
+                x2 = max(0, min(x2, FRIDA_NAXIS1_HAWAII.value - 1))
+                y1 = max(0, min(y1, FRIDA_NAXIS2_HAWAII.value - 1))
+                y2 = max(0, min(y2, FRIDA_NAXIS2_HAWAII.value - 1))
+                if event.key == ",":
+                    vmin = np.nanmin(image_data[y1 : y2 + 1, x1 : x2 + 1])
+                    vmax = np.nanmax(image_data[y1 : y2 + 1, x1 : x2 + 1])
+                else:
+                    vmin, vmax = ZScaleInterval().get_limits(image_data[y1 : y2 + 1, x1 : x2 + 1])
+                logger.info(f"Setting vmin={vmin}, vmax={vmax} for the zoomed region.")
+            ax.images[0].set_clim(vmin, vmax)
+            ax.figure.canvas.draw_idle()
+            plt.pause(0.1)  # allow time for the figure to update
+        elif event.key == "q":
+            plt.close(fig)
+
+    on_key(event=types.SimpleNamespace(key="?"))  # Show help message on startup
+    fig.canvas.mpl_connect("key_press_event", on_key)
+    # Start in zoom mode (equivalent to pressing the zoom button of the toolbar or the key 'o').
+    # Nothing is done when there is no NavigationToolbar2 (non-interactive backend, or
+    # rcParams['toolbar'] set to 'toolmanager').
+    toolbar = getattr(fig.canvas.manager, "toolbar", None)
+    if isinstance(toolbar, NavigationToolbar2):
+        toolbar.zoom()
+
+    return on_key
+
+
+def interactive_image_display(fig, ax, image_data, vmin, vmax):
+    """Display an image interactively until the figure is closed
+
+    The interactive keys defined in connect_image_display_keys are
+    connected to the figure, and the execution is blocked until the
+    figure is closed by the user (window closed or key 'q').
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        Figure containing the image (created with pyplot).
+    ax : matplotlib.axes.Axes
+        Axes where the image has been displayed (the image must be
+        ax.images[0]). The axis limits are assumed to be given in
+        array indices (0-based).
+    image_data : numpy.ndarray
+        2D array with the displayed image.
+    vmin : float
+        Initial background display limit.
+    vmax : float
+        Initial foreground display limit.
+    """
+    connect_image_display_keys(fig, ax, image_data, vmin, vmax)
+    # fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
+    fig.tight_layout()  # apply new tight_layout adjustments
+    # instead of plt.show(), use a loop to keep the figure open until closed by the user
+    # (otherwise, after using input_number() in the on_key function, the matplotlib event
+    # loop is not properly restored and the execution of the code continues as if the
+    # figure was closed, which is not the case)
+    while plt.fignum_exists(fig.number):
+        plt.pause(0.1)
+
+
 def overplot_slice_boundary_polynomials(
     input_poly,
     input_borders,
@@ -673,86 +826,7 @@ def overplot_slice_boundary_polynomials(
         if input_traces is not None:
             plot_traces(ax, list_poly_traces_all_slices, show_traceid=show_traceid)
 
-        mpl.rcParams["keymap.home"] = []  # disable 'h' and 'r'
-        mpl.rcParams["keymap.back"] = []  # disable 'c'
-        mpl.rcParams["keymap.forward"] = []  # disable 'v' (conflict with 'v' for setting vmin/vmax)
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
-        init_xylimits = xlim, ylim
-
-        def on_key(event):
-            nonlocal vmin, vmax
-            if event.key == "?":
-                logger.info("-" * 79)
-                logger.info("'?': show this help message")
-                logger.info("'a': toggle imshow aspect='equal' / aspect='auto'")
-                logger.info("'h': reset zoom to initial limits")
-                logger.info("'v': set vmin and vmax manually")
-                logger.info("',': set vmin and vmax to min and max of the zoomed region")
-                logger.info("'/': set vmin and vmax using zscale of the zoomed region")
-                logger.info("'q': quit")
-                logger.info("-" * 79)
-            elif event.key == "h":
-                xlim, ylim = init_xylimits
-                ax.set_xlim(xlim)
-                ax.set_ylim(ylim)
-                ax.images[0].set_clim(vmin, vmax)
-                fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
-                fig.tight_layout()  # apply new tight_layout adjustments
-                ax.figure.canvas.draw_idle()
-                plt.pause(0.1)  # allow time for the figure to update
-            elif event.key == "a":
-                if ax.get_aspect() in ["equal", 1.0]:
-                    logger.info("Setting aspect to 'auto'.")
-                    ax.set_aspect("auto")
-                else:
-                    logger.info("Setting aspect to 'equal'.")
-                    ax.set_aspect("equal")
-                fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
-                fig.tight_layout()  # apply new tight_layout adjustments
-                fig.canvas.draw()
-            elif event.key in ["v", ",", "/"]:
-                if event.key == "v":
-                    current_vmin, current_vmax = ax.images[0].get_clim()
-                    vmin = input_number(expected_type="float", prompt="Enter vmin: ", default=current_vmin)
-                    vmax = input_number(expected_type="float", prompt="Enter vmax: ", default=current_vmax)
-                else:
-                    xlim = ax.get_xlim()
-                    ylim = ax.get_ylim()
-                    x1, x2 = int(xlim[0]), int(xlim[1])
-                    y1, y2 = int(ylim[0]), int(ylim[1])
-                    x1 = max(0, min(x1, FRIDA_NAXIS1_HAWAII.value - 1))
-                    x2 = max(0, min(x2, FRIDA_NAXIS1_HAWAII.value - 1))
-                    y1 = max(0, min(y1, FRIDA_NAXIS2_HAWAII.value - 1))
-                    y2 = max(0, min(y2, FRIDA_NAXIS2_HAWAII.value - 1))
-                    if event.key == ",":
-                        vmin = np.nanmin(image_data[y1 : y2 + 1, x1 : x2 + 1])
-                        vmax = np.nanmax(image_data[y1 : y2 + 1, x1 : x2 + 1])
-                    else:
-                        vmin, vmax = ZScaleInterval().get_limits(image_data[y1 : y2 + 1, x1 : x2 + 1])
-                    logger.info(f"Setting vmin={vmin}, vmax={vmax} for the zoomed region.")
-                ax.images[0].set_clim(vmin, vmax)
-                ax.figure.canvas.draw_idle()
-                plt.pause(0.1)  # allow time for the figure to update
-            elif event.key == "q":
-                plt.close(fig)
-
-        on_key(event=types.SimpleNamespace(key="?"))  # Show help message on startup
-        fig.canvas.mpl_connect("key_press_event", on_key)
-        # Start in zoom mode (equivalent to pressing the zoom button of the toolbar or the key 'o').
-        # Nothing is done when there is no NavigationToolbar2 (non-interactive backend, or
-        # rcParams['toolbar'] set to 'toolmanager').
-        toolbar = getattr(fig.canvas.manager, "toolbar", None)
-        if isinstance(toolbar, NavigationToolbar2):
-            toolbar.zoom()
-        # fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
-        fig.tight_layout()  # apply new tight_layout adjustments
-        # instead of plt.show(), use a loop to keep the figure open until closed by the user
-        # (otherwise, after using input_number() in the on_key function, the matplotlib event
-        # loop is not properly restored and the execution of the code continues as if the
-        # figure was closed, which is not the case)
-        while plt.fignum_exists(fig.number):
-            plt.pause(0.1)
+        interactive_image_display(fig, ax, image_data, vmin, vmax)
 
 
 def main(args=None):

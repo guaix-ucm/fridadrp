@@ -234,7 +234,7 @@ def find_slice_boundary_borders_from_flat(
                         if iax == 0:
                             logger.info("Setting aspect to 'equal' for all axes.")
                         ax.set_aspect("equal")
-                fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
+                fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
                 fig.tight_layout()  # apply new tight_layout adjustments
                 fig.canvas.draw()
             elif event.key in ["v", ",", "/"]:
@@ -266,7 +266,7 @@ def find_slice_boundary_borders_from_flat(
                         else:
                             vmin, vmax = ZScaleInterval().get_limits(data[y1 : (y2 + 1), x1 : (x2 + 1)])
                     event.inaxes.images[0].set_clim(vmin, vmax)
-                    fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
+                    fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
                     fig.tight_layout()  # apply new tight_layout adjustments
                     fig.canvas.draw()
             elif event.key == "q":
@@ -274,7 +274,7 @@ def find_slice_boundary_borders_from_flat(
 
         on_key(event=types.SimpleNamespace(key="?"))  # Show help message on startup
         fig.canvas.mpl_connect("key_press_event", on_key)
-        fig.set_tight_layout(False)  # deactivate accumulated tight_layout adjustments
+        fig.set_layout_engine("none")  # deactivate accumulated tight_layout adjustments
         fig.tight_layout()  # apply new tight_layout adjustments
         # instead of plt.show(), use a loop to keep the figure open until closed by the user
         # (otherwise, after using input_number() in the on_key function, the matplotlib event

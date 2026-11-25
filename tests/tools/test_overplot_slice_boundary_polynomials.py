@@ -1,7 +1,10 @@
 """The PDF mosaic of the slices is saved without pyplot"""
 
 import logging
+import types
 
+from astropy.visualization import ZScaleInterval
+import matplotlib as mpl
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,6 +14,7 @@ import pytest
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex
+from fridadrp.tools.overplot_slice_boundary_polynomials import connect_image_display_keys
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces_within_slice_boundary_polynomials_mosaic
 from fridadrp.tools.overplot_slice_boundary_polynomials import polynomial_from_voffset
@@ -124,3 +128,66 @@ def test_polynomial_from_voffset_debugplot(debugplot, loglevel, expected, monkey
     caplog.set_level(loglevel, logger=overplot_module.__name__)
     polynomial_from_voffset([1.0, 1.0], debugplot=debugplot)
     assert captured["debugplot"] == expected
+
+
+@pytest.fixture
+def agg_pyplot():
+    """Use the non-interactive Agg backend with pyplot, restoring the previous backend afterwards"""
+    previous_backend = mpl.get_backend()
+    plt.switch_backend("Agg")
+    yield
+    plt.close("all")
+    try:
+        plt.switch_backend(previous_backend)
+    except ImportError:
+        pass
+
+
+@pytest.mark.filterwarnings("ignore:FigureCanvasAgg is non-interactive:UserWarning")
+def test_connect_image_display_keys(agg_pyplot, caplog):
+    caplog.set_level(logging.INFO, logger=overplot_module.__name__)
+    # Image with value 100 * row + column (0-based array indices)
+    naxis2, naxis1 = 100, 100
+    image = np.add.outer(100.0 * np.arange(naxis2), np.arange(naxis1))
+    vmin, vmax = 0.0, image.max()
+    with mpl.rc_context():  # the function modifies the global keymaps
+        fig, ax = plt.subplots()
+        ax.imshow(image, origin="lower", vmin=vmin, vmax=vmax)
+        init_xlim, init_ylim = (-0.5, naxis1 - 0.5), (-0.5, naxis2 - 0.5)
+        ax.set_xlim(init_xlim)
+        ax.set_ylim(init_ylim)
+        on_key = connect_image_display_keys(fig, ax, image, vmin, vmax)
+
+        # Help message on startup, and conflicting default keymaps disabled
+        assert "'q': quit" in caplog.text
+        assert mpl.rcParams["keymap.home"] == []
+        assert mpl.rcParams["keymap.back"] == []
+        assert mpl.rcParams["keymap.forward"] == []
+
+        # ',': min and max of the zoomed region (columns 10-20, rows 30-40)
+        ax.set_xlim(10.5, 20.5)
+        ax.set_ylim(30.5, 40.5)
+        on_key(types.SimpleNamespace(key=","))
+        assert ax.images[0].get_clim() == (100.0 * 30 + 10, 100.0 * 40 + 20)
+
+        # '/': zscale of the zoomed region
+        on_key(types.SimpleNamespace(key="/"))
+        zscale_limits = ZScaleInterval().get_limits(image[30:41, 10:21])
+        assert np.allclose(ax.images[0].get_clim(), zscale_limits)
+
+        # 'h': initial axis limits, keeping the last display limits
+        on_key(types.SimpleNamespace(key="h"))
+        assert ax.get_xlim() == init_xlim
+        assert ax.get_ylim() == init_ylim
+        assert np.allclose(ax.images[0].get_clim(), zscale_limits)
+
+        # 'a': toggle aspect (imshow sets aspect='equal' by default)
+        on_key(types.SimpleNamespace(key="a"))
+        assert ax.get_aspect() == "auto"
+        on_key(types.SimpleNamespace(key="a"))
+        assert ax.get_aspect() in ["equal", 1.0]
+
+        # 'q': close the figure
+        assert plt.fignum_exists(fig.number)
+        on_key(types.SimpleNamespace(key="q"))
+        assert not plt.fignum_exists(fig.number)
