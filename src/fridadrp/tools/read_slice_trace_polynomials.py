@@ -10,7 +10,6 @@
 """Read the polynomials that define the traces of the slices from a FITS file"""
 
 from astropy.io import fits
-import logging
 import numpy as np
 
 from fridadrp.core import FRIDA_NSLICES
@@ -65,7 +64,6 @@ def read_slice_trace_polynomials(input_polynomial):
     list_poly_traces_all_slices : list of list of Polynomial
         List of lists of Polynomial objects for the traces in each slice.
     """
-    logger = logging.getLogger(__name__)
 
     with fits.open(input_polynomial) as hdul:
         check_is_a_valid_slice_trace_polynomial_file(hdul)
@@ -85,7 +83,8 @@ def read_slice_trace_polynomials(input_polynomial):
                 )
             if array2d_coeffs.shape[1] != tracdeg + 1:
                 raise ValueError(
-                    f"Invalid number of polynomial coefficients in extension {extname}.\nExpected value is {tracdeg + 1}."
+                    f"Invalid number of polynomial coefficients in extension {extname}.\n"
+                    f"Expected value is {tracdeg + 1}."
                 )
             list_poly_traces_slice = []
             for itrace in range(ntraces_per_slice):
