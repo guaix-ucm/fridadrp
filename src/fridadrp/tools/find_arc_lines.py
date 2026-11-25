@@ -1127,6 +1127,7 @@ def main(args=None):
             # Primary HDU with the provenance of the tables
             primary_hdu = fits.PrimaryHDU()
             hdr = primary_hdu.header
+            hdr["KEYCODE"] = ("ARC_LINES", "Arc line detections (find_arc_lines)")
             hdr["IMAGE"] = (Path(args.image).name, "Input arc image")
             hdr["POLYFILE"] = (Path(args.poly).name, "Slice bound. pol.")
             hdr["FITMETH"] = (args.fit_method, "Line profile fit method")
@@ -1136,7 +1137,7 @@ def main(args=None):
             hdr["TSIGMA"] = (args.times_sigma_threshold, "Detection threshold (robust sigma)")
             hdr["MINHPCT"] = (args.minheight_percentage, "Minimum line height (percent)")
             hdr["MAXWPIX"] = (args.maxwidth_pixels, "[pix] Maximum line width")
-            hdr["UUID"] = (str(uuid.uuid4()), "Unique identifier for this run")
+            hdr["UUID"] = (str(uuid.uuid4()), "Unique identifier of this run")
             hdr["COMMENT"] = "row_index, x_peak and mean are 0-based array indices"
             hdu_list = fits.HDUList([primary_hdu])
             # Descriptions of the columns, stored as comments of the TTYPEn keywords

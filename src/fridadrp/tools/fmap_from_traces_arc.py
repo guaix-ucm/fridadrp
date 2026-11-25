@@ -14,6 +14,7 @@ from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 import logging
 import matplotlib.pyplot as plt
+import numpy as np
 from pathlib import Path
 from rich_argparse import RichHelpFormatter
 import teareduce as tea
@@ -28,12 +29,49 @@ from fridadrp.tools.overplot_slice_boundary_polynomials import interactive_image
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces
 from fridadrp.tools.overplot_slice_boundary_polynomials import polynomial_from_voffset
+from fridadrp.tools.read_arc_lines import read_arc_lines
 from fridadrp.tools.read_slice_boundary_polynomials import read_slice_boundary_polynomials
 from fridadrp.tools.read_slice_trace_polynomials import read_slice_trace_polynomials
 
 
+def plot_arc_lines(ax, list_arc_line_tables, color="red", markersize=2):
+    """Overplot the positions of the detected arc lines on the given axes
+
+    The positions are taken from the columns 'x_peak' (0-based array index
+    along NAXIS1) and 'row_index' (0-based array index along NAXIS2) of the
+    tables, so the axes must use 0-based array indices.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes on which to plot the arc lines.
+    list_arc_line_tables : list of astropy.table.Table or None
+        Tables with the arc line detections of each slice, as returned by
+        read_arc_lines. None elements and empty tables are ignored.
+    color : str, optional
+        Color of the markers.
+    markersize : float, optional
+        Size of the markers.
+
+    Returns
+    -------
+    line : matplotlib.lines.Line2D or None
+        The line with all the plotted points, or None if there are no
+        detections to plot.
+    """
+    list_tables = [table for table in list_arc_line_tables if table is not None and len(table) > 0]
+    if len(list_tables) == 0:
+        return None
+    # A single Line2D with the points of all the slices
+    x_peak = np.concatenate([np.asarray(table["x_peak"], dtype=float) for table in list_tables])
+    row_index = np.concatenate([np.asarray(table["row_index"], dtype=float) for table in list_tables])
+    (line,) = ax.plot(x_peak, row_index, color=color, marker=".", markersize=markersize, linestyle="none")
+    return line
+
+
 def compute_fmap_from_traces_arc(
-    arc_file,
+    arc_image,
+    arc_lines,
     traces_file,
     voffset=[0.0],
     show_sliceid=False,
@@ -45,8 +83,12 @@ def compute_fmap_from_traces_arc(
 
     Parameters
     ----------
-    arc_file : str
+    arc_image : str
         Path to the arc image file.
+    arc_lines : str
+        Path to the file with arc lines found by fridadrp-find_arc_lines.
+        Their positions are overplotted on the arc image (without applying
+        voffset, since they are measured positions in the image).
     traces_file : str
         Path to the file with the slice trace polynomials.
     voffset : list[float], optional
@@ -76,7 +118,7 @@ def compute_fmap_from_traces_arc(
     check_plot_limits(vlim, "vlim", require_increasing=True)
 
     # Read the arc image
-    with fits.open(arc_file) as hdulist:
+    with fits.open(arc_image) as hdulist:
         arc_data = hdulist[0].data
 
     # Determine the voffset polynomial if more than one value is provided
@@ -103,11 +145,24 @@ def compute_fmap_from_traces_arc(
         if list_poly_right[islice] is not None:
             list_poly_right[islice] += poly_voffset
 
+    # Read the arc line detections (0-based array indices). The voffset is not applied
+    # to them: they are positions measured in the arc image, while voffset corrects
+    # the boundary and trace polynomials.
+    list_arc_line_tables = read_arc_lines(arc_lines)
+    nslices_arc_lines = sum(table is not None for table in list_arc_line_tables)
+    ndetections = sum(len(table) for table in list_arc_line_tables if table is not None)
+    logger.info(f"Read {ndetections} arc line detections in {nslices_arc_lines} slices from\n[blue]{arc_lines}[/blue]")
+    image_in_arc_lines = fits.getheader(arc_lines)["IMAGE"]
+    if image_in_arc_lines != Path(arc_image).name:
+        logger.warning(
+            f"The arc lines were found in {image_in_arc_lines}, which is not the arc image {Path(arc_image).name}"
+        )
+
     # Compute the mapping from slice traces and arc image
     # (Implementation of the mapping computation goes here)
 
     # Plot the arc image and overplot the slice boundaries
-    title = f"Image: {Path(arc_file).name}"
+    title = f"Image: {Path(arc_image).name}"
     title += f"\nSlice trace polynomials: {Path(traces_file).name}"
     if vlim is not None:
         vmin, vmax = vlim
@@ -139,6 +194,7 @@ def compute_fmap_from_traces_arc(
     # (they are evaluated within the current x-axis limits)
     plot_fitted_boundary_polynomials(ax, list_poly_left, list_poly_right, show_sliceid)
     plot_traces(ax, list_poly_traces_all_slices, show_traceid=False)
+    plot_arc_lines(ax, list_arc_line_tables)
 
     interactive_image_display(fig, ax, arc_data, vmin, vmax)
 
@@ -149,7 +205,10 @@ def main(args=None):
         description="Compute mapping from slice traces and arc image",
         formatter_class=RichHelpFormatter,
     )
-    parser.add_argument("--arc", help="Arc image file", type=str, required=True)
+    parser.add_argument("--arc-image", help="Arc image file", type=str, required=True)
+    parser.add_argument(
+        "--arc-lines", help="File with arc lines found by fridadrp-find_arc_lines", type=str, required=True
+    )
     parser.add_argument(
         "--traces", help="Path to the file with the slice trace polynomials (optional)", type=str, required=True
     )
@@ -191,15 +250,18 @@ def main(args=None):
     logger = myscript.logger
 
     # Check the input files are defined
-    if args.arc is None:
-        raise ValueError("No input arc image file defined. Please provide a valid --arc file.")
+    if args.arc_image is None:
+        raise ValueError("No input arc image file defined. Please provide a valid --arc-image file.")
+    if args.arc_lines is None:
+        raise ValueError("No input arc lines file defined. Please provide a valid --arc-lines file.")
     if args.traces is None:
         raise ValueError("No input slice trace polynomials file defined. Please provide a valid --traces file.")
 
     # Compute the mapping from slice traces and an arc image
     logger.info("Computing mapping from slice traces and arc image...")
     compute_fmap_from_traces_arc(
-        arc_file=args.arc,
+        arc_image=args.arc_image,
+        arc_lines=args.arc_lines,
         traces_file=args.traces,
         voffset=args.voffset,
         show_sliceid=args.show_sliceid,

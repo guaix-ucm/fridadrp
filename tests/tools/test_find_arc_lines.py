@@ -20,6 +20,8 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.find_arc_lines import find_arc_lines
 from fridadrp.tools.find_arc_lines import retrieve_initial_data
+from fridadrp.tools.find_arc_lines import main as find_arc_lines_main
+from fridadrp.tools.read_arc_lines import read_arc_lines
 
 # Synthetic slice geometry: constant boundaries (0-based array indices along NAXIS2),
 # with slices of 60 pixels separated by 8 pixels
@@ -173,3 +175,33 @@ def test_retrieve_initial_data_xlim(synthetic_files):
     # Default limits: the whole detector along NAXIS1
     *_, xlim_default = retrieve_initial_data(str(image_file), str(poly_file))
     assert xlim_default == [-0.5, FRIDA_NAXIS1_HAWAII.value - 0.5]
+
+
+def test_output_file_can_be_read(synthetic_files, tmp_path):
+    # Round trip: the file written by the command-line interface is read by read_arc_lines
+    image_file, poly_file = synthetic_files
+    output_file = tmp_path / "arc_lines.fits"
+    find_arc_lines_main(
+        [
+            "--image",
+            str(image_file),
+            "--poly",
+            str(poly_file),
+            "--slicenum-list",
+            str(SLICENUM),
+            "--output",
+            str(output_file),
+        ]
+    )
+    assert fits.getheader(output_file)["KEYCODE"] == "ARC_LINES"
+    list_tables = read_arc_lines(str(output_file))
+    assert len(list_tables) == FRIDA_NSLICES
+    assert [islice for islice, table in enumerate(list_tables) if table is not None] == [SLICENUM - 1]
+    # Same detections as the library function with the defaults of the command-line interface
+    expected = find_arc_lines(
+        image=str(image_file), input_poly=str(poly_file), slicenum_list=[SLICENUM], maxwidth_pixels=20.0
+    )[SLICENUM - 1]
+    table = list_tables[SLICENUM - 1]
+    assert len(table) == len(expected) > 0
+    assert np.array_equal(table["row_index"], expected["row_index"])
+    assert np.allclose(table["x_peak"], expected["x_peak"])
