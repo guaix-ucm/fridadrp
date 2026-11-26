@@ -15,6 +15,7 @@ from fridadrp.core import FRIDA_NSLICES
 from fridadrp.core import FRIDA_NAXIS1_HAWAII_FIRST_USEFUL_PIXEL, FRIDA_NAXIS1_HAWAII_LAST_USEFUL_PIXEL
 from fridadrp.core import sliceid_from_sliceindex
 from fridadrp.tools.overplot_slice_boundary_polynomials import connect_image_display_keys
+from fridadrp.tools.overplot_slice_boundary_polynomials import interactive_image_display
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_fitted_boundary_polynomials
 from fridadrp.tools.overplot_slice_boundary_polynomials import plot_traces_within_slice_boundary_polynomials_mosaic
 from fridadrp.tools.overplot_slice_boundary_polynomials import polynomial_from_voffset
@@ -254,7 +255,7 @@ def test_connect_image_display_keys_inconsistent_lengths(agg_pyplot):
 
 @pytest.mark.filterwarnings("ignore:FigureCanvasAgg is non-interactive:UserWarning")
 def test_connect_image_display_keys_no_nested_event_loop(agg_pyplot, monkeypatch):
-    # The handler runs inside the GUI event loop started by plt.pause() in
+    # The handler runs inside the GUI event loop started by the waiting loop of
     # interactive_image_display; calling plt.pause() from the handler raises
     # this error with the Qt backend (Agg allows nesting, so it is simulated here)
     def fail_pause(interval):
@@ -271,3 +272,32 @@ def test_connect_image_display_keys_no_nested_event_loop(agg_pyplot, monkeypatch
         for key in [",", "/", "h", "a"]:
             on_key(types.SimpleNamespace(key=key))
         assert np.allclose(ax.images[0].get_clim(), ZScaleInterval().get_limits(image[30:41, 10:21]))
+
+
+@pytest.mark.filterwarnings("ignore:FigureCanvasAgg is non-interactive:UserWarning")
+def test_interactive_image_display_shows_window_once(agg_pyplot, monkeypatch):
+    # plt.pause() calls show() at every call, which raises the window and steals the
+    # focus from the terminal: the waiting loop must show the window only once
+    def fail_pause(interval):
+        raise AssertionError("plt.pause() should not be called in the waiting loop")
+
+    monkeypatch.setattr(overplot_module.plt, "pause", fail_pause)
+    image = np.zeros((10, 10))
+    with mpl.rc_context():  # the function modifies the global keymaps
+        fig, ax = plt.subplots()
+        ax.imshow(image, vmin=0.0, vmax=1.0)
+        calls = {"show": 0, "event_loop": 0}
+
+        def fake_show():
+            calls["show"] += 1
+
+        def fake_start_event_loop(timeout):
+            calls["event_loop"] += 1
+            if calls["event_loop"] == 3:
+                plt.close(fig)  # the user closes the window
+
+        monkeypatch.setattr(fig, "show", fake_show)
+        monkeypatch.setattr(fig.canvas, "start_event_loop", fake_start_event_loop)
+        interactive_image_display(fig, ax, image, 0.0, 1.0)
+    assert calls == {"show": 1, "event_loop": 3}
+    assert not plt.fignum_exists(fig.number)

@@ -682,9 +682,14 @@ def interactive_image_display(fig, ax, image_data, vmin, vmax, ds9mode=False):
     # instead of plt.show(), use a loop to keep the figure open until closed by the user
     # (otherwise, after using input_number() in the on_key function, the matplotlib event
     # loop is not properly restored and the execution of the code continues as if the
-    # figure was closed, which is not the case)
+    # figure was closed, which is not the case).
+    # The window is shown only once: plt.pause() would call show() at every iteration,
+    # which raises the window (rcParams['figure.raise_window']) and steals the focus
+    # from the terminal. The redraws requested with draw_idle() are performed by the
+    # event loop.
+    fig.show()
     while plt.fignum_exists(fig.number):
-        plt.pause(0.1)
+        fig.canvas.start_event_loop(0.1)
 
 
 def overplot_slice_boundary_polynomials(
