@@ -11,6 +11,9 @@
 
 import astropy.units as u
 from astropy.io import fits
+import matplotlib as mpl
+from matplotlib.backend_bases import FigureCanvasBase, KeyEvent
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from scipy.special import erf
@@ -22,6 +25,7 @@ from fridadrp.tools.find_arc_lines import find_arc_lines
 from fridadrp.tools.find_arc_lines import retrieve_initial_data
 from fridadrp.tools.find_arc_lines import main as find_arc_lines_main
 from fridadrp.tools.read_arc_lines import read_arc_lines
+import fridadrp.tools.find_arc_lines as find_arc_lines_module
 
 # Synthetic slice geometry: constant boundaries (0-based array indices along NAXIS2),
 # with slices of 60 pixels separated by 8 pixels
@@ -203,5 +207,49 @@ def test_output_file_can_be_read(synthetic_files, tmp_path):
     )[SLICENUM - 1]
     table = list_tables[SLICENUM - 1]
     assert len(table) == len(expected) > 0
+    assert np.array_equal(table["row_index"], expected["row_index"])
+    assert np.allclose(table["x_peak"], expected["x_peak"])
+
+
+@pytest.fixture
+def agg_pyplot():
+    """Use the non-interactive Agg backend with pyplot, restoring the previous backend afterwards"""
+    previous_backend = mpl.get_backend()
+    plt.switch_backend("Agg")
+    yield
+    plt.close("all")
+    try:
+        plt.switch_backend(previous_backend)
+    except ImportError:
+        pass
+
+
+@pytest.mark.filterwarnings("ignore:FigureCanvasAgg is non-interactive:UserWarning")
+def test_allplots_does_not_use_plt_pause(synthetic_files, detection_tables, agg_pyplot, monkeypatch):
+    # plt.pause() calls show() at every call, which raises the window and steals the
+    # focus from the terminal: the interactive loop over rows must not use it
+    def fail_pause(interval):
+        raise AssertionError("plt.pause() should not be called")
+
+    # Simulate the user pressing 'q' (fit the remaining rows without plotting) every
+    # time the code waits for a key (event loop without timeout)
+    nwait = {"count": 0}
+
+    def fake_start_event_loop(self, timeout=0):
+        if timeout == 0:
+            nwait["count"] += 1
+            self.callbacks.process("key_press_event", KeyEvent("key_press_event", self, "q"))
+
+    monkeypatch.setattr(find_arc_lines_module.plt, "pause", fail_pause)
+    monkeypatch.setattr(FigureCanvasBase, "start_event_loop", fake_start_event_loop)
+    image_file, poly_file = synthetic_files
+    with mpl.rc_context():
+        tables = find_arc_lines(
+            image=str(image_file), input_poly=str(poly_file), slicenum_list=[SLICENUM], allplots=True
+        )
+    # One wait (and one figure) per arc line
+    assert nwait["count"] == len(X_LINES)
+    # The interactive mode does not change the results
+    table, expected = tables[SLICENUM - 1], detection_tables[SLICENUM - 1]
     assert np.array_equal(table["row_index"], expected["row_index"])
     assert np.allclose(table["x_peak"], expected["x_peak"])

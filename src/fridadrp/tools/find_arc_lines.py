@@ -607,8 +607,7 @@ def find_arc_lines(
             if num_features > 0:
                 title = f"Detected arc lines ({num_features})\n"
                 title += subtitle
-                cmap = plt.cm.rainbow.copy()
-                cmap.set_under("white")
+                cmap = plt.cm.rainbow.with_extremes(under="white")
                 imshow_slice(
                     ax5,
                     labels_arc_lines,
@@ -697,8 +696,7 @@ def find_arc_lines(
                         )
                         title = "Valid arc lines after selection\n"
                         title += subtitle
-                        cmap = plt.cm.rainbow.copy()
-                        cmap.set_under("white")
+                        cmap = plt.cm.rainbow.with_extremes(under="white")
                         imshow_slice(
                             ax2,
                             labels_arc_lines,
@@ -781,6 +779,10 @@ def find_arc_lines(
 
                         fig.canvas.mpl_connect("key_press_event", on_key)
                         fig.canvas.mpl_connect("close_event", on_close)
+                        # Show the window only once: plt.pause() calls show() at every call, which
+                        # raises the window (rcParams['figure.raise_window']) and steals the focus
+                        # from the terminal, so the loop over rows below runs the event loop instead
+                        fig.show()
                     else:
                         ax1 = ax2 = ax3 = ax4 = None
                         allplots_effective = False
@@ -861,10 +863,12 @@ def find_arc_lines(
                                 if pause_between_rows:
                                     # It is necessary to insert a pause to allow the event loop to start before
                                     # the execution of the second iteration of the row loop
+                                    # (the event loop is run directly to avoid raising the window)
                                     ax4.cla()  # clear the axes for the refined peak plot
                                     ax4.axis("off")
                                     fig.tight_layout()
-                                    plt.pause(0.2)
+                                    fig.canvas.draw_idle()
+                                    fig.canvas.start_event_loop(0.2)
                                     fig.canvas.start_event_loop(timeout=0)
                             else:
                                 logger.debug(bad_msg)
@@ -893,7 +897,8 @@ def find_arc_lines(
                                 ax_external.legend(loc="upper left", fontsize=8, title=fit_method)
                                 fig.canvas.draw_idle()
                                 fig.tight_layout()
-                                plt.pause(0.1)  # pause to allow the plot to update
+                                # allow the plot to update (event loop run directly to avoid raising the window)
+                                fig.canvas.start_event_loop(0.1)
                             # In debug mode, show the fit result in the console
                             if logger.isEnabledFor(logging.DEBUG):
                                 logger.debug("\n".join([f"{k}={v!r}" for k, v in dict_fit_result.items()]))
@@ -926,7 +931,9 @@ def find_arc_lines(
                                 if pause_between_rows:
                                     # It is necessary to insert a pause to allow the event loop to start before
                                     # the execution of the second iteration of the row loop
-                                    plt.pause(0.2)
+                                    # (the event loop is run directly to avoid raising the window)
+                                    fig.canvas.draw_idle()
+                                    fig.canvas.start_event_loop(0.2)
                                     fig.canvas.start_event_loop(timeout=0)
                     if not last_figure_is_closed:
                         plt.ioff()
