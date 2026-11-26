@@ -11,6 +11,8 @@
 
 import argparse
 from astropy.io import fits
+from astropy.table import Table
+import astropy.units as u
 from astropy.visualization import ZScaleInterval
 import logging
 import matplotlib.pyplot as plt
@@ -168,6 +170,167 @@ def plot_arc_line_polynomials(ax, list_arc_line_fits, color="yellow", linewidth=
     return list_lines
 
 
+def compute_reference_points(list_arc_line_fits, poly_left, poly_right, list_poly_traces, maxiter=50, tol=1e-10):
+    """Compute the intersections of the arc lines with the boundaries and traces of a slice
+
+    Each arc line is described by x = P(y), and each slice boundary or
+    trace by y = Q(x), where x and y are 0-based array indices along
+    NAXIS1 and NAXIS2, respectively. Their intersection is the solution
+    of y = Q(P(y)), computed with the fixed-point iteration
+    y_{k+1} = Q(P(y_k)), starting at y_0 = Q(P(y_mid)), where y_mid is
+    the centre of the row range of the arc line.
+
+    The iteration converges because both curves are nearly perpendicular:
+    the convergence factor |dQ/dx * dP/dy| is the product of two small
+    slopes, so a few iterations are enough to reach the tolerance.
+
+    Parameters
+    ----------
+    list_arc_line_fits : list of dict
+        Fitted arc lines of the slice, as returned by fit_arc_line_polynomials.
+    poly_left : numpy.polynomial.Polynomial or None
+        Left (lower) boundary polynomial of the slice. Skipped if None.
+    poly_right : numpy.polynomial.Polynomial or None
+        Right (upper) boundary polynomial of the slice. Skipped if None.
+    list_poly_traces : list of numpy.polynomial.Polynomial
+        Trace polynomials of the slice, in the order of the traces file.
+    maxiter : int, optional
+        Maximum number of iterations.
+    tol : float, optional
+        Convergence tolerance (pixels): the iteration stops when the
+        change in y is smaller than this value.
+
+    Returns
+    -------
+    reference_points : astropy.table.Table
+        One row for each pair (arc line, curve), with the columns:
+        'feature_id' (arc line), 'curve_index' (0 = left boundary,
+        1 to N = traces, N + 1 = right boundary, where N is the number
+        of traces), 'curve_type' ('left', 'trace' or 'right'), 'x' and
+        'y' (intersection, 0-based array indices along NAXIS1 and NAXIS2;
+        NaN if the iteration did not converge), 'niter' (number of
+        iterations), 'converged' (bool) and 'extrapolation' (distance, in
+        pixels along NAXIS2, of the intersection outside the row range
+        employed to fit the arc line; 0 if it is inside).
+    """
+    # Curves ordered along NAXIS2: (curve_index, curve_type, polynomial)
+    list_curves = []
+    if poly_left is not None:
+        list_curves.append((0, "left", poly_left))
+    for itrace, poly_trace in enumerate(list_poly_traces):
+        if poly_trace is not None:
+            list_curves.append((itrace + 1, "trace", poly_trace))
+    if poly_right is not None:
+        list_curves.append((len(list_poly_traces) + 1, "right", poly_right))
+    ncurves = len(list_curves)
+    curve_index = np.array([curve[0] for curve in list_curves], dtype=int)
+    curve_type = np.array([curve[1] for curve in list_curves], dtype="U5")
+
+    def evaluate_curves(x):
+        # y = Q_j(x_j) for every curve j
+        return np.array([poly(xj) for (_, _, poly), xj in zip(list_curves, x)], dtype=float)
+
+    columns = {
+        "feature_id": [],
+        "curve_index": [],
+        "curve_type": [],
+        "x": [],
+        "y": [],
+        "niter": [],
+        "converged": [],
+        "extrapolation": [],
+    }
+    for arc_line_fit in list_arc_line_fits:
+        poly_arc = arc_line_fit["poly"]
+        row_min, row_max = arc_line_fit["row_min"], arc_line_fit["row_max"]
+        # Iterate simultaneously for all the curves of the slice
+        y_mid = 0.5 * (row_min + row_max)
+        y = evaluate_curves(np.full(ncurves, poly_arc(y_mid)))
+        niter = np.zeros(ncurves, dtype=int)
+        converged = np.zeros(ncurves, dtype=bool)
+        with np.errstate(over="ignore", invalid="ignore"):
+            for k in range(1, maxiter + 1):
+                active = ~converged
+                if not np.any(active):
+                    break
+                y_new = evaluate_curves(poly_arc(y))
+                delta = np.abs(y_new - y)
+                y = np.where(active, y_new, y)  # converged points are kept fixed
+                niter[active] = k
+                converged |= active & (delta < tol)
+            x = poly_arc(y)
+        x[~converged] = np.nan
+        y[~converged] = np.nan
+        # Distance outside the row range of the fitted arc line (NaN for not converged points)
+        extrapolation = np.maximum(np.maximum(row_min - y, y - row_max), 0.0)
+        extrapolation[~converged] = np.nan
+        columns["feature_id"].append(np.full(ncurves, arc_line_fit["feature_id"], dtype=int))
+        columns["curve_index"].append(curve_index)
+        columns["curve_type"].append(curve_type)
+        columns["x"].append(x)
+        columns["y"].append(y)
+        columns["niter"].append(niter)
+        columns["converged"].append(converged)
+        columns["extrapolation"].append(extrapolation)
+
+    dtypes = dict(
+        feature_id=int,
+        curve_index=int,
+        curve_type="U5",
+        x=float,
+        y=float,
+        niter=int,
+        converged=bool,
+        extrapolation=float,
+    )
+    reference_points = Table(
+        {
+            name: np.concatenate(values) if len(values) > 0 else np.array([], dtype=dtypes[name])
+            for name, values in columns.items()
+        }
+    )
+    for colname in ["x", "y", "extrapolation"]:
+        reference_points[colname].unit = u.pix
+    return reference_points
+
+
+def plot_reference_points(ax, list_reference_tables, color="C1", marker="o", markersize=6):
+    """Overplot the reference points (converged intersections) on the given axes
+
+    The axes must use 0-based array indices.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes on which to plot the reference points.
+    list_reference_tables : list of astropy.table.Table or None
+        Reference points of each slice, as returned by
+        compute_reference_points. None elements are ignored, and only
+        the converged points are plotted.
+    color : str, optional
+        Color of the markers.
+    marker : str, optional
+        Marker style.
+    markersize : float, optional
+        Size of the markers.
+
+    Returns
+    -------
+    line : matplotlib.lines.Line2D or None
+        The line with all the plotted points, or None if there are no
+        converged points to plot.
+    """
+    list_tables = [table[table["converged"]] for table in list_reference_tables if table is not None]
+    list_tables = [table for table in list_tables if len(table) > 0]
+    if len(list_tables) == 0:
+        return None
+    # A single Line2D with the points of all the slices
+    x = np.concatenate([np.asarray(table["x"], dtype=float) for table in list_tables])
+    y = np.concatenate([np.asarray(table["y"], dtype=float) for table in list_tables])
+    (line,) = ax.plot(x, y, color=color, marker=marker, markersize=markersize, linestyle="none")
+    return line
+
+
 def compute_fmap_from_traces_arc(
     arc_image,
     arc_lines,
@@ -274,9 +437,11 @@ def compute_fmap_from_traces_arc(
             f"The arc lines were found in {image_in_arc_lines}, which is not the arc image {Path(arc_image).name}"
         )
 
-    # Fit a polynomial to each arc line of the selected slices
-    # (x_peak as a function of row_index, both 0-based array indices)
+    # Fit a polynomial to each arc line of the selected slices (x_peak as a function
+    # of row_index, both 0-based array indices), and compute the reference points
+    # (intersections of the arc lines with the slice boundaries and traces)
     list_arc_line_fits_all_slices = [None] * FRIDA_NSLICES
+    list_reference_points_all_slices = [None] * FRIDA_NSLICES
     for islice in range(FRIDA_NSLICES):
         slicenum = islice + 1
         sliceid = sliceid_from_sliceindex(islice)
@@ -293,6 +458,25 @@ def compute_fmap_from_traces_arc(
             f"({nlines - len(list_arc_line_fits)} skipped)"
         )
         list_arc_line_fits_all_slices[islice] = list_arc_line_fits
+        reference_points = compute_reference_points(
+            list_arc_line_fits,
+            list_poly_left[islice],
+            list_poly_right[islice],
+            list_poly_traces_all_slices[islice],
+        )
+        list_reference_points_all_slices[islice] = reference_points
+        converged = np.asarray(reference_points["converged"])
+        if np.any(converged):
+            logger.info(
+                f"Slice #{slicenum:2d} (Slice ID: {sliceid:2d}): {np.sum(converged)} reference points "
+                f"(max. iterations: {np.max(reference_points['niter'][converged])}, "
+                f"max. extrapolation: {np.max(reference_points['extrapolation'][converged]):.2f} pix)"
+            )
+        if np.any(~converged):
+            logger.warning(
+                f"Slice #{slicenum:2d} (Slice ID: {sliceid:2d}): {np.sum(~converged)} reference points "
+                "did not converge"
+            )
 
     # Compute the mapping from slice traces and arc image
     # (Implementation of the mapping computation goes here)
@@ -334,6 +518,7 @@ def compute_fmap_from_traces_arc(
     for list_arc_line_fits in list_arc_line_fits_all_slices:
         if list_arc_line_fits is not None:
             plot_arc_line_polynomials(ax, list_arc_line_fits)
+    plot_reference_points(ax, list_reference_points_all_slices)
 
     interactive_image_display(fig, ax, arc_data, vmin, vmax)
 

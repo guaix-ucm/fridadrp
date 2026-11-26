@@ -17,9 +17,11 @@ import pytest
 
 from fridadrp.core import FRIDA_NSLICES
 from fridadrp.tools.fmap_from_traces_arc import compute_fmap_from_traces_arc
+from fridadrp.tools.fmap_from_traces_arc import compute_reference_points
 from fridadrp.tools.fmap_from_traces_arc import fit_arc_line_polynomials
 from fridadrp.tools.fmap_from_traces_arc import plot_arc_line_polynomials
 from fridadrp.tools.fmap_from_traces_arc import plot_arc_lines
+from fridadrp.tools.fmap_from_traces_arc import plot_reference_points
 
 
 def test_plot_arc_lines():
@@ -107,3 +109,103 @@ def test_compute_fmap_from_traces_arc_invalid_parameters(kwargs, match):
     # The parameters are checked before reading the input files
     with pytest.raises(ValueError, match=match):
         compute_fmap_from_traces_arc("missing_arc.fits", "missing_lines.fits", "missing_traces.fits", **kwargs)
+
+
+def _arc_line_fit(feature_id, poly, row_min, row_max):
+    """Fitted arc line with the structure returned by fit_arc_line_polynomials."""
+    return dict(feature_id=feature_id, poly=poly, row_min=row_min, row_max=row_max, npoints=10, rms=0.0)
+
+
+def test_compute_reference_points_constant_curves():
+    # Horizontal boundaries and traces (y = constant): the intersections are y = c, x = P(c)
+    list_fits = [_arc_line_fit(1, POLY_LINE1, 100.0, 160.0), _arc_line_fit(2, POLY_LINE2, 100.0, 160.0)]
+    constants = [98.0, 120.0, 140.0, 162.0]  # left boundary, two traces, right boundary
+    table = compute_reference_points(
+        list_fits,
+        Polynomial([constants[0]]),
+        Polynomial([constants[-1]]),
+        [Polynomial([c]) for c in constants[1:-1]],
+    )
+    assert len(table) == 8
+    assert list(table["feature_id"]) == [1] * 4 + [2] * 4
+    assert list(table["curve_index"]) == [0, 1, 2, 3] * 2
+    assert list(table["curve_type"]) == ["left", "trace", "trace", "right"] * 2
+    assert np.all(table["converged"])
+    assert np.all(table["niter"] <= 2)
+    assert np.array_equal(table["y"], constants * 2)
+    assert np.allclose(table["x"], np.concatenate([POLY_LINE1(constants), POLY_LINE2(constants)]))
+    # Only the boundaries are outside the row range of the arc lines
+    assert np.allclose(table["extrapolation"], [2.0, 0.0, 0.0, 2.0] * 2)
+
+
+def test_compute_reference_points_tilted_curves():
+    # Slopes of the boundaries and traces ~1e-2, curved arc lines
+    poly_left = Polynomial([95.0, 0.010, 1.0e-6])
+    poly_right = Polynomial([163.0, 0.012, -1.0e-6])
+    list_poly_traces = [Polynomial([118.0, 0.011]), Polynomial([141.0, 0.0115, 5.0e-7])]
+    list_fits = [_arc_line_fit(1, POLY_LINE1, 100.0, 160.0), _arc_line_fit(2, POLY_LINE2, 100.0, 160.0)]
+    table = compute_reference_points(list_fits, poly_left, poly_right, list_poly_traces)
+    assert np.all(table["converged"])
+    curves = [poly_left] + list_poly_traces + [poly_right]
+    for row in table:
+        poly_arc = POLY_LINE1 if row["feature_id"] == 1 else POLY_LINE2
+        poly_curve = curves[row["curve_index"]]
+        # The point lies on both curves
+        assert np.isclose(row["x"], poly_arc(row["y"]), rtol=0, atol=1e-9)
+        assert np.isclose(row["y"], poly_curve(row["x"]), rtol=0, atol=1e-9)
+        expected_extrapolation = max(100.0 - row["y"], row["y"] - 160.0, 0.0)
+        assert np.isclose(row["extrapolation"], expected_extrapolation)
+    # Nearly perpendicular curves: fast convergence
+    assert np.max(table["niter"]) <= 6
+
+
+def test_compute_reference_points_not_converged():
+    # x = y + 1 and y = x have no intersection: the iteration does not converge
+    list_fits = [_arc_line_fit(1, Polynomial([1.0, 1.0]), 0.0, 10.0)]
+    table = compute_reference_points(list_fits, None, None, [Polynomial([0.0, 1.0])], maxiter=20)
+    assert len(table) == 1
+    assert not table["converged"][0]
+    assert table["niter"][0] == 20
+    assert np.isnan(table["x"][0]) and np.isnan(table["y"][0]) and np.isnan(table["extrapolation"][0])
+
+
+def test_compute_reference_points_missing_boundary():
+    list_fits = [_arc_line_fit(1, POLY_LINE1, 100.0, 160.0)]
+    table = compute_reference_points(list_fits, None, Polynomial([162.0]), [Polynomial([130.0])])
+    # The missing left boundary is skipped; the curve indices are not renumbered
+    assert list(table["curve_index"]) == [1, 2]
+    assert list(table["curve_type"]) == ["trace", "right"]
+
+
+def test_compute_reference_points_without_arc_lines():
+    table = compute_reference_points([], Polynomial([98.0]), Polynomial([162.0]), [Polynomial([130.0])])
+    assert len(table) == 0
+    assert table.colnames == [
+        "feature_id",
+        "curve_index",
+        "curve_type",
+        "x",
+        "y",
+        "niter",
+        "converged",
+        "extrapolation",
+    ]
+
+
+def test_plot_reference_points():
+    list_fits = [_arc_line_fit(1, POLY_LINE1, 100.0, 160.0)]
+    table_ok = compute_reference_points(list_fits, Polynomial([98.0]), Polynomial([162.0]), [])
+    table_bad = compute_reference_points(
+        [_arc_line_fit(1, Polynomial([1.0, 1.0]), 0.0, 10.0)], None, None, [Polynomial([0.0, 1.0])], maxiter=5
+    )
+    list_tables = [None] * FRIDA_NSLICES
+    list_tables[0] = table_ok
+    list_tables[1] = table_bad
+    ax = Figure().subplots()
+    line = plot_reference_points(ax, list_tables)
+    # Only the converged points are plotted
+    assert list(ax.lines) == [line]
+    assert np.allclose(line.get_xdata(), table_ok["x"])
+    assert np.allclose(line.get_ydata(), table_ok["y"])
+    # Nothing to plot
+    assert plot_reference_points(Figure().subplots(), [None, table_bad]) is None
